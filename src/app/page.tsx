@@ -79,7 +79,7 @@ function preloadBatchImagesInBackground(items: ImageCardItem[]) {
         if (typeof img.decode === "function") {
           await Promise.race([
             img.decode(),
-            new Promise((resolve) => setTimeout(resolve, 500)),
+            new Promise((resolve) => setTimeout(resolve, 800)),
           ]);
         }
       } catch {
@@ -113,14 +113,27 @@ function CatalogueImageCard({
   onRetryImage,
 }: CatalogueImageCardProps) {
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
+  const [retryTimestamp, setRetryTimestamp] = useState<number | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
 
   // If the image was already preloaded into memory/disk cache, check img.complete on mount
   useEffect(() => {
-    if (imgRef.current && imgRef.current.complete && imgRef.current.naturalWidth > 0) {
-      setIsLoaded(true);
+    if (imgRef.current && imgRef.current.complete) {
+      if (imgRef.current.naturalWidth > 0) {
+        setIsLoaded(true);
+      }
     }
-  }, []);
+  }, [retryTimestamp]);
+
+  const imageUrl = retryTimestamp
+    ? `${item.proxyUrl}?retry=${retryTimestamp}`
+    : item.proxyUrl;
+
+  const handleRetry = () => {
+    setIsLoaded(false);
+    setRetryTimestamp(Date.now());
+    onRetryImage(item.id);
+  };
 
   const hasDiscount =
     item.product.sale_price !== null &&
@@ -161,7 +174,7 @@ function CatalogueImageCard({
             </span>
             <button
               type="button"
-              onClick={() => onRetryImage(item.id)}
+              onClick={handleRetry}
               className="text-[11px] text-neutral-900 font-semibold underline hover:text-black mt-1 cursor-pointer"
             >
               Retry Image
@@ -171,13 +184,16 @@ function CatalogueImageCard({
           /* eslint-disable-next-line @next/next/no-img-element */
           <img
             ref={imgRef}
-            src={item.proxyUrl}
+            src={imageUrl}
             alt={item.alt_text || `${item.product.name} image ${item.display_order + 1}`}
-            loading="eager"
+            loading="lazy"
             decoding="async"
             onLoad={() => setIsLoaded(true)}
-            onError={() => onImageError(item.id)}
-            className={`w-full h-full object-cover object-center group-hover:scale-105 transition-all duration-300 ${
+            onError={() => {
+              setIsLoaded(false);
+              onImageError(item.id);
+            }}
+            className={`w-full h-full object-cover object-center group-hover:scale-105 transition-opacity duration-300 ${
               isLoaded ? "opacity-100" : "opacity-0"
             }`}
           />
@@ -262,7 +278,7 @@ export default function StorefrontPage() {
 
   // Loading States
   const [isLoadingInitial, setIsLoadingInitial] = useState<boolean>(true);
-  const [isCommittingBatch, setIsCommittingBatch] = useState<boolean>(false);
+  const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
   const [isPrefetching, setIsPrefetching] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
@@ -277,18 +293,16 @@ export default function StorefrontPage() {
   const [showDiagnostics, setShowDiagnostics] = useState<boolean>(false);
   const [prefetchedBatchInfo, setPrefetchedBatchInfo] = useState<{ page: number; count: number } | null>(null);
 
-  // Refs for continuous rolling preload queue & observer control
+  // Strict Sequential Refs
   const isMountedRef = useRef<boolean>(true);
-  const isFetchingInitialRef = useRef<boolean>(false);
-  const isPrefetchingRef = useRef<boolean>(false);
+  const displayedPageRef = useRef<number>(1);
+  const fetchingPageRef = useRef<number | null>(null);
   const isCommittingRef = useRef<boolean>(false);
   const userRequestedNextBatchRef = useRef<boolean>(false);
   const prefetchedBatchRef = useRef<PrefetchedBatch | null>(null);
-  const currentPrefetchPromiseRef = useRef<Promise<PrefetchedBatch | null> | null>(null);
-  const commitNextBatchRef = useRef<(() => Promise<void>) | null>(null);
-  const pageRef = useRef<number>(1);
   const hasMoreRef = useRef<boolean>(false);
   const observerSentinelRef = useRef<HTMLDivElement | null>(null);
+  const commitPreparedBatchRef = useRef<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -296,15 +310,6 @@ export default function StorefrontPage() {
       isMountedRef.current = false;
     };
   }, []);
-
-  // Sync state refs to avoid stale closures in IntersectionObserver
-  useEffect(() => {
-    pageRef.current = page;
-  }, [page]);
-
-  useEffect(() => {
-    hasMoreRef.current = hasMore;
-  }, [hasMore]);
 
   /**
    * Proactively prefetch the next batch of 12 images in the background.
@@ -315,13 +320,14 @@ export default function StorefrontPage() {
     async (targetPage: number) => {
       if (
         !hasMoreRef.current ||
-        isPrefetchingRef.current ||
+        targetPage <= displayedPageRef.current ||
+        fetchingPageRef.current !== null ||
         prefetchedBatchRef.current?.page === targetPage
       ) {
         return;
       }
 
-      isPrefetchingRef.current = true;
+      fetchingPageRef.current = targetPage;
       if (isMountedRef.current) {
         setIsPrefetching(true);
       }
@@ -329,144 +335,134 @@ export default function StorefrontPage() {
       const from = (targetPage - 1) * BATCH_SIZE;
       const to = from + BATCH_SIZE - 1;
 
-      const promise = (async () => {
-        try {
-          const client = getSupabaseClient();
-          let query = client
-            .from("product_images")
-            .select(
-              `
+      try {
+        const client = getSupabaseClient();
+        let query = client
+          .from("product_images")
+          .select(
+            `
+            id,
+            storage_path,
+            alt_text,
+            display_order,
+            is_primary,
+            color,
+            created_at,
+            product:products!inner (
               id,
-              storage_path,
-              alt_text,
-              display_order,
-              is_primary,
-              color,
-              created_at,
-              product:products!inner (
+              name,
+              slug,
+              description,
+              price,
+              sale_price,
+              category,
+              status,
+              product_variants (
                 id,
-                name,
-                slug,
-                description,
-                price,
-                sale_price,
-                category,
-                status,
-                product_variants (
-                  id,
-                  size,
-                  color,
-                  stock_quantity,
-                  is_available
-                )
+                size,
+                color,
+                stock_quantity,
+                is_available
               )
-            `,
-              { count: "exact" }
             )
-            .eq("product.status", "published")
-            .order("created_at", { ascending: false })
-            .order("display_order", { ascending: true })
-            .order("id", { ascending: true })
-            .range(from, to);
+          `,
+            { count: "exact" }
+          )
+          .eq("product.status", "published")
+          .order("created_at", { ascending: false })
+          .order("display_order", { ascending: true })
+          .order("id", { ascending: true })
+          .range(from, to);
 
-          if (selectedCategory !== "All") {
-            query = query.eq("product.category", selectedCategory);
-          }
-
-          if (searchQuery.trim() !== "") {
-            query = query.ilike("product.name", `%${searchQuery.trim()}%`);
-          }
-
-          const tMetaStart = performance.now();
-          const { data, count, error } = await query;
-          const metaDurationMs = Math.round(performance.now() - tMetaStart);
-
-          if (error) {
-            throw new Error(error.message || "Failed to prefetch next batch.");
-          }
-
-          if (!isMountedRef.current) return null;
-
-          type RawImageRow = {
-            id: string;
-            storage_path: string;
-            alt_text: string | null;
-            display_order: number;
-            is_primary: boolean;
-            color: string | null;
-            created_at: string;
-            product: ImageParentProduct | ImageParentProduct[];
-          };
-
-          const formatted: ImageCardItem[] = ((data as unknown as RawImageRow[]) || []).map((item) => {
-            const rawProd = Array.isArray(item.product) ? item.product[0] : item.product;
-            const parentProduct: ImageParentProduct = {
-              id: rawProd.id,
-              name: rawProd.name,
-              slug: rawProd.slug,
-              description: rawProd.description,
-              price: Number(rawProd.price),
-              sale_price: rawProd.sale_price !== null ? Number(rawProd.sale_price) : null,
-              category: rawProd.category,
-              status: rawProd.status,
-              product_variants: rawProd.product_variants,
-            };
-
-            return {
-              id: item.id,
-              storage_path: item.storage_path,
-              alt_text: item.alt_text,
-              display_order: item.display_order,
-              is_primary: item.is_primary,
-              color: item.color,
-              created_at: item.created_at,
-              proxyUrl: `/api/images/${item.storage_path}`,
-              product: parentProduct,
-            };
-          });
-
-          const total = count ?? 0;
-          const batchResult: PrefetchedBatch = {
-            page: targetPage,
-            items: formatted,
-            totalCount: total,
-            metaDurationMs,
-          };
-
-          prefetchedBatchRef.current = batchResult;
-          if (isMountedRef.current) {
-            setPrefetchedBatchInfo({ page: targetPage, count: formatted.length });
-          }
-
-          // Start bounded background image preloading for this batch
-          preloadBatchImagesInBackground(formatted);
-
-          return batchResult;
-        } catch (err: unknown) {
-          if (isMountedRef.current) {
-            console.warn("[prefetchBatch] Error prefetching batch:", err);
-          }
-          return null;
-        } finally {
-          isPrefetchingRef.current = false;
-          if (isMountedRef.current) {
-            setIsPrefetching(false);
-          }
-          currentPrefetchPromiseRef.current = null;
+        if (selectedCategory !== "All") {
+          query = query.eq("product.category", selectedCategory);
         }
-      })();
 
-      currentPrefetchPromiseRef.current = promise;
-      const result = await promise;
+        if (searchQuery.trim() !== "") {
+          query = query.ilike("product.name", `%${searchQuery.trim()}%`);
+        }
 
-      // If the user's scroll position reached the sentinel while fetching was in flight, commit immediately!
-      if (
-        userRequestedNextBatchRef.current &&
-        result &&
-        result.items.length > 0 &&
-        isMountedRef.current
-      ) {
-        commitNextBatchRef.current?.();
+        const tStart = performance.now();
+        const { data, count, error } = await query;
+        const metaDurationMs = Math.round(performance.now() - tStart);
+
+        if (error) {
+          throw new Error(error.message || "Failed to retrieve next batch of images.");
+        }
+
+        if (!isMountedRef.current) return;
+
+        type RawImageRow = {
+          id: string;
+          storage_path: string;
+          alt_text: string | null;
+          display_order: number;
+          is_primary: boolean;
+          color: string | null;
+          created_at: string;
+          product: ImageParentProduct | ImageParentProduct[];
+        };
+
+        const formatted: ImageCardItem[] = ((data as unknown as RawImageRow[]) || []).map((item) => {
+          const rawProd = Array.isArray(item.product) ? item.product[0] : item.product;
+          const parentProduct: ImageParentProduct = {
+            id: rawProd.id,
+            name: rawProd.name,
+            slug: rawProd.slug,
+            description: rawProd.description,
+            price: Number(rawProd.price),
+            sale_price: rawProd.sale_price !== null ? Number(rawProd.sale_price) : null,
+            category: rawProd.category,
+            status: rawProd.status,
+            product_variants: rawProd.product_variants,
+          };
+
+          return {
+            id: item.id,
+            storage_path: item.storage_path,
+            alt_text: item.alt_text,
+            display_order: item.display_order,
+            is_primary: item.is_primary,
+            color: item.color,
+            created_at: item.created_at,
+            proxyUrl: `/api/images/${item.storage_path}`,
+            product: parentProduct,
+          };
+        });
+
+        const total = count ?? 0;
+        const batchResult: PrefetchedBatch = {
+          page: targetPage,
+          items: formatted,
+          totalCount: total,
+          metaDurationMs,
+        };
+
+        prefetchedBatchRef.current = batchResult;
+        if (isMountedRef.current) {
+          setPrefetchedBatchInfo({ page: targetPage, count: formatted.length });
+          setLoadMoreError(null);
+        }
+
+        // Start bounded background image preloading for this batch
+        preloadBatchImagesInBackground(formatted);
+      } catch (err: unknown) {
+        if (isMountedRef.current) {
+          const msg = err instanceof Error ? err.message : "Failed to load next batch.";
+          console.warn("[prefetchBatch] Error prefetching batch:", msg);
+          setLoadMoreError(msg);
+          setIsLoadingMore(false);
+        }
+      } finally {
+        fetchingPageRef.current = null;
+        if (isMountedRef.current) {
+          setIsPrefetching(false);
+        }
+      }
+
+      // If user's scroll position reached the sentinel while fetch was in flight, commit immediately!
+      if (userRequestedNextBatchRef.current && isMountedRef.current) {
+        commitPreparedBatchRef.current?.();
       }
     },
     [selectedCategory, searchQuery]
@@ -476,130 +472,93 @@ export default function StorefrontPage() {
    * Appends the prepared next batch of cards to the grid and immediately
    * triggers prefetching of the following batch to maintain a continuous cycle.
    */
-  const commitNextBatch = useCallback(async () => {
+  const commitPreparedBatch = useCallback(async () => {
     if (isCommittingRef.current || !hasMoreRef.current) return;
 
+    const targetPage = displayedPageRef.current + 1;
+
     // 1. FAST PATH: If batch is already prefetched and ready in memory, commit instantly with 0ms wait!
-    if (prefetchedBatchRef.current) {
+    if (prefetchedBatchRef.current && prefetchedBatchRef.current.page === targetPage) {
+      isCommittingRef.current = true;
       const batch = prefetchedBatchRef.current;
       prefetchedBatchRef.current = null;
       setPrefetchedBatchInfo(null);
       userRequestedNextBatchRef.current = false;
-      isCommittingRef.current = true;
+      setIsLoadingMore(false);
+      setLoadMoreError(null);
 
+      // Append items, deduplicating to maintain pristine sequential order
       setImages((prev) => {
         const existingIds = new Set(prev.map((img) => img.id));
         const fresh = batch.items.filter((img) => !existingIds.has(img.id));
         return [...prev, ...fresh];
       });
 
-      const newPage = batch.page;
-      const moreAvailable =
-        newPage * BATCH_SIZE < batch.totalCount && batch.items.length === BATCH_SIZE;
+      displayedPageRef.current = batch.page;
+      setPage(batch.page);
 
-      setPage(newPage);
-      pageRef.current = newPage;
-      setHasMore(moreAvailable);
+      const moreAvailable =
+        batch.page * BATCH_SIZE < batch.totalCount && batch.items.length === BATCH_SIZE;
       hasMoreRef.current = moreAvailable;
+      setHasMore(moreAvailable);
       setTotalCount(batch.totalCount);
-      setIsCommittingBatch(false);
-      setLoadMoreError(null);
-      isCommittingRef.current = false;
 
       // Record performance metric
       const metric: BatchMetric = {
-        batchNumber: newPage,
+        batchNumber: batch.page,
         imageCount: batch.items.length,
         metaDurationMs: batch.metaDurationMs,
         preloadDurationMs: 0,
-        totalDurationMs: 0,
+        totalDurationMs: batch.metaDurationMs,
         successfulCount: batch.items.length,
         failedCount: 0,
         timestamp: new Date().toLocaleTimeString(),
       };
       setMetrics((prev) => [...prev, metric]);
 
+      isCommittingRef.current = false;
+
       // CONTINUOUS CYCLE: Immediately trigger background prefetch of next batch!
       if (moreAvailable) {
-        prefetchBatch(newPage + 1);
+        prefetchBatch(batch.page + 1);
       }
       return;
     }
 
-    // 2. IN-FLIGHT PATH: If prefetch is currently resolving, await it and show subtle indicator
-    if (currentPrefetchPromiseRef.current) {
+    // 2. IN-FLIGHT PATH: If prefetch is currently in progress, mark user request and show restored loading animation
+    if (fetchingPageRef.current === targetPage) {
       userRequestedNextBatchRef.current = true;
-      setIsCommittingBatch(true);
+      setIsLoadingMore(true);
       setLoadMoreError(null);
-
-      const batch = await currentPrefetchPromiseRef.current;
-      if (batch && batch.items.length > 0 && isMountedRef.current) {
-        prefetchedBatchRef.current = null;
-        setPrefetchedBatchInfo(null);
-        userRequestedNextBatchRef.current = false;
-        isCommittingRef.current = true;
-
-        setImages((prev) => {
-          const existingIds = new Set(prev.map((img) => img.id));
-          const fresh = batch.items.filter((img) => !existingIds.has(img.id));
-          return [...prev, ...fresh];
-        });
-
-        const newPage = batch.page;
-        const moreAvailable =
-          newPage * BATCH_SIZE < batch.totalCount && batch.items.length === BATCH_SIZE;
-
-        setPage(newPage);
-        pageRef.current = newPage;
-        setHasMore(moreAvailable);
-        hasMoreRef.current = moreAvailable;
-        setTotalCount(batch.totalCount);
-        setIsCommittingBatch(false);
-        isCommittingRef.current = false;
-
-        const metric: BatchMetric = {
-          batchNumber: newPage,
-          imageCount: batch.items.length,
-          metaDurationMs: batch.metaDurationMs,
-          preloadDurationMs: 0,
-          totalDurationMs: 0,
-          successfulCount: batch.items.length,
-          failedCount: 0,
-          timestamp: new Date().toLocaleTimeString(),
-        };
-        setMetrics((prev) => [...prev, metric]);
-
-        // CONTINUOUS CYCLE: Immediately trigger background prefetch of following batch!
-        if (moreAvailable) {
-          prefetchBatch(newPage + 1);
-        }
-      } else {
-        setIsCommittingBatch(false);
-      }
       return;
     }
 
-    // 3. IDLE PATH: If neither prefetched nor in-flight, initiate prefetch and commit when done
-    userRequestedNextBatchRef.current = true;
-    setIsCommittingBatch(true);
-    setLoadMoreError(null);
-    prefetchBatch(pageRef.current + 1);
+    // 3. IDLE PATH: If neither prefetched nor in-flight, initiate prefetch and show loading animation
+    if (fetchingPageRef.current === null) {
+      userRequestedNextBatchRef.current = true;
+      setIsLoadingMore(true);
+      setLoadMoreError(null);
+      prefetchBatch(targetPage);
+    }
   }, [prefetchBatch]);
 
   useEffect(() => {
-    commitNextBatchRef.current = commitNextBatch;
-  }, [commitNextBatch]);
+    commitPreparedBatchRef.current = commitPreparedBatch;
+  }, [commitPreparedBatch]);
 
   // Initial load: queries first 12 images, reveals them, and immediately triggers background prefetch of batch #2
   useEffect(() => {
     let ignore = false;
-    isFetchingInitialRef.current = true;
-    userRequestedNextBatchRef.current = false;
+    displayedPageRef.current = 1;
+    fetchingPageRef.current = null;
     prefetchedBatchRef.current = null;
-    currentPrefetchPromiseRef.current = null;
+    userRequestedNextBatchRef.current = false;
+    isCommittingRef.current = false;
 
     async function loadInitial() {
       setIsLoadingInitial(true);
+      setIsLoadingMore(false);
+      setPrefetchedBatchInfo(null);
       setErrorMessage(null);
       setLoadMoreError(null);
 
@@ -707,9 +666,9 @@ export default function StorefrontPage() {
         setHasMore(moreAvailable);
         hasMoreRef.current = moreAvailable;
         setPage(1);
-        pageRef.current = 1;
+        displayedPageRef.current = 1;
 
-        // Reveal initial 12 cards together
+        // Reveal initial 12 cards together and hide initial loader
         setImages(formatted);
         setIsLoadingInitial(false);
 
@@ -743,8 +702,6 @@ export default function StorefrontPage() {
           setErrorMessage(msg);
           setIsLoadingInitial(false);
         }
-      } finally {
-        isFetchingInitialRef.current = false;
       }
     }
 
@@ -766,7 +723,7 @@ export default function StorefrontPage() {
       (entries) => {
         const first = entries[0];
         if (first && first.isIntersecting) {
-          commitNextBatch();
+          commitPreparedBatch();
         }
       },
       { rootMargin: "1000px", threshold: 0 }
@@ -777,7 +734,7 @@ export default function StorefrontPage() {
     return () => {
       observer.disconnect();
     };
-  }, [commitNextBatch, hasMore, isLoadingInitial]);
+  }, [commitPreparedBatch, hasMore, isLoadingInitial]);
 
   function handleImageError(imageId: string) {
     setFailedImageIds((prev) => new Set(prev).add(imageId));
@@ -834,7 +791,7 @@ export default function StorefrontPage() {
             </div>
             <p className="text-xs text-neutral-500 mt-1">
               {totalCount > 0
-                ? `Showing ${images.length} of ${totalCount} styles (12 per batch • proactive preloading)`
+                ? `Showing ${images.length} of ${totalCount} styles (Batch ${page} • 12 per batch • proactive preloading)`
                 : "Continuous catalogue feed"}
             </p>
           </div>
@@ -953,7 +910,7 @@ export default function StorefrontPage() {
           </div>
         )}
 
-        {/* Initial Loading State: spinner for first 12 cards */}
+        {/* Initial Loading State: Coordinated batch preparation spinner */}
         {isLoadingInitial && (
           <div className="py-24 flex flex-col items-center justify-center text-center space-y-4">
             <div className="relative flex items-center justify-center">
@@ -961,11 +918,11 @@ export default function StorefrontPage() {
               <div className="absolute w-12 h-12 border-3 border-neutral-200 border-t-neutral-900 rounded-full motion-safe:animate-spin" />
             </div>
             <div className="space-y-1">
-              <p className="text-sm font-semibold text-neutral-900 tracking-tight">
-                Preparing Curated Catalogue...
+              <p className="text-base font-semibold text-neutral-900 tracking-tight">
+                Preparing Initial Styles...
               </p>
-              <p className="text-xs text-neutral-500">
-                Fetching initial collection from Supabase & Cloudflare R2
+              <p className="text-xs font-mono text-neutral-500">
+                Connecting to Cloudflare R2 archive & Supabase
               </p>
             </div>
           </div>
@@ -1028,20 +985,31 @@ export default function StorefrontPage() {
           </div>
         )}
 
-        {/* Subtle Fallback Loading Indicator (only visible if user outpaces network) */}
-        {isCommittingBatch && (
+        {/* Restored Bottom Coordinated Batch Loading Indicator (visible if user outpaces network) */}
+        {isLoadingMore && (
           <div
             role="status"
             aria-live="polite"
-            className="py-8 flex flex-col items-center justify-center text-center space-y-2.5 transition-opacity duration-200"
+            className="py-10 flex flex-col items-center justify-center text-center space-y-3.5"
           >
             <div className="relative flex items-center justify-center">
-              <div className="w-8 h-8 rounded-full bg-neutral-900/10 motion-safe:animate-ping opacity-25" />
-              <div className="absolute w-7 h-7 border-2 border-neutral-200 border-t-neutral-900 rounded-full motion-safe:animate-spin" />
+              <div className="w-12 h-12 rounded-full bg-neutral-900/10 motion-safe:animate-ping opacity-25" />
+              <div className="absolute w-10 h-10 border-2 border-neutral-200 border-t-neutral-900 rounded-full motion-safe:animate-spin" />
             </div>
-            <p className="text-xs font-medium text-neutral-600">
-              Loading next styles...
-            </p>
+
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-neutral-900 tracking-tight">
+                Loading more styles...
+              </p>
+              <p className="text-xs font-mono text-neutral-500">
+                Preparing next collection of styles...
+              </p>
+            </div>
+
+            {/* Smooth progress bar */}
+            <div className="w-56 h-1.5 bg-neutral-100 rounded-full overflow-hidden border border-neutral-200/50">
+              <div className="h-full bg-neutral-900 animate-pulse w-2/3 rounded-full" />
+            </div>
           </div>
         )}
 
@@ -1051,7 +1019,10 @@ export default function StorefrontPage() {
             <p className="text-xs text-rose-800 font-medium">{loadMoreError}</p>
             <button
               type="button"
-              onClick={() => commitNextBatch()}
+              onClick={() => {
+                setLoadMoreError(null);
+                commitPreparedBatch();
+              }}
               className="px-3.5 py-1.5 bg-neutral-900 text-white rounded-lg text-xs font-semibold hover:bg-neutral-800 transition-colors cursor-pointer"
             >
               Retry Loading Next Batch
