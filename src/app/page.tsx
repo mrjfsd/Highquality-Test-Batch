@@ -54,45 +54,107 @@ interface PrefetchedBatch {
   items: ImageCardItem[];
   totalCount: number;
   metaDurationMs: number;
+  preloadDurationMs: number;
+  failedIds: string[];
 }
 
 /**
- * Proactively preloads images into browser HTTP/disk cache in the background.
- * Uses bounded concurrency (4 parallel workers) so it doesn't saturate the network
- * or block the main thread, prioritizing cards closest to entering the viewport.
+ * Preloads and decodes an image URL using the browser's native Image and decode() API.
+ * Ensures that pixels are decompressed in memory before the card is mounted into the DOM,
+ * eliminating individual image flash/pop-in.
  */
-function preloadBatchImagesInBackground(items: ImageCardItem[]) {
-  if (typeof window === "undefined" || items.length === 0) return;
+function preloadAndDecodeImage(
+  url: string,
+  timeoutMs = 6000
+): Promise<{ success: boolean; durationMs: number }> {
+  if (typeof window === "undefined") {
+    return Promise.resolve({ success: true, durationMs: 0 });
+  }
 
-  const concurrency = 4;
-  let index = 0;
+  return new Promise((resolve) => {
+    const start = performance.now();
+    let settled = false;
 
-  async function worker() {
-    while (index < items.length) {
-      const currentIndex = index++;
-      const item = items[currentIndex];
-      if (!item) break;
+    const cleanup = (success: boolean) => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        resolve({ success, durationMs: Math.round(performance.now() - start) });
+      }
+    };
 
-      try {
-        const img = new Image();
-        img.src = item.proxyUrl;
-        if (typeof img.decode === "function") {
+    const timer = setTimeout(() => {
+      cleanup(false);
+    }, timeoutMs);
+
+    const img = new Image();
+
+    const tryDecode = async () => {
+      if (typeof img.decode === "function") {
+        try {
           await Promise.race([
             img.decode(),
-            new Promise((resolve) => setTimeout(resolve, 800)),
+            new Promise((r) => setTimeout(r, 1000)),
           ]);
+        } catch {
+          // Decode error or timeout — bytes are already downloaded
         }
-      } catch {
-        // Non-blocking: <img> tag will still load normally on mount
       }
+      cleanup(true);
+    };
+
+    img.onload = tryDecode;
+    img.onerror = () => {
+      console.warn("[preload] Image load error:", url);
+      cleanup(false);
+    };
+
+    // Set src AFTER attaching handlers
+    img.src = url;
+
+    // Fast-path if image was already cached synchronously
+    if (img.complete && img.naturalWidth > 0) {
+      tryDecode();
+    }
+  });
+}
+
+/**
+ * Preloads a batch of images using bounded concurrency (4 parallel workers)
+ * so it doesn't overwhelm the browser network or block main thread execution.
+ */
+async function preloadBatchWithBoundedConcurrency(
+  items: ImageCardItem[],
+  concurrency = 4,
+  timeoutMs = 6000,
+  onProgress?: (loaded: number, total: number) => void
+): Promise<{ id: string; success: boolean }[]> {
+  if (typeof window === "undefined" || items.length === 0) {
+    return items.map((it) => ({ id: it.id, success: true }));
+  }
+
+  let nextIndex = 0;
+  let loadedCount = 0;
+  const results: { id: string; success: boolean }[] = new Array(items.length);
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const idx = nextIndex++;
+      const item = items[idx];
+      if (!item) break;
+
+      const res = await preloadAndDecodeImage(item.proxyUrl, timeoutMs);
+      results[idx] = { id: item.id, success: res.success };
+      loadedCount++;
+      onProgress?.(loadedCount, items.length);
     }
   }
 
-  const workers = Array.from(
-    { length: Math.min(concurrency, items.length) },
-    () => worker()
-  );
-  Promise.all(workers).catch(() => {});
+  const workerCount = Math.min(concurrency, items.length);
+  const workers = Array.from({ length: workerCount }, () => worker());
+  await Promise.all(workers);
+
+  return results;
 }
 
 interface CatalogueImageCardProps {
@@ -104,7 +166,7 @@ interface CatalogueImageCardProps {
 
 /**
  * Individual catalogue image card with reserved 3:4 aspect ratio,
- * subtle skeleton placeholder, and smooth image fade-in.
+ * explicit loading/loaded/error lifecycle, and smooth image reveal.
  */
 function CatalogueImageCard({
   item,
@@ -112,25 +174,32 @@ function CatalogueImageCard({
   onImageError,
   onRetryImage,
 }: CatalogueImageCardProps) {
-  const [isLoaded, setIsLoaded] = useState<boolean>(false);
+  const [imageStatus, setImageStatus] = useState<"loading" | "loaded" | "error">("loading");
   const [retryTimestamp, setRetryTimestamp] = useState<number | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
 
-  // If the image was already preloaded into memory/disk cache, check img.complete on mount
+  const effectiveStatus = isImageBroken ? "error" : imageStatus;
+
+  // Check if image is already complete / cached on mount or when retry occurs
   useEffect(() => {
-    if (imgRef.current && imgRef.current.complete) {
-      if (imgRef.current.naturalWidth > 0) {
-        setIsLoaded(true);
+    if (isImageBroken) return;
+    const img = imgRef.current;
+    if (img && img.complete) {
+      if (img.naturalWidth > 0) {
+        setImageStatus("loaded");
+      } else {
+        setImageStatus("error");
+        onImageError(item.id);
       }
     }
-  }, [retryTimestamp]);
+  }, [isImageBroken, item.id, onImageError, retryTimestamp]);
 
   const imageUrl = retryTimestamp
     ? `${item.proxyUrl}?retry=${retryTimestamp}`
     : item.proxyUrl;
 
   const handleRetry = () => {
-    setIsLoaded(false);
+    setImageStatus("loading");
     setRetryTimestamp(Date.now());
     onRetryImage(item.id);
   };
@@ -154,12 +223,12 @@ function CatalogueImageCard({
     <article className="group bg-white border border-neutral-200 rounded-xl overflow-hidden shadow-2xs hover:shadow-md transition-shadow duration-200 flex flex-col">
       {/* Image Container with Rigidly Reserved 3:4 Aspect Ratio (CLS = 0) */}
       <div className="relative w-full aspect-3/4 bg-neutral-100 overflow-hidden flex items-center justify-center">
-        {/* Subtle Skeleton Placeholder while image is loading */}
-        {!isLoaded && !isImageBroken && (
+        {/* Subtle Skeleton Placeholder displayed ONLY while image is loading */}
+        {effectiveStatus === "loading" && (
           <div className="absolute inset-0 bg-neutral-200/60 animate-pulse pointer-events-none" />
         )}
 
-        {isImageBroken ? (
+        {effectiveStatus === "error" ? (
           <div className="flex flex-col items-center justify-center p-6 text-neutral-400 text-center gap-2">
             <svg className="w-10 h-10 stroke-current text-neutral-300" fill="none" viewBox="0 0 24 24">
               <path
@@ -186,15 +255,22 @@ function CatalogueImageCard({
             ref={imgRef}
             src={imageUrl}
             alt={item.alt_text || `${item.product.name} image ${item.display_order + 1}`}
-            loading="lazy"
+            loading="eager"
             decoding="async"
-            onLoad={() => setIsLoaded(true)}
+            onLoad={(e) => {
+              if (e.currentTarget.naturalWidth > 0) {
+                setImageStatus("loaded");
+              } else {
+                setImageStatus("error");
+                onImageError(item.id);
+              }
+            }}
             onError={() => {
-              setIsLoaded(false);
+              setImageStatus("error");
               onImageError(item.id);
             }}
             className={`w-full h-full object-cover object-center group-hover:scale-105 transition-opacity duration-300 ${
-              isLoaded ? "opacity-100" : "opacity-0"
+              effectiveStatus === "loaded" ? "opacity-100" : "opacity-0"
             }`}
           />
         )}
@@ -282,6 +358,10 @@ export default function StorefrontPage() {
   const [isPrefetching, setIsPrefetching] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
+  const [batchProgress, setBatchProgress] = useState<{ loaded: number; total: number }>({
+    loaded: 0,
+    total: BATCH_SIZE,
+  });
 
   // Filters & Search
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
@@ -313,8 +393,8 @@ export default function StorefrontPage() {
 
   /**
    * Proactively prefetch the next batch of 12 images in the background.
-   * Runs Supabase query and triggers background image preloading so cards are ready
-   * in memory before the user scrolls to them.
+   * Runs Supabase query and preloads images into browser memory so cards are ready
+   * before the user scrolls to them.
    */
   const prefetchBatch = useCallback(
     async (targetPage: number) => {
@@ -430,12 +510,34 @@ export default function StorefrontPage() {
           };
         });
 
+        // Preload & decode images using bounded concurrency
+        const tPreloadStart = performance.now();
+        if (userRequestedNextBatchRef.current && isMountedRef.current) {
+          setBatchProgress({ loaded: 0, total: formatted.length });
+        }
+
+        const preloadResults = await preloadBatchWithBoundedConcurrency(
+          formatted,
+          4,
+          6000,
+          (loaded, total) => {
+            if (isMountedRef.current && userRequestedNextBatchRef.current) {
+              setBatchProgress({ loaded, total });
+            }
+          }
+        );
+
+        const preloadDurationMs = Math.round(performance.now() - tPreloadStart);
+        const failedIds = preloadResults.filter((r) => !r.success).map((r) => r.id);
+
         const total = count ?? 0;
         const batchResult: PrefetchedBatch = {
           page: targetPage,
           items: formatted,
           totalCount: total,
           metaDurationMs,
+          preloadDurationMs,
+          failedIds,
         };
 
         prefetchedBatchRef.current = batchResult;
@@ -443,9 +545,6 @@ export default function StorefrontPage() {
           setPrefetchedBatchInfo({ page: targetPage, count: formatted.length });
           setLoadMoreError(null);
         }
-
-        // Start bounded background image preloading for this batch
-        preloadBatchImagesInBackground(formatted);
       } catch (err: unknown) {
         if (isMountedRef.current) {
           const msg = err instanceof Error ? err.message : "Failed to load next batch.";
@@ -460,7 +559,7 @@ export default function StorefrontPage() {
         }
       }
 
-      // If user's scroll position reached the sentinel while fetch was in flight, commit immediately!
+      // If user's scroll position requested this batch, commit immediately!
       if (userRequestedNextBatchRef.current && isMountedRef.current) {
         commitPreparedBatchRef.current?.();
       }
@@ -487,6 +586,15 @@ export default function StorefrontPage() {
       setIsLoadingMore(false);
       setLoadMoreError(null);
 
+      // Track failed images so they display error fallback immediately
+      if (batch.failedIds.length > 0) {
+        setFailedImageIds((prev) => {
+          const next = new Set(prev);
+          batch.failedIds.forEach((id) => next.add(id));
+          return next;
+        });
+      }
+
       // Append items, deduplicating to maintain pristine sequential order
       setImages((prev) => {
         const existingIds = new Set(prev.map((img) => img.id));
@@ -508,10 +616,10 @@ export default function StorefrontPage() {
         batchNumber: batch.page,
         imageCount: batch.items.length,
         metaDurationMs: batch.metaDurationMs,
-        preloadDurationMs: 0,
-        totalDurationMs: batch.metaDurationMs,
-        successfulCount: batch.items.length,
-        failedCount: 0,
+        preloadDurationMs: batch.preloadDurationMs,
+        totalDurationMs: batch.metaDurationMs + batch.preloadDurationMs,
+        successfulCount: batch.items.length - batch.failedIds.length,
+        failedCount: batch.failedIds.length,
         timestamp: new Date().toLocaleTimeString(),
       };
       setMetrics((prev) => [...prev, metric]);
@@ -558,6 +666,7 @@ export default function StorefrontPage() {
     async function loadInitial() {
       setIsLoadingInitial(true);
       setIsLoadingMore(false);
+      setBatchProgress({ loaded: 0, total: BATCH_SIZE });
       setPrefetchedBatchInfo(null);
       setErrorMessage(null);
       setLoadMoreError(null);
@@ -659,6 +768,30 @@ export default function StorefrontPage() {
           };
         });
 
+        // Preload & decode the initial 12 images with bounded concurrency while showing the buffering animation
+        const tPreloadStart = performance.now();
+        setBatchProgress({ loaded: 0, total: formatted.length });
+
+        const preloadResults = await preloadBatchWithBoundedConcurrency(
+          formatted,
+          4,
+          6000,
+          (loaded, total) => {
+            if (!ignore) {
+              setBatchProgress({ loaded, total });
+            }
+          }
+        );
+
+        const preloadDurationMs = Math.round(performance.now() - tPreloadStart);
+
+        if (ignore) return;
+
+        const failed = preloadResults.filter((r) => !r.success).map((r) => r.id);
+        if (failed.length > 0) {
+          setFailedImageIds(new Set(failed));
+        }
+
         const total = count || 0;
         const moreAvailable = BATCH_SIZE < total && formatted.length === BATCH_SIZE;
 
@@ -668,7 +801,7 @@ export default function StorefrontPage() {
         setPage(1);
         displayedPageRef.current = 1;
 
-        // Reveal initial 12 cards together and hide initial loader
+        // Reveal the initial 12 cards together with their images fully ready in memory
         setImages(formatted);
         setIsLoadingInitial(false);
 
@@ -678,16 +811,13 @@ export default function StorefrontPage() {
           batchNumber: 1,
           imageCount: formatted.length,
           metaDurationMs,
-          preloadDurationMs: 0,
+          preloadDurationMs,
           totalDurationMs,
-          successfulCount: formatted.length,
-          failedCount: 0,
+          successfulCount: formatted.length - failed.length,
+          failedCount: failed.length,
           timestamp: new Date().toLocaleTimeString(),
         };
         setMetrics([metric]);
-
-        // Background preload initial images for instant render
-        preloadBatchImagesInBackground(formatted);
 
         // CONTINUOUS CYCLE: Immediately trigger background prefetch of batch #2!
         if (moreAvailable) {
@@ -889,6 +1019,9 @@ export default function StorefrontPage() {
                       <th className="py-1">Batch</th>
                       <th className="py-1">Cards</th>
                       <th className="py-1">Metadata Duration</th>
+                      <th className="py-1">Preload Duration</th>
+                      <th className="py-1">Total Duration</th>
+                      <th className="py-1">Images Ready</th>
                       <th className="py-1">Status</th>
                     </tr>
                   </thead>
@@ -898,8 +1031,16 @@ export default function StorefrontPage() {
                         <td className="py-1 font-semibold text-white">#{m.batchNumber}</td>
                         <td className="py-1">{m.imageCount}</td>
                         <td className="py-1">{m.metaDurationMs}ms</td>
+                        <td className="py-1">{m.preloadDurationMs}ms</td>
+                        <td className="py-1 text-emerald-300 font-semibold">{m.totalDurationMs}ms</td>
+                        <td className="py-1">
+                          <span className="text-emerald-400">{m.successfulCount}</span>
+                          {m.failedCount > 0 && (
+                            <span className="text-rose-400 ml-1">({m.failedCount} err)</span>
+                          )}
+                        </td>
                         <td className="py-1 text-emerald-400">
-                          {m.batchNumber === 1 ? "✓ Initial batch" : "✓ Seamless prefetch commit"}
+                          {m.batchNumber === 1 ? "✓ Initial batch prepared" : "✓ Seamless prefetch commit"}
                         </td>
                       </tr>
                     ))}
@@ -922,8 +1063,24 @@ export default function StorefrontPage() {
                 Preparing Initial Styles...
               </p>
               <p className="text-xs font-mono text-neutral-500">
-                Connecting to Cloudflare R2 archive & Supabase
+                {batchProgress.total > 0
+                  ? `Loading & decoding images ${batchProgress.loaded} of ${batchProgress.total}`
+                  : "Connecting to Cloudflare R2 archive & Supabase"}
               </p>
+            </div>
+
+            {/* Smooth progress bar */}
+            <div className="w-56 h-1.5 bg-neutral-100 rounded-full overflow-hidden border border-neutral-200/50">
+              <div
+                className="h-full bg-neutral-900 transition-all duration-200 ease-out"
+                style={{
+                  width: `${
+                    batchProgress.total > 0
+                      ? Math.min((batchProgress.loaded / batchProgress.total) * 100, 100)
+                      : 8
+                  }%`,
+                }}
+              />
             </div>
           </div>
         )}
@@ -1002,13 +1159,24 @@ export default function StorefrontPage() {
                 Loading more styles...
               </p>
               <p className="text-xs font-mono text-neutral-500">
-                Preparing next collection of styles...
+                {batchProgress.total > 0
+                  ? `Preparing images ${batchProgress.loaded} of ${batchProgress.total}`
+                  : "Fetching image batch metadata..."}
               </p>
             </div>
 
             {/* Smooth progress bar */}
             <div className="w-56 h-1.5 bg-neutral-100 rounded-full overflow-hidden border border-neutral-200/50">
-              <div className="h-full bg-neutral-900 animate-pulse w-2/3 rounded-full" />
+              <div
+                className="h-full bg-neutral-900 transition-all duration-200 ease-out"
+                style={{
+                  width: `${
+                    batchProgress.total > 0
+                      ? Math.min((batchProgress.loaded / batchProgress.total) * 100, 100)
+                      : 15
+                  }%`,
+                }}
+              />
             </div>
           </div>
         )}
