@@ -1,4 +1,5 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
  * Validates and retrieves the required Supabase environment variables.
@@ -30,10 +31,13 @@ let clientInstance: SupabaseClient | null = null;
 
 /**
  * Creates a fresh Supabase client instance using validated public credentials.
+ * Uses @supabase/ssr createBrowserClient to persist the session in cookies
+ * so that server-side Route Handlers, Server Components, and Middleware
+ * can authenticate the user session.
  */
 export function createSupabaseClient(): SupabaseClient {
   const { url, key } = getSupabaseConfig();
-  return createClient(url, key);
+  return createBrowserClient(url, key);
 }
 
 /**

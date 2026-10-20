@@ -2,13 +2,17 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { verifyAdminAuthorization, type AdminVerificationResult } from "@/lib/supabase/auth";
 import type { Product, ProductVariant, ProductImage } from "@/types/product";
+import {
+  executeBatchUpload,
+  type BatchProgressState,
+  type BatchUploadItem,
+} from "@/lib/images/batch-uploader";
 
-const BUCKET_NAME = process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET || "product-images";
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+// Maximum raw file selection limit (compressed in-browser to ~1-2 MB before upload to R2)
+const MAX_INPUT_FILE_SIZE = 35 * 1024 * 1024; // 35 MB
 const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
 
 interface VariantInput {
@@ -30,8 +34,6 @@ interface ImageInput {
 }
 
 export default function NewProductPage() {
-  const router = useRouter();
-
   // Auth State
   const [authStatus, setAuthStatus] = useState<AdminVerificationResult>({
     isAuthenticated: false,
@@ -66,9 +68,18 @@ export default function NewProductPage() {
   const [selectedImages, setSelectedImages] = useState<ImageInput[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Submission / Progress State
+  // Concurrency & Batch Upload Progress State
+  const [concurrency, setConcurrency] = useState<number>(3);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [progressStep, setProgressStep] = useState<string | null>(null);
+  const [progressState, setProgressState] = useState<BatchProgressState | null>(null);
+  const [partialUploadSummary, setPartialUploadSummary] = useState<{
+    successCount: number;
+    failedCount: number;
+    cancelledCount: number;
+    failedItems: { name: string; error: string }[];
+  } | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [createdProduct, setCreatedProduct] = useState<{
     product: Product;
@@ -155,8 +166,8 @@ export default function NewProductPage() {
         errors.push(`${file.name}: Unsupported format (${file.type}). Only JPEG, PNG, WebP, AVIF accepted.`);
         return;
       }
-      if (file.size > MAX_FILE_SIZE) {
-        errors.push(`${file.name}: Exceeds 5 MB limit (${(file.size / (1024 * 1024)).toFixed(2)} MB).`);
+      if (file.size > MAX_INPUT_FILE_SIZE) {
+        errors.push(`${file.name}: Exceeds 35 MB input limit (${(file.size / (1024 * 1024)).toFixed(2)} MB).`);
         return;
       }
 
@@ -257,13 +268,27 @@ export default function NewProductPage() {
     }
 
     setIsSubmitting(true);
+    setPartialUploadSummary(null);
     const client = getSupabaseClient();
-    const uploadedPaths: string[] = [];
-    let createdProductId: string | null = null;
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
     try {
       // Step 1: Insert Product into public.products
-      setProgressStep("1/4 Creating product record in database...");
+      setProgressState({
+        stage: "Saving product",
+        overallPercent: selectedImages.length > 0 ? 5 : 50,
+        processedCount: 0,
+        totalCount: selectedImages.length,
+        successCount: 0,
+        failedCount: 0,
+        cancelledCount: 0,
+        currentFileName: null,
+        totalOriginalBytes: 0,
+        totalCompressedBytes: 0,
+        items: {},
+      });
+
       const { data: prodData, error: prodError } = await client
         .from("products")
         .insert({
@@ -282,11 +307,9 @@ export default function NewProductPage() {
         throw new Error(`Database error creating product: ${prodError?.message || "Unknown error"}`);
       }
 
-      createdProductId = prodData.id;
       const savedProduct: Product = prodData;
 
       // Step 2: Insert Variants into public.product_variants
-      setProgressStep("2/4 Saving product variants...");
       const variantRows = variants.map((v) => ({
         product_id: savedProduct.id,
         size: v.size.trim(),
@@ -305,99 +328,119 @@ export default function NewProductPage() {
         throw new Error(`Database error saving variants: ${variantError.message}`);
       }
 
-      // Step 3: Upload Image Files to Supabase Storage
+      // Step 3: Compress browser-side & upload via real-time progress batch pipeline
       const savedImages: ProductImage[] = [];
 
       if (selectedImages.length > 0) {
-        setProgressStep(`3/4 Uploading ${selectedImages.length} image(s) to Storage...`);
-
-        for (let i = 0; i < selectedImages.length; i++) {
-          const imgInput = selectedImages[i];
-          const ext = imgInput.file.name.split(".").pop()?.toLowerCase() || "jpg";
-          const uniqueName = `${Date.now()}-${i}-${crypto.randomUUID()}.${ext}`;
-          const storagePath = `products/${savedProduct.id}/${uniqueName}`;
-
-          const { error: uploadError } = await client.storage
-            .from(BUCKET_NAME)
-            .upload(storagePath, imgInput.file, {
-              cacheControl: "3600",
-              upsert: false,
-            });
-
-          if (uploadError) {
-            throw new Error(`Storage upload failed for ${imgInput.file.name}: ${uploadError.message}`);
-          }
-
-          uploadedPaths.push(storagePath);
-        }
-
-        // Step 4: Insert Image records into public.product_images
-        setProgressStep("4/4 Saving image metadata records...");
-        const imageRows = uploadedPaths.map((path, idx) => ({
-          product_id: savedProduct.id,
-          storage_path: path,
-          alt_text: selectedImages[idx].altText.trim() || `${savedProduct.name} image ${idx + 1}`,
-          display_order: idx,
-          is_primary: selectedImages[idx].isPrimary,
-          color: selectedImages[idx].color.trim() || null,
+        const batchItems: BatchUploadItem[] = selectedImages.map((img, idx) => ({
+          id: img.id,
+          file: img.file,
+          altText: img.altText,
+          color: img.color,
+          isPrimary: img.isPrimary,
+          displayOrder: idx,
         }));
 
-        const { data: savedImagesData, error: imgDbError } = await client
-          .from("product_images")
-          .insert(imageRows)
-          .select();
+        const uploadResult = await executeBatchUpload({
+          productId: savedProduct.id,
+          items: batchItems,
+          concurrency,
+          signal: abortController.signal,
+          getAuthToken: async () => {
+            const { data: sessionData } = await client.auth.getSession();
+            return sessionData.session?.access_token;
+          },
+          onProgress: (state) => {
+            setProgressState(state);
+          },
+        });
 
-        if (imgDbError) {
-          throw new Error(`Failed to save image metadata: ${imgDbError.message}`);
+        // Step 4: Insert Image metadata for successfully uploaded images
+        if (uploadResult.successful.length > 0) {
+          setProgressState((prev) => (prev ? { ...prev, stage: "Saving product" } : null));
+
+          const imageRows = uploadResult.successful.map((item) => ({
+            product_id: savedProduct.id,
+            storage_path: item.storagePath,
+            alt_text: item.altText.trim() || `${savedProduct.name} image ${item.displayOrder + 1}`,
+            display_order: item.displayOrder,
+            is_primary: item.isPrimary,
+            color: item.color.trim() || null,
+            mime_type: item.mimeType || null,
+            file_size_bytes: item.fileSizeBytes || null,
+            width: item.width || null,
+            height: item.height || null,
+          }));
+
+          const { data: savedImagesData, error: imgDbError } = await client
+            .from("product_images")
+            .insert(imageRows)
+            .select();
+
+          if (imgDbError) {
+            throw new Error(`Failed to save image metadata: ${imgDbError.message}`);
+          }
+
+          if (savedImagesData) {
+            savedImagesData.forEach((row: ProductImage) => {
+              savedImages.push({
+                ...row,
+                proxyUrl: `/api/images/${row.storage_path}`,
+              });
+            });
+          }
         }
 
-        // Resolve public URLs
-        if (savedImagesData) {
-          savedImagesData.forEach((row: ProductImage) => {
-            const { data: urlData } = client.storage
-              .from(BUCKET_NAME)
-              .getPublicUrl(row.storage_path);
-            savedImages.push({
-              ...row,
-              public_url: urlData.publicUrl,
-            });
+        // Handle partial uploads or cancellations safely
+        if (uploadResult.failed.length > 0 || uploadResult.cancelled.length > 0) {
+          const successfulIds = new Set(uploadResult.successful.map((s) => s.id));
+          setSelectedImages((prev) => prev.filter((img) => !successfulIds.has(img.id)));
+
+          setPartialUploadSummary({
+            successCount: uploadResult.successful.length,
+            failedCount: uploadResult.failed.length,
+            cancelledCount: uploadResult.cancelled.length,
+            failedItems: uploadResult.failed.map((f) => ({
+              name: f.fileName,
+              error: f.error,
+            })),
           });
         }
       }
 
-      // Everything succeeded cleanly!
+      // Succeeded! Render confirmed summary
       setCreatedProduct({
         product: savedProduct,
         variants: savedVariantsData || [],
         images: savedImages,
       });
     } catch (err: unknown) {
-      // Rollback cleanup on failure to avoid orphaned storage files and partial DB rows
-      if (uploadedPaths.length > 0) {
-        try {
-          await client.storage.from(BUCKET_NAME).remove(uploadedPaths);
-        } catch {
-          // Ignore secondary cleanup error
-        }
-      }
-      if (createdProductId) {
-        try {
-          await client.from("products").delete().eq("id", createdProductId);
-        } catch {
-          // Ignore secondary cleanup error
-        }
-      }
+      const isAborted =
+        (err instanceof DOMException && err.name === "AbortError") ||
+        abortController.signal.aborted;
 
-      const msg = err instanceof Error ? err.message : "Unexpected error during product creation.";
-      setErrorMessage(msg);
+      if (isAborted) {
+        setErrorMessage("Upload was cancelled by administrator.");
+      } else {
+        const msg = err instanceof Error ? err.message : "Unexpected error during product creation.";
+        setErrorMessage(msg);
+      }
     } finally {
       setIsSubmitting(false);
-      setProgressStep(null);
+      abortControllerRef.current = null;
+    }
+  }
+
+  function handleCancelUpload() {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
   }
 
   function handleResetForm() {
     setCreatedProduct(null);
+    setProgressState(null);
+    setPartialUploadSummary(null);
     setName("");
     setSlug("");
     setAutoSlug(true);
@@ -540,7 +583,7 @@ export default function NewProductPage() {
               Delivered Image Assets ({savedImages.length})
             </h2>
             <span className="text-xs text-neutral-500">
-              Bucket: <code className="font-mono">{BUCKET_NAME}</code>
+              Bucket: <code className="font-mono">style-edit-products (private R2)</code>
             </span>
           </div>
 
@@ -554,12 +597,16 @@ export default function NewProductPage() {
                   className="border border-neutral-200 rounded-lg p-3 bg-neutral-50/50 space-y-2 flex flex-col"
                 >
                   <div className="w-full h-44 bg-white rounded-md overflow-hidden flex items-center justify-center border border-neutral-200">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={img.public_url || ""}
-                      alt={img.alt_text || product.name}
-                      className="max-h-full max-w-full object-contain"
-                    />
+                    {img.proxyUrl ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={img.proxyUrl}
+                        alt={img.alt_text || product.name}
+                        className="max-h-full max-w-full object-contain"
+                      />
+                    ) : (
+                      <span className="text-xs text-neutral-400">No preview</span>
+                    )}
                   </div>
                   <div className="text-[11px] space-y-1 flex-1">
                     <div className="flex items-center justify-between">
@@ -580,14 +627,14 @@ export default function NewProductPage() {
                       {img.storage_path}
                     </p>
                   </div>
-                  {img.public_url && (
+                  {img.proxyUrl && (
                     <a
-                      href={img.public_url}
+                      href={img.proxyUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-blue-600 hover:underline text-[11px] block truncate"
                     >
-                      Open full image ↗
+                      View via proxy ↗
                     </a>
                   )}
                 </div>
@@ -690,19 +737,124 @@ export default function NewProductPage() {
       {/* Error Alert */}
       {errorMessage && (
         <div className="p-4 rounded-lg border border-rose-200 bg-rose-50 text-xs text-rose-800 space-y-1">
-          <span className="font-semibold block">Validation / Creation Error</span>
+          <span className="font-semibold block">Validation / Upload Error</span>
           <p className="leading-relaxed">{errorMessage}</p>
         </div>
       )}
 
-      {/* Progress Alert */}
-      {isSubmitting && progressStep && (
-        <div className="p-4 rounded-lg border border-blue-200 bg-blue-50 text-xs text-blue-900 flex items-center gap-3">
-          <svg className="animate-spin h-4 w-4 text-blue-700" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-          </svg>
-          <span className="font-medium">{progressStep}</span>
+      {/* Partial Upload Summary Warning */}
+      {partialUploadSummary && (
+        <div className="p-4 rounded-lg border border-amber-300 bg-amber-50 text-xs text-amber-900 space-y-2 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="font-semibold flex items-center gap-1.5 text-amber-900">
+              <span className="w-2 h-2 rounded-full bg-amber-500" />
+              Partial Upload Notice: {partialUploadSummary.successCount} succeeded, {partialUploadSummary.failedCount} failed, {partialUploadSummary.cancelledCount} cancelled
+            </span>
+          </div>
+          {partialUploadSummary.failedItems.length > 0 && (
+            <div className="bg-white/80 p-2.5 rounded border border-amber-200 space-y-1">
+              <span className="font-medium text-amber-950 block">Failed Files:</span>
+              <ul className="list-disc pl-4 space-y-0.5 text-[11px] text-amber-800 font-mono">
+                {partialUploadSummary.failedItems.map((f, i) => (
+                  <li key={i}>{f.name} — {f.error}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <p className="text-[11px] text-amber-800">
+            The product record and {partialUploadSummary.successCount} successful image(s) have been saved safely. Failed or cancelled images remain in your selection below so you can retry or replace them.
+          </p>
+        </div>
+      )}
+
+      {/* Real-time Upload Progress Dashboard */}
+      {progressState && (
+        <div className="p-5 rounded-xl border border-neutral-800 bg-neutral-950 text-neutral-100 space-y-4 shadow-lg font-sans">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-neutral-800 pb-3">
+            <div className="flex items-center gap-2.5">
+              <span className="relative flex h-2.5 w-2.5">
+                {isSubmitting ? (
+                  <>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+                  </>
+                ) : (
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-neutral-500" />
+                )}
+              </span>
+              <span className="text-xs uppercase font-bold tracking-wider text-emerald-400">
+                Stage: {progressState.stage}
+              </span>
+              <span className="text-[11px] text-neutral-400 font-mono">
+                ({progressState.processedCount} / {progressState.totalCount} images processed)
+              </span>
+            </div>
+
+            {isSubmitting && (
+              <button
+                type="button"
+                onClick={handleCancelUpload}
+                className="self-start sm:self-auto px-3 py-1 bg-rose-600/90 hover:bg-rose-600 text-white text-[11px] font-semibold rounded transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                Cancel Upload
+              </button>
+            )}
+          </div>
+
+          {/* Overall Progress Bar */}
+          <div className="space-y-1.5">
+            <div className="flex justify-between text-xs font-mono">
+              <span className="text-neutral-300 font-semibold">Overall Progress</span>
+              <span className="text-emerald-400 font-bold">{progressState.overallPercent}%</span>
+            </div>
+            <div className="w-full bg-neutral-800 rounded-full h-3 overflow-hidden p-0.5 border border-neutral-700">
+              <div
+                className="bg-linear-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-300 ease-out"
+                style={{ width: `${progressState.overallPercent}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Current File and Live Metrics */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-[11px] pt-1">
+            <div className="bg-neutral-900 border border-neutral-800 p-2.5 rounded-lg">
+              <span className="text-neutral-400 block text-[10px] uppercase font-mono">Completed</span>
+              <span className="text-sm font-bold text-emerald-400">{progressState.successCount}</span>
+            </div>
+            <div className="bg-neutral-900 border border-neutral-800 p-2.5 rounded-lg">
+              <span className="text-neutral-400 block text-[10px] uppercase font-mono">Failed</span>
+              <span className={`text-sm font-bold ${progressState.failedCount > 0 ? "text-rose-400" : "text-neutral-300"}`}>
+                {progressState.failedCount}
+              </span>
+            </div>
+            <div className="bg-neutral-900 border border-neutral-800 p-2.5 rounded-lg">
+              <span className="text-neutral-400 block text-[10px] uppercase font-mono">Original Total</span>
+              <span className="text-sm font-bold text-neutral-200">
+                {(progressState.totalOriginalBytes / (1024 * 1024)).toFixed(1)} MB
+              </span>
+            </div>
+            <div className="bg-neutral-900 border border-neutral-800 p-2.5 rounded-lg">
+              <span className="text-neutral-400 block text-[10px] uppercase font-mono">Compressed</span>
+              <span className="text-sm font-bold text-sky-400">
+                {(progressState.totalCompressedBytes / (1024 * 1024)).toFixed(1)} MB
+                {progressState.totalOriginalBytes > 0 && progressState.totalCompressedBytes > 0 && (
+                  <span className="text-[10px] text-emerald-400 ml-1">
+                    (-{(((progressState.totalOriginalBytes - progressState.totalCompressedBytes) / progressState.totalOriginalBytes) * 100).toFixed(0)}%)
+                  </span>
+                )}
+              </span>
+            </div>
+          </div>
+
+          {progressState.currentFileName && (
+            <div className="text-[11px] text-neutral-400 font-mono flex items-center gap-2 bg-neutral-900/60 px-3 py-1.5 rounded border border-neutral-800/60 truncate">
+              <span className="text-neutral-500">Active File:</span>
+              <span className="text-neutral-200 truncate">{progressState.currentFileName}</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -976,15 +1128,34 @@ export default function NewProductPage() {
 
         {/* Section 4: Image Assets */}
         <section className="bg-white border border-neutral-200 rounded-xl p-6 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-neutral-100 pb-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-neutral-100 pb-3 gap-3">
             <div>
               <h2 className="text-sm font-semibold uppercase tracking-wider text-neutral-800">
                 4. Product Images (Multiple allowed)
               </h2>
               <p className="text-[11px] text-neutral-500">
-                Max 5 MB per file. Accepted formats: JPEG, PNG, WebP, AVIF. Uploaded to bucket:{" "}
-                <code className="font-mono text-[11px] bg-neutral-100 px-1 rounded">{BUCKET_NAME}</code>.
+                Automatic browser compression targets 1–2 MB (max 2000px). Accepted formats: JPEG, PNG, WebP, AVIF. Uploaded to private Cloudflare R2 bucket.
               </p>
+            </div>
+
+            {/* Concurrency Selector */}
+            <div className="flex items-center gap-2 self-start sm:self-auto bg-neutral-50 border border-neutral-200 px-3 py-1.5 rounded-lg text-xs">
+              <label htmlFor="concurrency-select" className="text-neutral-600 font-medium whitespace-nowrap text-[11px]">
+                Concurrency:
+              </label>
+              <select
+                id="concurrency-select"
+                disabled={isSubmitting}
+                value={concurrency}
+                onChange={(e) => setConcurrency(parseInt(e.target.value, 10) || 3)}
+                className="bg-white border border-neutral-300 rounded px-2 py-0.5 text-xs font-semibold text-neutral-800 cursor-pointer"
+              >
+                <option value={1}>1 (Sequential)</option>
+                <option value={2}>2 Concurrent</option>
+                <option value={3}>3 (Default)</option>
+                <option value={4}>4 Concurrent</option>
+                <option value={5}>5 Concurrent</option>
+              </select>
             </div>
           </div>
 
@@ -1074,20 +1245,30 @@ export default function NewProductPage() {
         {/* Submit Actions */}
         <div className="bg-white border border-neutral-200 rounded-xl p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="text-xs text-neutral-500">
-            Records and images are validated and synced atomically to prevent orphaned data.
+            Assets are compressed in-browser before upload, keeping R2 storage lean and network transfers fast.
           </div>
 
           <div className="flex items-center gap-3">
-            <Link
-              href="/admin"
-              className="px-4 py-2 border border-neutral-300 text-neutral-700 rounded-lg text-xs font-medium hover:bg-neutral-50 transition-colors"
-            >
-              Cancel
-            </Link>
+            {isSubmitting ? (
+              <button
+                type="button"
+                onClick={handleCancelUpload}
+                className="px-4 py-2 border border-rose-300 text-rose-700 bg-rose-50 rounded-lg text-xs font-semibold hover:bg-rose-100 transition-colors cursor-pointer"
+              >
+                Cancel Upload
+              </button>
+            ) : (
+              <Link
+                href="/admin"
+                className="px-4 py-2 border border-neutral-300 text-neutral-700 rounded-lg text-xs font-medium hover:bg-neutral-50 transition-colors"
+              >
+                Cancel
+              </Link>
+            )}
             <button
               type="submit"
               disabled={isSubmitting}
-              className="inline-flex items-center justify-center gap-2 px-6 py-2 bg-neutral-900 text-white rounded-lg text-xs font-semibold hover:bg-neutral-800 disabled:opacity-50 transition-colors"
+              className="inline-flex items-center justify-center gap-2 px-6 py-2 bg-neutral-900 text-white rounded-lg text-xs font-semibold hover:bg-neutral-800 disabled:opacity-50 transition-colors cursor-pointer"
             >
               {isSubmitting ? (
                 <>
@@ -1095,7 +1276,7 @@ export default function NewProductPage() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
                   </svg>
-                  Processing Product & Uploads...
+                  Processing & Uploading...
                 </>
               ) : (
                 "Save Product & Upload Assets"

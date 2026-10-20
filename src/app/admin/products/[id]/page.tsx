@@ -2,17 +2,17 @@
 
 import { use, useEffect, useState, Suspense } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { verifyAdminAuthorization, type AdminVerificationResult } from "@/lib/supabase/auth";
 import type { Product, ProductVariant, ProductImage } from "@/types/product";
-
-const BUCKET_NAME = process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET || "product-images";
 
 function ProductInspectContent({
   paramsPromise,
 }: {
   paramsPromise: Promise<{ id: string }>;
 }) {
+  const router = useRouter();
   const resolvedParams = use(paramsPromise);
   const productId = resolvedParams.id;
 
@@ -23,6 +23,9 @@ function ProductInspectContent({
   });
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [deletingProduct, setDeletingProduct] = useState(false);
+  const [deletingImageId, setDeletingImageId] = useState<string | null>(null);
 
   const [product, setProduct] = useState<Product | null>(null);
   const [variants, setVariants] = useState<ProductVariant[]>([]);
@@ -77,16 +80,11 @@ function ProductInspectContent({
           .eq("product_id", productId)
           .order("display_order", { ascending: true });
 
-        // Resolve public URLs
-        const resolvedImages: ProductImage[] = (imgData || []).map((img: ProductImage) => {
-          const { data: urlData } = client.storage
-            .from(BUCKET_NAME)
-            .getPublicUrl(img.storage_path);
-          return {
-            ...img,
-            public_url: urlData.publicUrl,
-          };
-        });
+        // Resolve proxy URLs for private R2 image delivery (bucket remains private)
+        const resolvedImages: ProductImage[] = (imgData || []).map((img: ProductImage) => ({
+          ...img,
+          proxyUrl: `/api/images/${img.storage_path}`,
+        }));
 
         if (isMounted) {
           setProduct(prodData);
@@ -108,6 +106,80 @@ function ProductInspectContent({
       isMounted = false;
     };
   }, [productId]);
+
+  async function handleDeleteProduct() {
+    if (!product) return;
+    const confirmed = window.confirm(
+      `Are you sure you want to delete "${product.name}"? This will permanently delete the product, all variants, and all ${images.length} images from Cloudflare R2.`
+    );
+    if (!confirmed) return;
+
+    setDeletingProduct(true);
+    setActionError(null);
+
+    try {
+      const client = getSupabaseClient();
+      const { data: sessionData } = await client.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      const headers: Record<string, string> = {};
+      if (accessToken) {
+        headers["Authorization"] = `Bearer ${accessToken}`;
+      }
+
+      const res = await fetch(`/api/admin/products/${productId}`, {
+        method: "DELETE",
+        headers,
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Server returned status ${res.status}`);
+      }
+
+      router.push("/admin");
+    } catch (err: unknown) {
+      setActionError(
+        err instanceof Error ? err.message : "Failed to delete product."
+      );
+      setDeletingProduct(false);
+    }
+  }
+
+  async function handleDeleteImage(imageId: string) {
+    const confirmed = window.confirm("Are you sure you want to delete this image from storage?");
+    if (!confirmed) return;
+
+    setDeletingImageId(imageId);
+    setActionError(null);
+
+    try {
+      const client = getSupabaseClient();
+      const { data: sessionData } = await client.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      const headers: Record<string, string> = {};
+      if (accessToken) {
+        headers["Authorization"] = `Bearer ${accessToken}`;
+      }
+
+      const res = await fetch(`/api/admin/images/${imageId}`, {
+        method: "DELETE",
+        headers,
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Failed to delete image (status ${res.status})`);
+      }
+
+      setImages((prev) => prev.filter((img) => img.id !== imageId));
+    } catch (err: unknown) {
+      setActionError(
+        err instanceof Error ? err.message : "Failed to delete image asset."
+      );
+    } finally {
+      setDeletingImageId(null);
+    }
+  }
 
   if (loading) {
     return (
@@ -172,6 +244,14 @@ function ProductInspectContent({
           >
             + Create New
           </Link>
+          <button
+            type="button"
+            onClick={handleDeleteProduct}
+            disabled={deletingProduct}
+            className="px-3 py-1.5 border border-rose-300 text-rose-700 rounded-lg font-medium hover:bg-rose-50 transition-colors disabled:opacity-50"
+          >
+            {deletingProduct ? "Deleting..." : "Delete Product"}
+          </button>
           <Link
             href="/admin"
             className="px-3 py-1.5 border border-neutral-300 text-neutral-700 rounded-lg font-medium hover:bg-neutral-50 transition-colors"
@@ -180,6 +260,20 @@ function ProductInspectContent({
           </Link>
         </div>
       </div>
+
+      {/* Action Error Banner */}
+      {actionError && (
+        <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 text-xs text-rose-800 flex items-center justify-between">
+          <span>{actionError}</span>
+          <button
+            type="button"
+            onClick={() => setActionError(null)}
+            className="text-rose-600 hover:text-rose-900 font-bold ml-2"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -239,7 +333,7 @@ function ProductInspectContent({
             Image Gallery ({images.length})
           </h2>
           <span className="text-xs text-neutral-500">
-            Bucket: <code className="font-mono">{BUCKET_NAME}</code>
+            Bucket: <code className="font-mono">style-edit-products (private R2)</code>
           </span>
         </div>
 
@@ -253,12 +347,16 @@ function ProductInspectContent({
                 className="border border-neutral-200 rounded-lg p-3 bg-neutral-50/50 space-y-2 flex flex-col"
               >
                 <div className="w-full h-44 bg-white rounded-md overflow-hidden flex items-center justify-center border border-neutral-200">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={img.public_url || ""}
-                    alt={img.alt_text || product.name}
-                    className="max-h-full max-w-full object-contain"
-                  />
+                  {img.proxyUrl ? (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img
+                      src={img.proxyUrl}
+                      alt={img.alt_text || product.name}
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  ) : (
+                    <span className="text-xs text-neutral-400">No preview</span>
+                  )}
                 </div>
                 <div className="text-[11px] space-y-1 flex-1">
                   <div className="flex items-center justify-between">
@@ -279,16 +377,26 @@ function ProductInspectContent({
                     {img.storage_path}
                   </p>
                 </div>
-                {img.public_url && (
-                  <a
-                    href={img.public_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:underline text-[11px] block truncate"
+                <div className="flex items-center justify-between pt-1">
+                  {img.proxyUrl && (
+                    <a
+                      href={img.proxyUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline text-[11px] block truncate"
+                    >
+                      View via proxy ↗
+                    </a>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteImage(img.id)}
+                    disabled={deletingImageId === img.id}
+                    className="text-rose-600 hover:text-rose-800 text-[11px] underline ml-auto disabled:opacity-50"
                   >
-                    Open public asset ↗
-                  </a>
-                )}
+                    {deletingImageId === img.id ? "Deleting..." : "Delete image"}
+                  </button>
+                </div>
               </div>
             ))}
           </div>

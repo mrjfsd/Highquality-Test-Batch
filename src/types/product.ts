@@ -30,17 +30,31 @@ export interface ProductVariant {
 }
 
 /**
- * Product image asset reference matching public.product_images table
+ * Product image asset reference matching public.product_images table.
+ *
+ * storage_path is the full R2 object key (e.g. "products/<uuid>/timestamp-uuid.jpg").
+ * Images are stored in a private Cloudflare R2 bucket — never in a public bucket.
+ * Access is provided through the server-side /api/images/[...key] proxy which
+ * generates a time-limited presigned GET URL.
  */
 export interface ProductImage {
   id: string;
   product_id: string;
-  storage_path: string; // Object path within Supabase Storage bucket
+  storage_path: string; // R2 object key (e.g. products/<product_id>/<uuid>.jpg)
   alt_text: string | null;
   display_order: number;
   is_primary: boolean;
   color: string | null;
-  public_url?: string; // Derived dynamically from storage_path
+  mime_type: string | null;         // MIME type stored at upload time
+  file_size_bytes: number | null;   // File size in bytes
+  width: number | null;             // Image width in pixels (optional)
+  height: number | null;            // Image height in pixels (optional)
+  /**
+   * Resolved at runtime by calling /api/images/<storage_path>.
+   * This is NOT persisted in the database — it is a derived, time-limited URL.
+   * Never store this value in the database.
+   */
+  proxyUrl?: string;
   created_at: string;
   updated_at: string;
 }
