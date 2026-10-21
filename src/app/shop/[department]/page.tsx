@@ -3,7 +3,6 @@
 
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import Link from "next/link";
 import type { Department } from "@/data/products";
 import {
   VALID_DEPARTMENTS,
@@ -55,27 +54,15 @@ export default async function DepartmentPage({ params }: Props) {
   const departmentProducts = getProductsByDepartment(department);
 
   return (
-    <main className="listing">
-      {/* Breadcrumb */}
-      <nav className="breadcrumb" aria-label="Breadcrumb">
-        <Link href="/">Home</Link>
-        <span aria-hidden="true">/</span>
-        <span aria-current="page">{department}</span>
-      </nav>
-
-      {/* Department header */}
-      <header className="listing-header">
-        <span className="eyebrow">
-          DEPARTMENT / {department.toUpperCase()}
-        </span>
-        <h1>{department}</h1>
-        <p>
-          Modern wardrobe foundations—considered in shape, feel and function.
-        </p>
+    <main className="collection-page">
+      {/* Department Title Header */}
+      <header className="collection-title-header">
+        <h1 className="collection-title">{department}</h1>
       </header>
 
-      {/* Interactive category bar + product grid — client component */}
+      {/* Main Collection Layout: 30% Filter Sidebar + 70% Product Area */}
       <DepartmentListingContent
+        key={department}
         department={department}
         products={departmentProducts}
       />
