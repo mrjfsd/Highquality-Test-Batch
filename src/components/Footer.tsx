@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 
 function ArrowRightIcon() {
@@ -79,11 +78,7 @@ function PhoneIcon({ size = 16 }: { size?: number }) {
 }
 
 export default function Footer() {
-  const [currentYear, setCurrentYear] = useState(2026);
-
-  useEffect(() => {
-    setCurrentYear(new Date().getFullYear());
-  }, []);
+  const currentYear = 2026;
 
   return (
     <footer className="footer" id="footer">
