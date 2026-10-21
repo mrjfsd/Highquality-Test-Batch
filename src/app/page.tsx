@@ -1,190 +1,330 @@
-// Home page — / route
-// Server component. All data is static placeholder; real data from Supabase is a future phase.
-
 import type { Metadata } from "next";
 import Link from "next/link";
-import Icon from "@/components/Icon";
-import SectionHeading from "@/components/SectionHeading";
-import ProductCard from "@/components/ProductCard";
-import { products } from "@/data/products";
 
 export const metadata: Metadata = {
-  title: "Style-Edit | Considered Clothing for Everyday Life",
+  title: "Style-Edit | Considered Everyday Fashion",
   description:
-    "A considered wardrobe of quiet essentials, cut for real life. Shop Women, Men, and Kids.",
+    "Discover your next favourite look at Style-Edit. Curated everyday fashion for Men, Women, and Kids, chosen in Mysuru.",
 };
 
-// Photos from the reference — Unsplash, same URLs
-const photos = {
-  duo: "https://images.unsplash.com/flagged/photo-1570733117311-d990c3816c47?auto=format&fit=crop&w=1200&q=80",
-  trench:
-    "https://images.unsplash.com/photo-1601762603339-fd61e28b698a?auto=format&fit=crop&w=1200&q=80",
-  silhouette:
-    "https://images.unsplash.com/photo-1603189343302-e603f7add05a?auto=format&fit=crop&w=1200&q=80",
-  boy: "https://images.unsplash.com/photo-1759313560190-d160c3567170?auto=format&fit=crop&w=1200&q=80",
-  seated:
-    "https://images.unsplash.com/photo-1629511565591-a1d494ad6c58?auto=format&fit=crop&w=1200&q=80",
+type ImageProps = {
+  src: string;
+  alt: string;
+  className?: string;
+  loading?: "lazy" | "eager";
 };
 
-const departmentCards = [
+const images = {
+  hero: "https://images.unsplash.com/photo-1507297448044-a99b358cd06e?auto=format&fit=crop&w=2000&q=88",
+  men: "https://images.unsplash.com/photo-1592409039573-5a135408dcc4?auto=format&fit=crop&w=900&q=86",
+  women: "https://images.unsplash.com/photo-1590399830217-8db7489f911e?auto=format&fit=crop&w=900&q=86",
+  kids: "https://images.unsplash.com/photo-1758851552775-7353c60e4906?auto=format&fit=crop&w=900&q=86",
+  productOne: "https://images.unsplash.com/photo-1676165303734-5c2b9dd394af?auto=format&fit=crop&w=800&q=85",
+  productTwo: "https://images.unsplash.com/photo-1585685674190-5b11f080af33?auto=format&fit=crop&w=800&q=85",
+  productThree: "https://images.unsplash.com/photo-1701844778607-3fe61e2f6e82?auto=format&fit=crop&w=800&q=85",
+  productFour: "https://images.unsplash.com/photo-1706823934334-9fec8177bb4f?auto=format&fit=crop&w=800&q=85",
+  editorial: "https://images.unsplash.com/photo-1697659991852-d700e2fd4098?auto=format&fit=crop&w=1400&q=88",
+  essentials: "https://images.unsplash.com/photo-1551488831-00ddcb6c6bd3?auto=format&fit=crop&w=1800&q=88",
+};
+
+const departments = [
   {
-    slug: "women",
-    label: "Women",
-    image: photos.trench,
-    line: "Refined shapes, easy layers",
+    title: "MEN",
+    detail: "Everyday essentials",
+    image: images.men,
+    alt: "Man in a clean casual white T-shirt",
+    href: "/shop/men",
   },
   {
-    slug: "men",
-    label: "Men",
-    image: photos.silhouette,
-    line: "Modern staples, simply done",
+    title: "WOMEN",
+    detail: "Styles for every mood",
+    image: images.women,
+    alt: "Woman in a black blazer and relaxed white trousers",
+    href: "/shop/women",
   },
   {
-    slug: "kids",
-    label: "Kids",
-    image: photos.boy,
-    line: "Built for every small adventure",
+    title: "KIDS",
+    detail: "Little looks, big style",
+    image: images.kids,
+    alt: "Young boy in a casual jacket and beanie",
+    href: "/shop/kids",
   },
 ];
 
-const flowSteps = [
-  ["01", "Home", "Discover the edit"],
-  ["02", "Department", "Browse & filter"],
-  ["03", "Product", "Choose options"],
-  ["04", "Cart", "Review items"],
-  ["05", "WhatsApp", "Send order"],
+const sampleProducts = [
+  {
+    name: "Relaxed Fit Cotton T-Shirt",
+    price: "₹899",
+    image: images.productOne,
+    alt: "Model wearing a relaxed monochrome outfit",
+    href: "/product/heavyweight-crew-tee",
+  },
+  {
+    name: "Everyday Oversized Shirt",
+    price: "₹1,299",
+    image: images.productTwo,
+    alt: "Woman wearing an oversized white shirt",
+    href: "/product/studio-overshirt",
+  },
+  {
+    name: "Classic Straight-Fit Trousers",
+    price: "₹1,499",
+    image: images.productThree,
+    alt: "Woman wearing straight-fit jeans and a black jacket",
+    href: "/product/pleated-easy-trouser",
+  },
+  {
+    name: "Essential Casual Sweatshirt",
+    price: "₹1,199",
+    image: images.productFour,
+    alt: "Model in an understated casual top",
+    href: "/product/everyday-oxford-shirt",
+  },
 ];
 
-export default function HomePage() {
-  // Featured: first 4 products from the placeholder data
-  const featured = products.slice(0, 4);
+function SmartImage({ src, alt, className = "", loading = "lazy" }: ImageProps) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={src} alt={alt} className={className} loading={loading} />
+  );
+}
+
+function ArrowIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" width="15" height="15">
+      <path d="M5 12h14M14 7l5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function TextLink({
+  children,
+  href = "#",
+  className = "",
+}: {
+  children: React.ReactNode;
+  href?: string;
+  className?: string;
+}) {
+  return (
+    <Link className={`text-link ${className}`} href={href}>
+      <span>{children}</span>
+      <ArrowIcon />
+    </Link>
+  );
+}
+
+function SectionHeading({
+  eyebrow,
+  title,
+  description,
+  action,
+}: {
+  eyebrow?: string;
+  title: string;
+  description: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="section-heading">
+      <div>
+        {eyebrow && <p className="eyebrow">{eyebrow}</p>}
+        <h2>{title}</h2>
+        <p>{description}</p>
+      </div>
+      {action && <div className="section-action">{action}</div>}
+    </div>
+  );
+}
+
+/* ── Section 3: Editorial Hero ── */
+function HeroBanner() {
+  return (
+    <section className="hero" aria-labelledby="hero-title">
+      <SmartImage
+        src={images.hero}
+        alt="Two models in contemporary everyday fashion"
+        className="hero-image"
+        loading="eager"
+      />
+      <div className="hero-overlay" />
+      <div className="hero-content">
+        <p className="eyebrow light">THE NEW EVERYDAY</p>
+        <h1 id="hero-title">Your Style. Your Edit.</h1>
+        <p>Discover everyday fashion, handpicked for every mood.</p>
+        
+        {/* Refined editorial hero buttons with sophisticated solid/outline pairing */}
+        <div className="hero-actions">
+          <Link className="hero-btn hero-btn-primary" href="/shop/women">
+            <span>Shop Women</span>
+            <ArrowIcon />
+          </Link>
+          <Link className="hero-btn hero-btn-secondary" href="/shop/men">
+            <span>Shop Men</span>
+            <ArrowIcon />
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ── Section 4: Shop by Department ── */
+function DepartmentCard({
+  title,
+  detail,
+  image,
+  alt,
+  href,
+  index,
+}: (typeof departments)[number] & { index: number }) {
+  return (
+    <article className="department-card">
+      <Link className="department-image-wrap" href={href} aria-label={`Explore ${title}`}>
+        <SmartImage src={image} alt={alt} className="department-image" />
+        <span className="department-number">0{index + 1}</span>
+      </Link>
+      <div className="department-meta">
+        <div>
+          <h3>{title}</h3>
+          <p>{detail}</p>
+        </div>
+        <TextLink href={href}>Explore collection</TextLink>
+      </div>
+    </article>
+  );
+}
+
+function ShopByDepartment() {
+  return (
+    <section className="section departments" id="departments">
+      <SectionHeading
+        eyebrow="CURATED FOR YOU"
+        title="Shop by Department"
+        description="Find your style, your way."
+      />
+      <div className="department-grid">
+        {departments.map((department, index) => (
+          <DepartmentCard key={department.title} {...department} index={index} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/* ── Section 5: The Current Favourites ── */
+function HomeProductCard({ product }: { product: (typeof sampleProducts)[number] }) {
+  return (
+    <article className="product-card">
+      <Link className="product-image-wrap" href={product.href} aria-label={product.name}>
+        <SmartImage src={product.image} alt={product.alt} className="product-image" />
+        <span className="product-tag">THE EDIT</span>
+      </Link>
+      <div className="product-meta">
+        <div>
+          <h3>{product.name}</h3>
+          <p className="sample-label">Illustrative price</p>
+        </div>
+        <p className="price">{product.price}</p>
+      </div>
+    </article>
+  );
+}
+
+function FeaturedProducts() {
+  return (
+    <section className="section favourites" id="favourites">
+      <SectionHeading
+        eyebrow="STYLE-EDIT PICKS"
+        title="The Current Favourites"
+        description="Pieces worth making room for."
+        action={<TextLink href="/shop/women">View all</TextLink>}
+      />
+      <div className="product-grid">
+        {sampleProducts.map((product) => (
+          <HomeProductCard product={product} key={product.name} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/* ── Section 6: The Everyday Edit (Editorial Feature) ── */
+function EditorialFeature() {
+  const currentYear = 2026;
 
   return (
-    <main>
-      {/* ── Hero ── */}
-      <section className="hero" aria-label="Hero">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={photos.duo} alt="Models in crisp white shirts" />
-        <div className="hero-overlay" aria-hidden="true" />
-        <div className="hero-copy">
-          <span className="eyebrow eyebrow--light">THE EVERYDAY EDIT / 25</span>
-          <h1>
-            Less noise.
-            <br />
-            More style.
-          </h1>
-          <p>A considered wardrobe of quiet essentials, cut for real life.</p>
-          <div className="hero-actions">
-            <Link href="/shop/women" className="button button--light">
-              Shop women
-            </Link>
-            <Link href="/shop/men" className="button button--light">
-              Shop men
-            </Link>
-          </div>
-        </div>
-        <div className="hero-index" aria-hidden="true">
-          01 <span /> 04
-        </div>
-      </section>
-
-      {/* ── Featured products ── */}
-      <section className="content-section" aria-label="Featured products">
-        <SectionHeading
-          eyebrow="CURATED FOR NOW"
-          title="The quiet essentials"
-          actionLabel="View the edit"
-          actionHref="/shop/women"
+    <section className="editorial section">
+      <div className="editorial-image-wrap">
+        <SmartImage
+          src={images.editorial}
+          alt="Woman in a relaxed contemporary look outside a modern building"
+          className="editorial-image"
         />
-        <div className="product-grid product-grid--featured">
-          {featured.map((product) => (
-            <ProductCard key={product.id} product={product} />
-          ))}
-        </div>
-      </section>
+        <span className="vertical-note">STYLE NOTES / {currentYear}</span>
+      </div>
+      <div className="editorial-copy">
+        <p className="eyebrow">THE EVERYDAY EDIT</p>
+        <h2>Everyday, Elevated.</h2>
+        <p className="editorial-description">
+          Easy-to-wear styles. Fresh looks. More ways to make them yours.
+        </p>
+        <Link className="button button-dark" href="/shop/women">
+          Explore the Collection
+        </Link>
+      </div>
+    </section>
+  );
+}
 
-      {/* ── Department cards ── */}
-      <section className="department-section" aria-label="Shop by department">
-        <SectionHeading eyebrow="FIND YOUR EDIT" title="Shop by department" />
-        <div className="department-grid">
-          {departmentCards.map((item, i) => (
-            <Link
-              key={item.slug}
-              href={`/shop/${item.slug}`}
-              className="department-card"
-              aria-label={`Shop ${item.label}`}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={item.image}
-                alt={`${item.label} clothing collection`}
-                loading="lazy"
-              />
-              <span className="department-number">0{i + 1}</span>
-              <span className="department-copy">
-                <strong>{item.label}</strong>
-                <small>{item.line}</small>
-                <span className="circle-arrow" aria-hidden="true">
-                  <Icon name="arrow" />
-                </span>
-              </span>
-            </Link>
-          ))}
+/* ── Section 7: Everyday Essentials Feature ── */
+function CuratedCollection() {
+  return (
+    <section className="section essentials" id="essentials">
+      <div className="essentials-banner">
+        <SmartImage
+          src={images.essentials}
+          alt="A carefully curated rail of timeless everyday clothing"
+          className="essentials-image"
+        />
+        <div className="essentials-overlay" />
+        <div className="essentials-copy">
+          <p className="eyebrow light">A WARDROBE FOUNDATION</p>
+          <h2>Everyday Essentials</h2>
+          <p>Discover versatile pieces for your everyday wardrobe.</p>
+          <TextLink href="/shop/men" className="light-link">
+            Explore the edit
+          </TextLink>
         </div>
-      </section>
+        <p className="essentials-side-note">SELECTED WITH INTENTION</p>
+      </div>
+    </section>
+  );
+}
 
-      {/* ── Brand story / editorial section ── */}
-      <section className="story-section" aria-label="Our approach">
-        <div className="story-image">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={photos.seated}
-            alt="Relaxed tailoring in a minimal room"
-            loading="lazy"
-          />
-        </div>
-        <div className="story-copy">
-          <span className="eyebrow">THE STYLE—EDIT APPROACH</span>
-          <h2>
-            Wear more.
-            <br />
-            Choose well.
-          </h2>
-          <p>
-            We focus on versatile pieces with considered details—clothes
-            designed to work together and live beyond a season.
-          </p>
-          <span className="text-link">
-            Read our approach <Icon name="arrow" />
-          </span>
-        </div>
-      </section>
+/* ── Section 8: Oversized STYLE EDIT Brand Statement ── */
+function BrandStatement() {
+  return (
+    <section className="brand-statement" aria-label="Style Edit brand statement">
+      <div className="gold-rule" />
+      <div className="brand-statement-top">
+        <p>Style that feels like you.</p>
+        <span>MYSURU / INDIA</span>
+      </div>
+      <p className="giant-wordmark">STYLE EDIT</p>
+    </section>
+  );
+}
 
-      {/* ── Customer journey / flow section ── */}
-      <section className="flow-section" aria-label="How it works">
-        <div className="flow-intro">
-          <span className="eyebrow">CUSTOMER JOURNEY</span>
-          <h2>
-            From first look
-            <br />
-            to WhatsApp
-          </h2>
-          <p>
-            A simple ordering flow with no account, checkout, or payment
-            gateway.
-          </p>
-        </div>
-        <div className="flow-map" role="list">
-          {flowSteps.map(([num, label, desc], index) => (
-            <div className="flow-step" key={num} role="listitem">
-              <span>{num}</span>
-              <strong>{label}</strong>
-              <small>{desc}</small>
-              {index < 4 && <Icon name="chevron" />}
-            </div>
-          ))}
-        </div>
-      </section>
+export default function HomePage() {
+  return (
+    <main className="site-shell">
+      <HeroBanner />
+      <ShopByDepartment />
+      <FeaturedProducts />
+      <EditorialFeature />
+      <CuratedCollection />
+      <BrandStatement />
     </main>
   );
 }

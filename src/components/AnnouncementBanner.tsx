@@ -1,15 +1,15 @@
 // Announcement banner — scrolls naturally with the page (not sticky/fixed).
-// Intentional per product spec: banner scrolls away, navbar stays sticky.
+// Consistent with burgundy brand palette and easy to update when a promotion changes.
 
 interface AnnouncementBannerProps {
   message?: string;
 }
 
 export default function AnnouncementBanner({
-  message = "COMPLIMENTARY DELIVERY ON ORDERS ABOVE ₹2,500",
+  message = "A LITTLE MORE STYLE, A LITTLE LESS SPEND — EXPLORE OUR LATEST EDITS.",
 }: AnnouncementBannerProps) {
   return (
-    <div className="announcement">
+    <div className="announcement" id="top">
       {message}
     </div>
   );
