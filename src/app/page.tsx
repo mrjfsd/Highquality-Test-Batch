@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import HomeScrollAnimator from "@/components/HomeScrollAnimator";
 
 export const metadata: Metadata = {
   title: "Style-Edit | Considered Everyday Fashion",
@@ -126,7 +127,7 @@ function SectionHeading({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="section-heading">
+    <div className="section-heading reveal-heading">
       <div>
         {eyebrow && <p className="eyebrow">{eyebrow}</p>}
         <h2>{title}</h2>
@@ -149,12 +150,12 @@ function HeroBanner() {
       />
       <div className="hero-overlay" />
       <div className="hero-content">
-        <p className="eyebrow light">THE NEW EVERYDAY</p>
-        <h1 id="hero-title">Your Style. Your Edit.</h1>
-        <p>Discover everyday fashion, handpicked for every mood.</p>
+        <p className="eyebrow light hero-fade-1">THE NEW EVERYDAY</p>
+        <h1 id="hero-title" className="hero-fade-2">Your Style. Your Edit.</h1>
+        <p className="hero-fade-3">Discover everyday fashion, handpicked for every mood.</p>
         
         {/* Refined editorial hero buttons with sophisticated solid/outline pairing */}
-        <div className="hero-actions">
+        <div className="hero-actions hero-fade-4">
           <Link className="hero-btn hero-btn-primary" href="/shop/women">
             <span>Shop Women</span>
             <ArrowIcon />
@@ -179,7 +180,7 @@ function DepartmentCard({
   index,
 }: (typeof departments)[number] & { index: number }) {
   return (
-    <article className="department-card">
+    <article className={`department-card reveal-item stagger-${index + 1}`}>
       <Link className="department-image-wrap" href={href} aria-label={`Explore ${title}`}>
         <SmartImage src={image} alt={alt} className="department-image" />
         <span className="department-number">0{index + 1}</span>
@@ -213,9 +214,15 @@ function ShopByDepartment() {
 }
 
 /* ── Section 5: The Current Favourites ── */
-function HomeProductCard({ product }: { product: (typeof sampleProducts)[number] }) {
+function HomeProductCard({
+  product,
+  index = 0,
+}: {
+  product: (typeof sampleProducts)[number];
+  index?: number;
+}) {
   return (
-    <article className="product-card">
+    <article className={`product-card reveal-item stagger-${(index % 4) + 1}`}>
       <Link className="product-image-wrap" href={product.href} aria-label={product.name}>
         <SmartImage src={product.image} alt={product.alt} className="product-image" />
         <span className="product-tag">THE EDIT</span>
@@ -241,8 +248,8 @@ function FeaturedProducts() {
         action={<TextLink href="/shop/women">View all</TextLink>}
       />
       <div className="product-grid">
-        {sampleProducts.map((product) => (
-          <HomeProductCard product={product} key={product.name} />
+        {sampleProducts.map((product, index) => (
+          <HomeProductCard product={product} index={index} key={product.name} />
         ))}
       </div>
     </section>
@@ -255,7 +262,7 @@ function EditorialFeature() {
 
   return (
     <section className="editorial section">
-      <div className="editorial-image-wrap">
+      <div className="editorial-image-wrap reveal-item">
         <SmartImage
           src={images.editorial}
           alt="Woman in a relaxed contemporary look outside a modern building"
@@ -263,7 +270,7 @@ function EditorialFeature() {
         />
         <span className="vertical-note">STYLE NOTES / {currentYear}</span>
       </div>
-      <div className="editorial-copy">
+      <div className="editorial-copy reveal-item stagger-1">
         <p className="eyebrow">THE EVERYDAY EDIT</p>
         <h2>Everyday, Elevated.</h2>
         <p className="editorial-description">
@@ -281,14 +288,14 @@ function EditorialFeature() {
 function CuratedCollection() {
   return (
     <section className="section essentials" id="essentials">
-      <div className="essentials-banner">
+      <div className="essentials-banner reveal-item">
         <SmartImage
           src={images.essentials}
           alt="A carefully curated rail of timeless everyday clothing"
           className="essentials-image"
         />
         <div className="essentials-overlay" />
-        <div className="essentials-copy">
+        <div className="essentials-copy reveal-item stagger-1">
           <p className="eyebrow light">A WARDROBE FOUNDATION</p>
           <h2>Everyday Essentials</h2>
           <p>Discover versatile pieces for your everyday wardrobe.</p>
@@ -305,7 +312,7 @@ function CuratedCollection() {
 /* ── Section 8: Oversized STYLE EDIT Brand Statement ── */
 function BrandStatement() {
   return (
-    <section className="brand-statement" aria-label="Style Edit brand statement">
+    <section className="brand-statement reveal-item" aria-label="Style Edit brand statement">
       <div className="gold-rule" />
       <div className="brand-statement-top">
         <p>Style that feels like you.</p>
@@ -319,6 +326,7 @@ function BrandStatement() {
 export default function HomePage() {
   return (
     <main className="site-shell">
+      <HomeScrollAnimator />
       <HeroBanner />
       <ShopByDepartment />
       <FeaturedProducts />

@@ -107,6 +107,36 @@ a:focus-visible {
   backdrop-filter: blur(12px);
 }
 
+.nav-brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+  transition: opacity 180ms ease;
+}
+
+.nav-brand-lockup:hover {
+  opacity: 0.85;
+}
+
+.nav-brand-logo {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.nav-brand-text {
+  color: var(--burgundy);
+  font-family: var(--condensed);
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 .nav-wordmark {
   color: var(--burgundy);
   font-family: var(--condensed);
@@ -194,6 +224,25 @@ a:focus-visible {
   transform: scaleX(1);
 }
 
+/* ── Homepage Navbar: Remove underline completely on hover, retain subtle color/opacity transition ── */
+.home-navbar .desktop-nav a::after {
+  display: none !important;
+}
+
+.home-navbar .desktop-nav a {
+  transition: color 200ms ease, opacity 200ms ease;
+}
+
+.home-navbar .desktop-nav a:hover {
+  color: var(--burgundy);
+  opacity: 0.82;
+}
+
+.home-navbar .desktop-nav a:focus-visible {
+  outline: 2px solid var(--burgundy);
+  outline-offset: 3px;
+}
+
 .nav-actions {
   display: flex;
   justify-content: flex-end;
@@ -246,7 +295,8 @@ a:focus-visible {
   background: var(--burgundy);
   color: var(--white);
   font-size: 9px;
-  font-weight: 600;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .menu-button {
@@ -254,11 +304,20 @@ a:focus-visible {
 }
 
 /* ── Functional Mobile Navigation Drawer ── */
+.mobile-nav-overlay-portal {
+  position: fixed;
+  inset: 0;
+  z-index: 99990;
+  pointer-events: auto;
+}
+
 .mobile-nav-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 35;
-  background: rgba(37, 35, 33, 0.4);
+  width: 100vw;
+  height: 100dvh;
+  z-index: 99991;
+  background: rgba(30, 27, 25, 0.6);
   backdrop-filter: blur(4px);
   animation: fadeIn 200ms ease;
 }
@@ -268,15 +327,18 @@ a:focus-visible {
   top: 0;
   right: 0;
   bottom: 0;
-  z-index: 45;
+  height: 100dvh;
+  z-index: 99999;
   width: min(340px, 86vw);
-  background: var(--ivory);
+  background-color: #ffffff !important;
+  background: #ffffff !important;
   border-left: 1px solid var(--stone);
-  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.08);
+  box-shadow: -10px 0 35px rgba(0, 0, 0, 0.2);
   display: flex;
   flex-direction: column;
   padding: 24px;
-  animation: slideInRight 250ms ease;
+  animation: slideInRight 250ms cubic-bezier(0.16, 1, 0.3, 1);
+  overflow-y: auto;
 }
 
 .mobile-nav-header {
@@ -285,6 +347,17 @@ a:focus-visible {
   justify-content: space-between;
   padding-bottom: 20px;
   border-bottom: 1px solid var(--stone);
+}
+
+.close-menu-btn {
+  color: var(--charcoal);
+  border-radius: 50%;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.close-menu-btn:hover {
+  background: var(--stone);
+  color: var(--burgundy);
 }
 
 .mobile-nav-links {
@@ -324,7 +397,7 @@ a:focus-visible {
   width: 100%;
   padding: 12px 14px 12px 38px;
   border: 1px solid var(--stone);
-  background: var(--white);
+  background: #f8f5f0;
   font-family: inherit;
   font-size: 13px;
   border-radius: 6px;
@@ -343,31 +416,33 @@ a:focus-visible {
   color: var(--muted);
   stroke: currentColor;
   fill: none;
-  stroke-width: 1.5;
+  stroke-width: 1.75;
 }
 
 .mobile-nav-footer {
   margin-top: auto;
-  padding-top: 20px;
+  padding-top: 24px;
   border-top: 1px solid var(--stone);
-  font-size: 12px;
-  color: var(--muted);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 4px;
 }
 
-.mobile-nav-footer a {
-  color: var(--charcoal);
-  font-weight: 500;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  transition: color 150ms ease;
-}
-
-.mobile-nav-footer a:hover {
+.mobile-nav-footer-brand {
+  margin: 0;
+  font-family: var(--condensed);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   color: var(--burgundy);
+}
+
+.mobile-nav-footer-tagline {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
 }
 
 @keyframes fadeIn {
@@ -1001,6 +1076,36 @@ a:focus-visible {
   flex-direction: column;
   align-items: flex-start;
   gap: 16px;
+}
+
+.footer-brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  text-decoration: none;
+  transition: opacity 180ms ease;
+}
+
+.footer-brand-lockup:hover {
+  opacity: 0.88;
+}
+
+.footer-brand-logo {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.footer-brand-text {
+  color: var(--white);
+  font-family: var(--condensed);
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .footer-logo {
@@ -2255,6 +2360,19 @@ a:focus-visible {
     padding-inline: 18px;
   }
 
+  .nav-brand-lockup {
+    gap: 8px;
+  }
+
+  .nav-brand-logo {
+    width: 32px;
+    height: 32px;
+  }
+
+  .nav-brand-text {
+    font-size: 20px;
+  }
+
   .nav-wordmark {
     font-size: 22px;
   }
@@ -2272,9 +2390,21 @@ a:focus-visible {
     display: grid;
   }
 
+  .nav-actions {
+    gap: 3px;
+  }
+
   .icon-button {
-    width: 36px;
-    height: 36px;
+    width: 34px;
+    height: 34px;
+  }
+
+  .bag-button span {
+    top: 0;
+    right: 0;
+    width: 14px;
+    height: 14px;
+    font-size: 8px;
   }
 
   .hero,
@@ -2465,6 +2595,19 @@ a:focus-visible {
     padding: 65px 24px 28px;
   }
 
+  .footer-brand-lockup {
+    gap: 12px;
+  }
+
+  .footer-brand-logo {
+    width: 40px;
+    height: 40px;
+  }
+
+  .footer-brand-text {
+    font-size: 22px;
+  }
+
   .footer-top {
     grid-template-columns: 1fr;
     gap: 40px;
@@ -2626,3 +2769,101 @@ a:focus-visible {
     grid-template-columns: 1fr;
   }
 }
+
+/* ============================================================
+   STYLE-EDIT — Premium Scroll & Typography Animations
+   Subtle fade-up transitions inspired by luxury fashion websites
+   ============================================================ */
+
+/* Progressive Enhancement:
+   When JS confirms support and animations are enabled, elements reveal smoothly.
+   If JS is unavailable, items remain at default opacity: 1 without delays. */
+html.animations-ready .reveal-item {
+  opacity: 0;
+  transform: translateY(20px);
+  transition:
+    opacity 700ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 700ms cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+
+html.animations-ready .reveal-item.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Restrained staggered reveals for department and product cards */
+html.animations-ready .reveal-item.stagger-1 {
+  transition-delay: 80ms;
+}
+
+html.animations-ready .reveal-item.stagger-2 {
+  transition-delay: 160ms;
+}
+
+html.animations-ready .reveal-item.stagger-3 {
+  transition-delay: 240ms;
+}
+
+html.animations-ready .reveal-item.stagger-4 {
+  transition-delay: 320ms;
+}
+
+/* Subtle heading text reveal */
+html.animations-ready .reveal-heading {
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity 750ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 750ms cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+
+html.animations-ready .reveal-heading.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Hero gentle entrance */
+@keyframes heroFadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hero-fade-1 {
+  animation: heroFadeInUp 650ms cubic-bezier(0.16, 1, 0.3, 1) 80ms both;
+}
+
+.hero-fade-2 {
+  animation: heroFadeInUp 700ms cubic-bezier(0.16, 1, 0.3, 1) 160ms both;
+}
+
+.hero-fade-3 {
+  animation: heroFadeInUp 700ms cubic-bezier(0.16, 1, 0.3, 1) 240ms both;
+}
+
+.hero-fade-4 {
+  animation: heroFadeInUp 750ms cubic-bezier(0.16, 1, 0.3, 1) 320ms both;
+}
+
+/* Accessible Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+  html.animations-ready .reveal-item,
+  html.animations-ready .reveal-heading,
+  .hero-fade-1,
+  .hero-fade-2,
+  .hero-fade-3,
+  .hero-fade-4 {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
