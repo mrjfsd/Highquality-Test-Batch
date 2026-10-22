@@ -3,8 +3,15 @@
 
 export type Department = "Women" | "Men" | "Kids";
 
+export type StorefrontVariantOption = {
+  id?: string;
+  size: string;
+  color: string;
+  is_available: boolean;
+};
+
 export type Product = {
-  id: number;
+  id: number | string;
   slug: string;
   department: Department;
   category: string;
@@ -16,6 +23,10 @@ export type Product = {
   colors: string[];
   fabric: string;
   fit: string;
+  description?: string;
+  created_at?: string;
+  variants?: StorefrontVariantOption[];
+  is_database?: boolean;
 };
 
 const photos = {

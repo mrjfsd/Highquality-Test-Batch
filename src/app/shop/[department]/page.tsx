@@ -4,14 +4,11 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import type { Department } from "@/data/products";
-import {
-  VALID_DEPARTMENTS,
-  getProductsByDepartment,
-} from "@/data/products";
+import { VALID_DEPARTMENTS } from "@/data/products";
+import { fetchPublishedProductsByDepartment } from "@/lib/products/storefront";
 import DepartmentListingContent from "@/components/DepartmentListingContent";
 
 // Tells Next.js which department params exist at build time (SSG).
-// New params beyond this list will still be rendered on-demand (ISR).
 export function generateStaticParams() {
   return VALID_DEPARTMENTS.map((d) => ({ department: d.toLowerCase() }));
 }
@@ -53,7 +50,7 @@ export default async function DepartmentPage({ params }: Props) {
     notFound();
   }
 
-  const departmentProducts = getProductsByDepartment(department);
+  const departmentProducts = await fetchPublishedProductsByDepartment(department);
 
   return (
     <main className="collection-page">

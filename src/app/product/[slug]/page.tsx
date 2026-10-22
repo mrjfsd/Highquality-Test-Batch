@@ -5,7 +5,8 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Dosis } from "next/font/google";
-import { products, getProductBySlug, getRelatedProducts, formatPrice } from "@/data/products";
+import { products, formatPrice } from "@/data/products";
+import { fetchProductBySlug, fetchRelatedProducts } from "@/lib/products/storefront";
 import ProductCard from "@/components/ProductCard";
 import ProductSelectors from "@/components/ProductSelectors";
 import SectionHeading from "@/components/SectionHeading";
@@ -20,7 +21,7 @@ const dosis = Dosis({
 
 export const instant = false;
 
-// Generate static params for all placeholder products at build time
+// Generate static params for placeholder products at build time
 export function generateStaticParams() {
   return products.map((p) => ({ slug: p.slug }));
 }
@@ -31,7 +32,7 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const product = getProductBySlug(slug);
+  const product = await fetchProductBySlug(slug);
   if (!product) {
     return { title: "Product Not Found | Style-Edit" };
   }
@@ -43,13 +44,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function ProductDetailPage({ params }: Props) {
   const { slug } = await params;
-  const product = getProductBySlug(slug);
+  const product = await fetchProductBySlug(slug);
 
   if (!product) {
     notFound();
   }
 
-  const baseRelated = getRelatedProducts(product, 4);
+  const baseRelated = await fetchRelatedProducts(product, 4);
   const related: typeof baseRelated = [...baseRelated];
   if (related.length > 0) {
     while (related.length < 4) {
@@ -114,8 +115,8 @@ export default async function ProductDetailPage({ params }: Props) {
           <hr className="detail-divider" />
 
           <p className="product-description">
-            An understated everyday piece with thoughtful proportions and an
-            easy, versatile feel. Designed to wear on repeat.
+            {product.description ||
+              "An understated everyday piece with thoughtful proportions and an easy, versatile feel. Designed to wear on repeat."}
           </p>
 
           {/* Interactive color/size selectors + Quantity + Add to Cart / Buy it now */}

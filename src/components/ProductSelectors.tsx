@@ -3,11 +3,11 @@
 // ProductSelectors — client component handling color, size, quantity selection,
 // and purchase controls on the product detail page, matching the reference design.
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import type { Product } from "@/data/products";
 import Icon from "@/components/Icon";
 
-const SIZES = ["XS", "S", "M", "L", "XL"] as const;
+const FALLBACK_MOCK_SIZES = ["XS", "S", "M", "L", "XL"] as const;
 
 // Human-friendly labels for hex colors used in Style Edit's catalog
 const COLOR_NAMES: Record<string, string> = {
@@ -38,7 +38,40 @@ const COLOR_NAMES: Record<string, string> = {
   "#444a4b": "Graphite",
 };
 
+// Known color names mapped to hex for swatch display
+const COLOR_NAME_TO_HEX: Record<string, string> = {
+  black: "#1a1a1a",
+  white: "#f8f8f8",
+  charcoal: "#343434",
+  grey: "#808080",
+  gray: "#808080",
+  "light grey": "#d1d5db",
+  "light gray": "#d1d5db",
+  navy: "#1a2b49",
+  blue: "#2b5c8f",
+  olive: "#556b2f",
+  green: "#2e5a36",
+  beige: "#d9d2c5",
+  khaki: "#a49b8b",
+  brown: "#5c4033",
+  pink: "#e8a598",
+  red: "#9e2a2b",
+  maroon: "#800020",
+  burgundy: "#781d29",
+  orange: "#f97316",
+  yellow: "#eab308",
+  purple: "#9333ea",
+  cream: "#fffdd0",
+  oatmeal: "#c2b8a8",
+  taupe: "#827c74",
+  ivory: "#ece9e2",
+  stone: "#d9d6cf",
+  ecru: "#e7e3da",
+  sand: "#b3aa9d",
+};
+
 function formatColorLabel(rawColor: string): string {
+  if (!rawColor) return "";
   const normalized = rawColor.trim().toLowerCase();
   if (COLOR_NAMES[normalized]) {
     return COLOR_NAMES[normalized];
@@ -49,22 +82,122 @@ function formatColorLabel(rawColor: string): string {
   return rawColor;
 }
 
+function resolveSwatchBackground(rawColor: string): string {
+  if (!rawColor) return "#222222";
+  const trimmed = rawColor.trim();
+  if (trimmed.startsWith("#") || trimmed.startsWith("rgb") || trimmed.startsWith("hsl")) {
+    return trimmed;
+  }
+  const lower = trimmed.toLowerCase();
+  if (COLOR_NAME_TO_HEX[lower]) {
+    return COLOR_NAME_TO_HEX[lower];
+  }
+  return trimmed;
+}
+
 interface ProductSelectorsProps {
   product: Product;
 }
 
+function isDatabaseBackedProduct(product: Product): boolean {
+  if (product.is_database === true) return true;
+  if (typeof product.id === "string") return true;
+  if (Boolean(product.created_at)) return true;
+  if (Array.isArray(product.variants)) return true;
+  return false;
+}
+
 export default function ProductSelectors({ product }: ProductSelectorsProps) {
+  const isDb = isDatabaseBackedProduct(product);
+
   const hasColors = Boolean(product.colors && product.colors.length > 0);
   const [selectedColor, setSelectedColor] = useState<string>(
     hasColors ? product.colors[0] : ""
   );
-  const [selectedSize, setSelectedSize] = useState<string>("M");
+
+  const handleColorChange = (newColor: string) => {
+    setSelectedColor(newColor);
+    setUserSelectedSize(null);
+  };
+
+  // Compute variants configured for the currently selected color
+  const variantsForSelectedColor = useMemo(() => {
+    if (!isDb || !product.variants) return [];
+    if (!selectedColor) return product.variants;
+    return product.variants.filter(
+      (v) => v.color.trim().toLowerCase() === selectedColor.trim().toLowerCase()
+    );
+  }, [isDb, product.variants, selectedColor]);
+
+  // Determine available sizes based on configured variants for this color
+  const availableSizes = useMemo(() => {
+    if (!isDb) {
+      // Legacy mock fallback for homepage products only
+      return Array.from(FALLBACK_MOCK_SIZES);
+    }
+    // Collect unique sizes specifically configured for this color
+    const uniqueSizes: string[] = [];
+    variantsForSelectedColor.forEach((v) => {
+      if (v.size && !uniqueSizes.includes(v.size)) {
+        uniqueSizes.push(v.size);
+      }
+    });
+    return uniqueSizes;
+  }, [isDb, variantsForSelectedColor]);
+
+  // User selected size state
+  const [userSelectedSize, setUserSelectedSize] = useState<string | null>(null);
+
+  // Effective selected size: if user selected a size that is valid for the current color, use it;
+  // otherwise auto-select the first in-stock size, or first configured size for this color.
+  const selectedSize = useMemo(() => {
+    if (!isDb) {
+      return userSelectedSize || "M";
+    }
+    if (availableSizes.length === 0) {
+      return "";
+    }
+    if (userSelectedSize && availableSizes.includes(userSelectedSize)) {
+      return userSelectedSize;
+    }
+    const firstInStock = variantsForSelectedColor.find((v) => v.is_available);
+    return firstInStock ? firstInStock.size : (availableSizes[0] || "");
+  }, [isDb, userSelectedSize, availableSizes, variantsForSelectedColor]);
+
   const [quantity, setQuantity] = useState<number>(1);
   const [added, setAdded] = useState<boolean>(false);
 
+  // Check if current selection corresponds to an available in-stock variant
+  const currentVariant = useMemo(() => {
+    if (!isDb) return null;
+    return variantsForSelectedColor.find(
+      (v) => v.size.trim().toLowerCase() === selectedSize.trim().toLowerCase()
+    );
+  }, [isDb, variantsForSelectedColor, selectedSize]);
+
+  const isCurrentSelectionAvailable = useMemo(() => {
+    if (!isDb) {
+      return Boolean(selectedSize);
+    }
+    if (availableSizes.length === 0 || !selectedSize) {
+      return false;
+    }
+    return Boolean(currentVariant && currentVariant.is_available);
+  }, [isDb, availableSizes.length, selectedSize, currentVariant]);
+
   const handleAddToCart = () => {
+    if (!isCurrentSelectionAvailable) return;
     setAdded(true);
     setTimeout(() => setAdded(false), 2000);
+  };
+
+  const getButtonText = () => {
+    if (added) return "Added to cart";
+    if (isDb) {
+      if (availableSizes.length === 0) return "Unavailable";
+      if (!isCurrentSelectionAvailable) return "Out of stock";
+    }
+    return "Add to cart";
   };
 
   return (
@@ -74,7 +207,9 @@ export default function ProductSelectors({ product }: ProductSelectorsProps) {
         <div className="selector-group">
           <div className="selector-head">
             <span className="selector-label">COLOR</span>
-            <small className="selector-state">Selected</small>
+            <small className="selector-state">
+              {formatColorLabel(selectedColor) || "Selected"}
+            </small>
           </div>
           <div
             className="color-swatches-row"
@@ -84,6 +219,7 @@ export default function ProductSelectors({ product }: ProductSelectorsProps) {
             {product.colors.map((color) => {
               const isSelected = selectedColor === color;
               const label = formatColorLabel(color);
+              const bgColor = resolveSwatchBackground(color);
               return (
                 <button
                   key={color}
@@ -93,11 +229,11 @@ export default function ProductSelectors({ product }: ProductSelectorsProps) {
                   aria-label={label}
                   title={label}
                   className={`color-swatch-btn ${isSelected ? "selected" : ""}`}
-                  onClick={() => setSelectedColor(color)}
+                  onClick={() => handleColorChange(color)}
                 >
                   <span
                     className="color-swatch-inner"
-                    style={{ backgroundColor: color }}
+                    style={{ backgroundColor: bgColor }}
                     aria-hidden="true"
                   />
                 </button>
@@ -107,28 +243,50 @@ export default function ProductSelectors({ product }: ProductSelectorsProps) {
         </div>
       )}
 
-      {/* Size selection — compact rectangular buttons without Size Guide */}
+      {/* Size selection — ONLY configured sizes for database products */}
       <div className="selector-group">
         <div className="selector-head">
           <span className="selector-label">SIZE</span>
+          {isDb && !isCurrentSelectionAvailable && selectedSize && (
+            <small className="selector-state text-rose-600">Out of Stock</small>
+          )}
         </div>
         <div className="size-row" role="radiogroup" aria-label="Select size">
-          {SIZES.map((size) => {
-            const isSelected = selectedSize === size;
-            return (
-              <button
-                key={size}
-                type="button"
-                role="radio"
-                aria-checked={isSelected}
-                aria-label={`Select size ${size}`}
-                className={`size-btn ${isSelected ? "selected" : ""}`}
-                onClick={() => setSelectedSize(size)}
-              >
-                {size}
-              </button>
-            );
-          })}
+          {availableSizes.length > 0 ? (
+            availableSizes.map((size) => {
+              const isSelected = selectedSize === size;
+              const variantMatch = isDb
+                ? variantsForSelectedColor.find(
+                    (v) => v.size.trim().toLowerCase() === size.trim().toLowerCase()
+                  )
+                : null;
+              const isSizeAvailable = isDb
+                ? Boolean(variantMatch && variantMatch.is_available)
+                : true;
+
+              return (
+                <button
+                  key={size}
+                  type="button"
+                  role="radio"
+                  aria-checked={isSelected}
+                  aria-label={`Select size ${size}${!isSizeAvailable ? " (Out of stock)" : ""}`}
+                  disabled={!isSizeAvailable}
+                  title={!isSizeAvailable ? `${size} - Out of stock` : `Size ${size}`}
+                  className={`size-btn ${isSelected ? "selected" : ""} ${
+                    !isSizeAvailable ? "disabled" : ""
+                  }`}
+                  onClick={() => {
+                    if (isSizeAvailable) setUserSelectedSize(size);
+                  }}
+                >
+                  {size}
+                </button>
+              );
+            })
+          ) : (
+            <p className="no-sizes-msg">No sizes currently configured for this color.</p>
+          )}
         </div>
       </div>
 
@@ -141,7 +299,7 @@ export default function ProductSelectors({ product }: ProductSelectorsProps) {
               type="button"
               className="qty-btn"
               aria-label="Decrease quantity"
-              disabled={quantity <= 1}
+              disabled={quantity <= 1 || !isCurrentSelectionAvailable}
               onClick={() => setQuantity((prev) => Math.max(1, prev - 1))}
             >
               <Icon name="minus" size={14} />
@@ -153,6 +311,7 @@ export default function ProductSelectors({ product }: ProductSelectorsProps) {
               type="button"
               className="qty-btn"
               aria-label="Increase quantity"
+              disabled={!isCurrentSelectionAvailable}
               onClick={() => setQuantity((prev) => prev + 1)}
             >
               <Icon name="plus" size={14} />
@@ -165,10 +324,11 @@ export default function ProductSelectors({ product }: ProductSelectorsProps) {
             type="button"
             className="btn-add-to-cart"
             aria-label={`Add ${product.name} to cart`}
+            disabled={!isCurrentSelectionAvailable}
             onClick={handleAddToCart}
           >
             <Icon name="bag" size={18} />
-            <span>{added ? "Added to cart" : "Add to cart"}</span>
+            <span>{getButtonText()}</span>
           </button>
         </div>
 

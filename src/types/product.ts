@@ -6,10 +6,14 @@ export interface Product {
   name: string;
   slug: string;
   description: string | null;
+  department: "men" | "women" | "kids" | "Men" | "Women" | "Kids";
+  category: string;
   price: number;
   sale_price: number | null;
-  category: string;
+  fabric: string | null;
+  fit: string | null;
   status: "draft" | "published" | "archived";
+  is_featured: boolean;
   created_at: string;
   updated_at: string;
 }

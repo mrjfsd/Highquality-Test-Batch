@@ -226,7 +226,15 @@ export default function DepartmentListingContent({
       case "price-desc":
         return list.sort((a, b) => (b.sale ?? b.price) - (a.sale ?? a.price));
       case "newest":
-        return list.sort((a, b) => b.id - a.id);
+        return list.sort((a, b) => {
+          if (a.created_at && b.created_at) {
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+          }
+          if (typeof a.id === "number" && typeof b.id === "number") {
+            return b.id - a.id;
+          }
+          return String(b.id).localeCompare(String(a.id));
+        });
       case "name-asc":
         return list.sort((a, b) => a.name.localeCompare(b.name));
       case "featured":
