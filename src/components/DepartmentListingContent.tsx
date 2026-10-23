@@ -1,12 +1,11 @@
 "use client";
 
-// DepartmentListingContent — collection page layout adhering to the 30% Filter Sidebar / 70% Product Listing architecture.
-// Dynamically supports /shop/men, /shop/women, /shop/kids with existing product data.
+// DepartmentListingContent — Snitch-inspired slide-out filter overlay.
+// Supports /shop/men, /shop/women, /shop/kids with database-only products and fixed grid positioning.
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import type { Product } from "@/data/products";
 import ProductCard from "@/components/ProductCard";
-import Icon from "@/components/Icon";
 
 interface DepartmentListingContentProps {
   department: string;
@@ -46,34 +45,196 @@ function getColorLabel(hex: string): string {
   return COLOR_NAMES[hex.toLowerCase()] || hex.toUpperCase();
 }
 
-const SUPPORTED_SIZES = [
-  "XS",
-  "S",
-  "M",
-  "L",
-  "XL",
-  "XXL",
-  "3XL",
-  "Oversized",
+// Exactly the 5 requested sizes for catalogue filter
+const CATALOGUE_FILTER_SIZES = ["XS", "S", "M", "L", "XL"] as const;
+
+type PricePreset = 500 | 1000 | null;
+
+// Professional customer-facing category options per department group
+export const DEPARTMENT_CATEGORY_CONFIG = [
+  {
+    department: "Men",
+    categories: [
+      "Oversized T-Shirts",
+      "Track Pants",
+      "Hoodies",
+      "Jeans",
+    ],
+  },
+  {
+    department: "Women",
+    categories: [
+      "T-Shirts",
+      "Track Pants",
+      "Short Kurtis",
+      "Crop Tops",
+      "Jeans",
+      "Hoodies",
+      "Oversized T-Shirts",
+      "Sleepwear Sets",
+      "Korean-Style Sleepwear Sets",
+      "Korean-Style Pants",
+      "Korean-Style Formal Trousers",
+      "Palazzo Pants",
+    ],
+  },
+  {
+    department: "Kids",
+    categories: [
+      "T-Shirts",
+      "Pants",
+      "Co-ord Sets",
+      "Sleepwear Sets",
+      "Frocks",
+      "Korean-Style Sets",
+      "Korean-Style Frocks",
+    ],
+  },
 ] as const;
 
-type SortOption =
-  | "featured"
-  | "newest"
-  | "price-asc"
-  | "price-desc"
-  | "name-asc";
+// Presentation-layer mapping from professional display labels to underlying database category aliases
+const CATEGORY_DATABASE_ALIASES: Record<string, string[]> = {
+  "T-Shirts": ["t-shirts", "t-shirt", "tshirts", "tshirt", "t shirt"],
+  "Track Pants": ["track pants", "track pant", "night pants", "night pant"],
+  "Short Kurtis": ["short kurtis", "short kurti"],
+  "Crop Tops": ["crop tops", "crop top", "short tops", "short top"],
+  "Jeans": ["jeans", "jean"],
+  "Hoodies": ["hoodies", "hoodie"],
+  "Oversized T-Shirts": [
+    "oversized t-shirts",
+    "oversize t-shirts",
+    "oversize t-shirt",
+    "oversized t-shirt",
+  ],
+  "Sleepwear Sets": ["sleepwear sets", "sleepwear set", "night suits", "night suit"],
+  "Korean-Style Sleepwear Sets": [
+    "korean-style sleepwear sets",
+    "korean style sleepwear sets",
+    "korean night suits",
+    "korean night suit",
+  ],
+  "Korean-Style Pants": [
+    "korean-style pants",
+    "korean style pants",
+    "korean pants",
+    "korean pant",
+  ],
+  "Korean-Style Formal Trousers": [
+    "korean-style formal trousers",
+    "korean style formal trousers",
+    "korean formal pants",
+    "korean formal pant",
+  ],
+  "Palazzo Pants": [
+    "palazzo pants",
+    "palazzo pant",
+    "plazo pants",
+    "plazo pant",
+  ],
+  "Pants": ["pants", "pant"],
+  "Co-ord Sets": ["co-ord sets", "co-ord set", "coord sets", "coord set"],
+  "Frocks": ["frocks", "frock"],
+  "Korean-Style Sets": [
+    "korean-style sets",
+    "korean style sets",
+    "korean sets",
+    "korean set",
+  ],
+  "Korean-Style Frocks": [
+    "korean-style frocks",
+    "korean style frocks",
+    "korean frocks",
+    "korean frock",
+  ],
+};
+
+/**
+ * Connects professional category display names to actual product records in Supabase.
+ * Enforces strict department isolation and justified mappings for legacy records
+ * without altering database values or filter behavior.
+ */
+export function productMatchesCategory(
+  product: Product,
+  targetCategory: string,
+  targetGroupDept: string
+): boolean {
+  // Department isolation: product department must match target group
+  if (product.department.toLowerCase() !== targetGroupDept.toLowerCase()) {
+    return false;
+  }
+
+  const pCategory = (product.category || "").trim().toLowerCase();
+  const target = targetCategory.trim();
+  const pName = (product.name || "").trim().toLowerCase();
+  const pSlug = (product.slug || "").trim().toLowerCase();
+
+  // 1. Direct exact match (case-insensitive)
+  if (pCategory === target.toLowerCase()) {
+    return true;
+  }
+
+  // 2. Known database alias match
+  const aliases = CATEGORY_DATABASE_ALIASES[target] || [target.toLowerCase()];
+  if (aliases.includes(pCategory)) {
+    return true;
+  }
+
+  // 3. Normalized alphanumeric match (ignoring hyphens, spaces: e.g. "T-Shirts" vs "T Shirts")
+  const normCategory = pCategory.replace(/[-\s]/g, "");
+  if (
+    normCategory &&
+    aliases.some((alias) => alias.replace(/[-\s]/g, "") === normCategory)
+  ) {
+    return true;
+  }
+
+  // 4. Justified legacy mapping for records saved with generic category 'Pants':
+  if (pCategory === "pants" || pCategory === "pant") {
+    if (target === "Pants") {
+      return true;
+    }
+    if (target === "Jeans" && (pName.includes("jeans") || pSlug.includes("jeans"))) {
+      return true;
+    }
+    if (target === "Track Pants" && (pName.includes("track") || pName.includes("night"))) {
+      return true;
+    }
+    if (target === "Korean-Style Pants" && pName.includes("korean")) {
+      return true;
+    }
+    if (target === "Korean-Style Formal Trousers" && pName.includes("formal")) {
+      return true;
+    }
+    if (target === "Palazzo Pants" && pName.includes("palazzo")) {
+      return true;
+    }
+  }
+
+  // 5. Plural / singular match where unambiguous (e.g. "Hoodies" vs "Hoodie")
+  if (
+    (target === "Hoodies" && pCategory === "hoodie") ||
+    (target === "Frocks" && pCategory === "frock")
+  ) {
+    return true;
+  }
+
+  return false;
+}
 
 export default function DepartmentListingContent({
   department,
   products,
 }: DepartmentListingContentProps) {
-  // ── Filter states ──
+  // ── Snitch Overlay Drawer state ──
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const filterTriggerRef = useRef<HTMLButtonElement>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
+
+  // ── Applied Filter States (active in catalogue) ──
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedColors, setSelectedColors] = useState<string[]>([]);
   const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
-  const [priceMin, setPriceMin] = useState<string>("");
-  const [priceMax, setPriceMax] = useState<string>("");
+  const [pricePreset, setPricePreset] = useState<PricePreset>(null);
   const [availability, setAvailability] = useState<{
     inStock: boolean;
     outOfStock: boolean;
@@ -82,16 +243,27 @@ export default function DepartmentListingContent({
     outOfStock: false,
   });
 
-  // ── View & Sort states ──
-  const [sortBy, setSortBy] = useState<SortOption>("featured");
-  const [gridCols, setGridCols] = useState<4 | 2>(4);
-  const [showAllColors, setShowAllColors] = useState(false);
-  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  // ── Draft Filter States (inside drawer before applying) ──
+  const [draftCategories, setDraftCategories] = useState<string[]>([]);
+  const [draftColors, setDraftColors] = useState<string[]>([]);
+  const [draftSizes, setDraftSizes] = useState<string[]>([]);
+  const [draftPricePreset, setDraftPricePreset] = useState<PricePreset>(null);
+  const [draftAvailability, setDraftAvailability] = useState<{
+    inStock: boolean;
+    outOfStock: boolean;
+  }>({
+    inStock: false,
+    outOfStock: false,
+  });
 
-  // ── Section collapse/expand states ──
+  // ── Color Dropdown state & ref (inside drawer) ──
+  const [colorDropdownOpen, setColorDropdownOpen] = useState(false);
+  const colorDropdownRef = useRef<HTMLDivElement>(null);
+
+  // ── Expandable Drawer Sections (matching Snitch reference rows) ──
   const [expandedSections, setExpandedSections] = useState({
-    color: true,
     size: true,
+    color: true,
     price: true,
     category: true,
     availability: true,
@@ -104,43 +276,161 @@ export default function DepartmentListingContent({
     }));
   };
 
+  // ── Predefined Category Options for Current Department ──
+  const currentDepartmentCategories = useMemo(() => {
+    const config = DEPARTMENT_CATEGORY_CONFIG.find(
+      (c) => c.department.toLowerCase() === department.toLowerCase()
+    );
+    return config ? config.categories : [];
+  }, [department]);
 
+  // Category product count based on published products in the current catalogue
+  const getCategoryProductCount = useCallback(
+    (catName: string) => {
+      return products.filter((p) =>
+        productMatchesCategory(p, catName, department)
+      ).length;
+    },
+    [products, department]
+  );
 
-  // ── Derived filter data from current products ──
-  const availableCategories = useMemo(() => {
-    return Array.from(new Set(products.map((p) => p.category))).sort();
-  }, [products]);
+  // Open drawer: populate draft state from applied state
+  const openDrawer = useCallback(() => {
+    setDraftCategories(selectedCategories);
+    setDraftColors(selectedColors);
+    setDraftSizes(selectedSizes);
+    setDraftPricePreset(pricePreset);
+    setDraftAvailability(availability);
+    setDrawerOpen(true);
+  }, [
+    selectedCategories,
+    selectedColors,
+    selectedSizes,
+    pricePreset,
+    availability,
+  ]);
 
+  // Close drawer: restore focus to FILTERS trigger
+  const closeDrawer = useCallback(() => {
+    setDrawerOpen(false);
+    setColorDropdownOpen(false);
+    setTimeout(() => {
+      filterTriggerRef.current?.focus();
+    }, 50);
+  }, []);
+
+  // Commit draft to applied state and close drawer
+  const applyFilters = () => {
+    setSelectedCategories(draftCategories);
+    setSelectedColors(draftColors);
+    setSelectedSizes(draftSizes);
+    setPricePreset(draftPricePreset);
+    setAvailability(draftAvailability);
+    setDrawerOpen(false);
+    setColorDropdownOpen(false);
+    setTimeout(() => {
+      filterTriggerRef.current?.focus();
+    }, 50);
+  };
+
+  // Clear selections inside drawer
+  const clearDraftFilters = () => {
+    setDraftCategories([]);
+    setDraftColors([]);
+    setDraftSizes([]);
+    setDraftPricePreset(null);
+    setDraftAvailability({ inStock: false, outOfStock: false });
+  };
+
+  // Global Clear All (from pills bar or if applied directly)
+  const handleClearAll = () => {
+    setSelectedCategories([]);
+    setSelectedColors([]);
+    setSelectedSizes([]);
+    setPricePreset(null);
+    setAvailability({ inStock: false, outOfStock: false });
+    setDraftCategories([]);
+    setDraftColors([]);
+    setDraftSizes([]);
+    setDraftPricePreset(null);
+    setDraftAvailability({ inStock: false, outOfStock: false });
+  };
+
+  // Lock background scroll when drawer is open
+  useEffect(() => {
+    if (drawerOpen) {
+      const scrollY = window.scrollY;
+      document.body.style.position = "fixed";
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = "100%";
+      document.body.style.overflow = "hidden";
+    } else {
+      const scrollY = document.body.style.top;
+      document.body.style.position = "";
+      document.body.style.top = "";
+      document.body.style.width = "";
+      document.body.style.overflow = "";
+      if (scrollY) {
+        window.scrollTo(0, parseInt(scrollY || "0", 10) * -1);
+      }
+    }
+    return () => {
+      document.body.style.position = "";
+      document.body.style.top = "";
+      document.body.style.width = "";
+      document.body.style.overflow = "";
+    };
+  }, [drawerOpen]);
+
+  // Handle Escape key
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        if (colorDropdownOpen) {
+          setColorDropdownOpen(false);
+        } else if (drawerOpen) {
+          closeDrawer();
+        }
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [drawerOpen, colorDropdownOpen, closeDrawer]);
+
+  // Close color dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        colorDropdownRef.current &&
+        !colorDropdownRef.current.contains(event.target as Node)
+      ) {
+        setColorDropdownOpen(false);
+      }
+    }
+    if (colorDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [colorDropdownOpen]);
+
+  // Derived filter data from current products
   const availableColors = useMemo(() => {
     const set = new Set<string>();
     products.forEach((p) => {
-      p.colors.forEach((c) => set.add(c));
+      p.colors?.forEach((c) => set.add(c));
     });
     return Array.from(set);
   }, [products]);
 
-  const departmentMinPrice = useMemo(() => {
-    if (products.length === 0) return 0;
-    return Math.min(...products.map((p) => p.sale ?? p.price));
-  }, [products]);
-
-  const departmentMaxPrice = useMemo(() => {
-    if (products.length === 0) return 10000;
-    return Math.max(...products.map((p) => p.sale ?? p.price));
-  }, [products]);
-
-  // Visible colors with + Show more threshold of 5
-  const displayedColors = showAllColors
-    ? availableColors
-    : availableColors.slice(0, 5);
-
-  // Active filter count calculation
+  // Active filter count (applied)
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (selectedCategories.length > 0) count += selectedCategories.length;
     if (selectedColors.length > 0) count += selectedColors.length;
     if (selectedSizes.length > 0) count += selectedSizes.length;
-    if (priceMin !== "" || priceMax !== "") count += 1;
+    if (pricePreset !== null) count += 1;
     if (availability.inStock) count += 1;
     if (availability.outOfStock) count += 1;
     return count;
@@ -148,61 +438,88 @@ export default function DepartmentListingContent({
     selectedCategories,
     selectedColors,
     selectedSizes,
-    priceMin,
-    priceMax,
+    pricePreset,
     availability,
   ]);
 
-  const handleClearAll = () => {
-    setSelectedCategories([]);
-    setSelectedColors([]);
-    setSelectedSizes([]);
-    setPriceMin("");
-    setPriceMax("");
-    setAvailability({ inStock: false, outOfStock: false });
-  };
+  // Draft filter count (inside drawer)
+  const draftFilterCount = useMemo(() => {
+    let count = 0;
+    if (draftCategories.length > 0) count += draftCategories.length;
+    if (draftColors.length > 0) count += draftColors.length;
+    if (draftSizes.length > 0) count += draftSizes.length;
+    if (draftPricePreset !== null) count += 1;
+    if (draftAvailability.inStock) count += 1;
+    if (draftAvailability.outOfStock) count += 1;
+    return count;
+  }, [
+    draftCategories,
+    draftColors,
+    draftSizes,
+    draftPricePreset,
+    draftAvailability,
+  ]);
 
-  // ── Combined Filtering ──
+  // Combined Filtering (based on committed applied filters)
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
       // 1. Category filter
-      if (
-        selectedCategories.length > 0 &&
-        !selectedCategories.includes(product.category)
-      ) {
-        return false;
+      if (selectedCategories.length > 0) {
+        const matchesAny = selectedCategories.some((catName) => {
+          return productMatchesCategory(product, catName, department);
+        });
+        if (!matchesAny) {
+          return false;
+        }
       }
 
       // 2. Color filter
       if (
         selectedColors.length > 0 &&
-        !product.colors.some((color) => selectedColors.includes(color))
+        !product.colors?.some((color) => selectedColors.includes(color))
       ) {
         return false;
       }
 
-      // 3. Price filter
-      const effectivePrice = product.sale ?? product.price;
-      if (priceMin !== "") {
-        const minVal = parseFloat(priceMin);
-        if (!isNaN(minVal) && effectivePrice < minVal) {
-          return false;
-        }
-      }
-      if (priceMax !== "") {
-        const maxVal = parseFloat(priceMax);
-        if (!isNaN(maxVal) && effectivePrice > maxVal) {
+      // 3. Size filter
+      if (selectedSizes.length > 0) {
+        const hasMatchingSize =
+          product.variants && product.variants.length > 0
+            ? product.variants.some((v) => selectedSizes.includes(v.size))
+            : false;
+        if (!hasMatchingSize) {
           return false;
         }
       }
 
-      // 4. Availability filter
-      const isAvailable =
-        (product as unknown as { is_available?: boolean }).is_available ?? true;
-      if (availability.inStock && !availability.outOfStock && !isAvailable) {
+      // 4. Price preset filter (strictly below ₹500 or ₹1,000)
+      const effectivePrice = product.sale ?? product.price;
+      if (pricePreset === 500 && effectivePrice >= 500) {
         return false;
       }
-      if (availability.outOfStock && !availability.inStock && isAvailable) {
+      if (pricePreset === 1000 && effectivePrice >= 1000) {
+        return false;
+      }
+
+      // 5. Availability filter
+      const productHasAvailableVariant =
+        product.variants && product.variants.length > 0
+          ? product.variants.some((v) => v.is_available)
+          : (product as unknown as { is_available?: boolean }).is_available ??
+            true;
+
+      if (
+        availability.inStock &&
+        !availability.outOfStock &&
+        !productHasAvailableVariant
+      ) {
+        return false;
+      }
+      if (
+        availability.outOfStock &&
+        !availability.inStock &&
+        productHasAvailableVariant
+      ) {
         return false;
       }
 
@@ -212,517 +529,217 @@ export default function DepartmentListingContent({
     products,
     selectedCategories,
     selectedColors,
-    priceMin,
-    priceMax,
+    selectedSizes,
+    pricePreset,
     availability,
   ]);
 
-  // ── Sorting ──
-  const sortedProducts = useMemo(() => {
-    const list = [...filteredProducts];
-    switch (sortBy) {
-      case "price-asc":
-        return list.sort((a, b) => (a.sale ?? a.price) - (b.sale ?? b.price));
-      case "price-desc":
-        return list.sort((a, b) => (b.sale ?? b.price) - (a.sale ?? a.price));
-      case "newest":
-        return list.sort((a, b) => {
-          if (a.created_at && b.created_at) {
-            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-          }
-          if (typeof a.id === "number" && typeof b.id === "number") {
-            return b.id - a.id;
-          }
-          return String(b.id).localeCompare(String(a.id));
-        });
-      case "name-asc":
-        return list.sort((a, b) => a.name.localeCompare(b.name));
-      case "featured":
-      default:
-        return list;
-    }
-  }, [filteredProducts, sortBy]);
-
-  // Handler helpers
-  const toggleCategory = (cat: string) => {
-    setSelectedCategories((prev) =>
-      prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]
+  // Draft Toggle Helpers (inside drawer)
+  const toggleDraftCategory = (catName: string) => {
+    setDraftCategories((prev) =>
+      prev.includes(catName)
+        ? prev.filter((c) => c !== catName)
+        : [...prev, catName]
     );
   };
 
-  const toggleColor = (color: string) => {
-    setSelectedColors((prev) =>
+  const toggleDraftColor = (color: string) => {
+    setDraftColors((prev) =>
       prev.includes(color) ? prev.filter((c) => c !== color) : [...prev, color]
     );
   };
 
-  const toggleSize = (size: string) => {
-    setSelectedSizes((prev) =>
+  const toggleDraftSize = (size: string) => {
+    setDraftSizes((prev) =>
       prev.includes(size) ? prev.filter((s) => s !== size) : [...prev, size]
     );
   };
 
+  const toggleDraftPricePreset = (preset: 500 | 1000) => {
+    setDraftPricePreset((prev) => (prev === preset ? null : preset));
+  };
+
+  // Draft color label for closed dropdown trigger inside drawer
+  const draftColorDropdownLabel = useMemo(() => {
+    if (draftColors.length === 0) return "All colors";
+    if (draftColors.length === 1) return getColorLabel(draftColors[0]);
+    return `${draftColors.length} selected`;
+  }, [draftColors]);
+
   return (
     <div className="collection-layout">
       {/* ═══════════════════════════════════════════════════════════
-          LEFT: FILTER SIDEBAR (Approx 30%)
+          CATALOGUE TOP TOOLBAR (Above Product Grid)
+          Left: Item Count | Right: EXACTLY ONE Snitch-Style FILTERS Button
           ═══════════════════════════════════════════════════════════ */}
-      <aside
-        className={`filter-sidebar ${mobileFiltersOpen ? "filter-sidebar--open" : ""}`}
-        aria-label={`${department} collection filters`}
-      >
-        <div className="filter-header">
-          <div className="filter-title-wrap">
-            <h2>Filters</h2>
+      <div className="product-toolbar">
+        <div className="product-toolbar-left">
+          <span className="product-count">
+            {filteredProducts.length}{" "}
+            {filteredProducts.length === 1 ? "item" : "items"}
+          </span>
+        </div>
+
+        <div className="product-toolbar-right">
+          <button
+            ref={filterTriggerRef}
+            type="button"
+            className={`snitch-filter-btn ${activeFilterCount > 0 ? "active" : ""}`}
+            onClick={openDrawer}
+            aria-expanded={drawerOpen}
+            aria-haspopup="dialog"
+            aria-label="Open filter drawer"
+          >
+            {/* Minimal sliders/filter icon matching Snitch reference */}
+            <svg
+              className="snitch-filter-icon"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+              <circle cx="8" cy="6" r="2.5" fill="var(--white)" />
+              <circle cx="16" cy="12" r="2.5" fill="var(--white)" />
+              <circle cx="9" cy="18" r="2.5" fill="var(--white)" />
+            </svg>
+            <span className="snitch-filter-text">FILTERS</span>
             {activeFilterCount > 0 && (
-              <span className="filter-badge">{activeFilterCount}</span>
+              <span className="snitch-filter-badge">{activeFilterCount}</span>
             )}
-          </div>
-          <div className="filter-header-actions">
-            {activeFilterCount > 0 && (
+          </button>
+        </div>
+      </div>
+
+      {/* ACTIVE FILTER PILLS (Beneath Toolbar) */}
+      {activeFilterCount > 0 && (
+        <div className="active-filters-bar" aria-label="Active filters">
+          <span className="active-filters-label">Active filters:</span>
+          <div className="active-filters-list">
+            {selectedCategories.map((catName) => (
+              <button
+                key={catName}
+                type="button"
+                className="filter-pill"
+                onClick={() => {
+                  setSelectedCategories((prev) =>
+                    prev.filter((c) => c !== catName)
+                  );
+                  setDraftCategories((prev) =>
+                    prev.filter((c) => c !== catName)
+                  );
+                }}
+                aria-label={`Remove category filter ${catName}`}
+              >
+                <span>{catName}</span>
+                <span className="pill-remove">×</span>
+              </button>
+            ))}
+            {selectedColors.map((hex) => (
+              <button
+                key={hex}
+                type="button"
+                className="filter-pill"
+                onClick={() => {
+                  setSelectedColors((prev) => prev.filter((c) => c !== hex));
+                  setDraftColors((prev) => prev.filter((c) => c !== hex));
+                }}
+                aria-label={`Remove color filter ${getColorLabel(hex)}`}
+              >
+                <span
+                  className="pill-swatch"
+                  style={{ backgroundColor: hex }}
+                />
+                <span>{getColorLabel(hex)}</span>
+                <span className="pill-remove">×</span>
+              </button>
+            ))}
+            {selectedSizes.map((size) => (
+              <button
+                key={size}
+                type="button"
+                className="filter-pill"
+                onClick={() => {
+                  setSelectedSizes((prev) => prev.filter((s) => s !== size));
+                  setDraftSizes((prev) => prev.filter((s) => s !== size));
+                }}
+                aria-label={`Remove size filter ${size}`}
+              >
+                <span>Size: {size}</span>
+                <span className="pill-remove">×</span>
+              </button>
+            ))}
+            {pricePreset !== null && (
               <button
                 type="button"
-                className="filter-clear-link"
-                onClick={handleClearAll}
+                className="filter-pill"
+                onClick={() => {
+                  setPricePreset(null);
+                  setDraftPricePreset(null);
+                }}
+                aria-label={`Remove price filter under ₹${pricePreset}`}
               >
-                Clear all
+                <span>Price: &lt; ₹{pricePreset.toLocaleString("en-IN")}</span>
+                <span className="pill-remove">×</span>
+              </button>
+            )}
+            {availability.inStock && (
+              <button
+                type="button"
+                className="filter-pill"
+                onClick={() => {
+                  setAvailability((prev) => ({ ...prev, inStock: false }));
+                  setDraftAvailability((prev) => ({
+                    ...prev,
+                    inStock: false,
+                  }));
+                }}
+                aria-label="Remove In Stock filter"
+              >
+                <span>In stock</span>
+                <span className="pill-remove">×</span>
+              </button>
+            )}
+            {availability.outOfStock && (
+              <button
+                type="button"
+                className="filter-pill"
+                onClick={() => {
+                  setAvailability((prev) => ({ ...prev, outOfStock: false }));
+                  setDraftAvailability((prev) => ({
+                    ...prev,
+                    outOfStock: false,
+                  }));
+                }}
+                aria-label="Remove Out of Stock filter"
+              >
+                <span>Out of stock</span>
+                <span className="pill-remove">×</span>
               </button>
             )}
             <button
               type="button"
-              className="filter-close-btn"
-              onClick={() => setMobileFiltersOpen(false)}
-              aria-label="Close filters"
+              className="filter-clear-all-pill"
+              onClick={handleClearAll}
             >
-              <Icon name="close" size={16} />
+              Clear all
             </button>
           </div>
         </div>
-
-        {/* 1. COLOR FILTER */}
-        <section className="filter-section">
-          <button
-            type="button"
-            className="filter-section-header"
-            onClick={() => toggleSection("color")}
-            aria-expanded={expandedSections.color}
-          >
-            <span>Color</span>
-            <span className="filter-arrow" aria-hidden="true">
-              {expandedSections.color ? "↑" : "↓"}
-            </span>
-          </button>
-          {expandedSections.color && (
-            <div className="filter-section-body">
-              <div className="filter-checkbox-list">
-                {displayedColors.map((hex) => {
-                  const isChecked = selectedColors.includes(hex);
-                  const label = getColorLabel(hex);
-                  return (
-                    <label
-                      key={hex}
-                      className={`filter-checkbox-item ${isChecked ? "active" : ""}`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => toggleColor(hex)}
-                      />
-                      <span
-                        className="color-swatch-dot"
-                        style={{ backgroundColor: hex }}
-                        aria-hidden="true"
-                      />
-                      <span className="filter-item-label">{label}</span>
-                    </label>
-                  );
-                })}
-              </div>
-              {availableColors.length > 5 && (
-                <button
-                  type="button"
-                  className="filter-show-more-btn"
-                  onClick={() => setShowAllColors((prev) => !prev)}
-                >
-                  {showAllColors
-                    ? "− Show less"
-                    : `+ Show more (${availableColors.length - 5})`}
-                </button>
-              )}
-            </div>
-          )}
-        </section>
-
-        {/* 2. SIZE FILTER */}
-        <section className="filter-section">
-          <button
-            type="button"
-            className="filter-section-header"
-            onClick={() => toggleSection("size")}
-            aria-expanded={expandedSections.size}
-          >
-            <span>Size</span>
-            <span className="filter-arrow" aria-hidden="true">
-              {expandedSections.size ? "↑" : "↓"}
-            </span>
-          </button>
-          {expandedSections.size && (
-            <div className="filter-section-body">
-              <div className="filter-checkbox-list">
-                {SUPPORTED_SIZES.map((size) => {
-                  const isChecked = selectedSizes.includes(size);
-                  return (
-                    <label
-                      key={size}
-                      className={`filter-checkbox-item ${isChecked ? "active" : ""}`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => toggleSize(size)}
-                      />
-                      <span className="filter-item-label">{size}</span>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </section>
-
-        {/* 3. PRICE FILTER */}
-        <section className="filter-section">
-          <button
-            type="button"
-            className="filter-section-header"
-            onClick={() => toggleSection("price")}
-            aria-expanded={expandedSections.price}
-          >
-            <span>Price</span>
-            <span className="filter-arrow" aria-hidden="true">
-              {expandedSections.price ? "↑" : "↓"}
-            </span>
-          </button>
-          {expandedSections.price && (
-            <div className="filter-section-body">
-              <div className="filter-price-inputs">
-                <div className="price-input-box">
-                  <span className="currency-prefix">₹</span>
-                  <input
-                    type="number"
-                    min={departmentMinPrice}
-                    max={departmentMaxPrice}
-                    placeholder={departmentMinPrice.toLocaleString("en-IN")}
-                    value={priceMin}
-                    onChange={(e) => setPriceMin(e.target.value)}
-                    aria-label="Minimum price"
-                  />
-                </div>
-                <span className="price-to-divider">to</span>
-                <div className="price-input-box">
-                  <span className="currency-prefix">₹</span>
-                  <input
-                    type="number"
-                    min={departmentMinPrice}
-                    max={departmentMaxPrice}
-                    placeholder={departmentMaxPrice.toLocaleString("en-IN")}
-                    value={priceMax}
-                    onChange={(e) => setPriceMax(e.target.value)}
-                    aria-label="Maximum price"
-                  />
-                </div>
-              </div>
-              <div className="price-range-hint">
-                Range: ₹{departmentMinPrice.toLocaleString("en-IN")} – ₹
-                {departmentMaxPrice.toLocaleString("en-IN")}
-              </div>
-            </div>
-          )}
-        </section>
-
-        {/* 4. CATEGORY FILTER */}
-        <section className="filter-section">
-          <button
-            type="button"
-            className="filter-section-header"
-            onClick={() => toggleSection("category")}
-            aria-expanded={expandedSections.category}
-          >
-            <span>Category</span>
-            <span className="filter-arrow" aria-hidden="true">
-              {expandedSections.category ? "↑" : "↓"}
-            </span>
-          </button>
-          {expandedSections.category && (
-            <div className="filter-section-body">
-              <div className="filter-checkbox-list">
-                {availableCategories.map((category) => {
-                  const isChecked = selectedCategories.includes(category);
-                  const count = products.filter(
-                    (p) => p.category === category
-                  ).length;
-                  return (
-                    <label
-                      key={category}
-                      className={`filter-checkbox-item ${isChecked ? "active" : ""}`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => toggleCategory(category)}
-                      />
-                      <span className="filter-item-label">{category}</span>
-                      <span className="filter-item-count">({count})</span>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </section>
-
-        {/* 5. AVAILABILITY FILTER */}
-        <section className="filter-section">
-          <button
-            type="button"
-            className="filter-section-header"
-            onClick={() => toggleSection("availability")}
-            aria-expanded={expandedSections.availability}
-          >
-            <span>Availability</span>
-            <span className="filter-arrow" aria-hidden="true">
-              {expandedSections.availability ? "↑" : "↓"}
-            </span>
-          </button>
-          {expandedSections.availability && (
-            <div className="filter-section-body">
-              <div className="filter-checkbox-list">
-                <label
-                  className={`filter-checkbox-item ${availability.inStock ? "active" : ""}`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={availability.inStock}
-                    onChange={(e) =>
-                      setAvailability((prev) => ({
-                        ...prev,
-                        inStock: e.target.checked,
-                      }))
-                    }
-                  />
-                  <span className="filter-item-label">In stock</span>
-                </label>
-                <label
-                  className={`filter-checkbox-item ${availability.outOfStock ? "active" : ""}`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={availability.outOfStock}
-                    onChange={(e) =>
-                      setAvailability((prev) => ({
-                        ...prev,
-                        outOfStock: e.target.checked,
-                      }))
-                    }
-                  />
-                  <span className="filter-item-label">Out of stock</span>
-                </label>
-              </div>
-            </div>
-          )}
-        </section>
-      </aside>
-
-      {/* Backdrop for mobile filter drawer */}
-      {mobileFiltersOpen && (
-        <div
-          className="filter-drawer-backdrop"
-          onClick={() => setMobileFiltersOpen(false)}
-          aria-hidden="true"
-        />
       )}
 
-      {/* ═══════════════════════════════════════════════════════════
-          RIGHT: PRODUCT AREA (Approx 70%)
-          ═══════════════════════════════════════════════════════════ */}
+      {/* 4-COLUMN PRODUCT GRID (Full width, fixed position behind overlay) */}
       <section className="product-area" aria-label="Product collection">
-        {/* PRODUCT TOOLBAR */}
-        <div className="product-toolbar">
-          <div className="product-toolbar-left">
-            <span className="product-count">
-              {filteredProducts.length}{" "}
-              {filteredProducts.length === 1 ? "item" : "items"}
-            </span>
-          </div>
-
-          <div className="product-toolbar-right">
-            {/* Mobile Filter Toggle Button */}
-            <button
-              type="button"
-              className="mobile-filter-toggle"
-              onClick={() => setMobileFiltersOpen(true)}
-              aria-label="Open filter menu"
-            >
-              <span>Filters</span>
-              {activeFilterCount > 0 && (
-                <span className="filter-badge-mobile">
-                  {activeFilterCount}
-                </span>
-              )}
-            </button>
-
-            {/* Sort Control */}
-            <div className="sort-dropdown-wrap">
-              <label htmlFor="collection-sort-select" className="sort-label">
-                Sort
-              </label>
-              <select
-                id="collection-sort-select"
-                className="sort-select"
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as SortOption)}
-                aria-label="Sort products"
-              >
-                <option value="featured">Featured</option>
-                <option value="newest">Newest</option>
-                <option value="price-asc">Price: Low to High</option>
-                <option value="price-desc">Price: High to Low</option>
-                <option value="name-asc">Alphabetical: A–Z</option>
-              </select>
-              <span className="sort-indicator" aria-hidden="true">
-                ↓
-              </span>
-            </div>
-
-            {/* View / Grid Toggle Controls */}
-            <div className="grid-view-toggle" aria-label="Grid layout view">
-              <button
-                type="button"
-                className={`grid-toggle-btn ${gridCols === 4 ? "active" : ""}`}
-                onClick={() => setGridCols(4)}
-                aria-label="4 columns per row"
-                title="4 columns"
-              >
-                ▦
-              </button>
-              <button
-                type="button"
-                className={`grid-toggle-btn ${gridCols === 2 ? "active" : ""}`}
-                onClick={() => setGridCols(2)}
-                aria-label="2 columns per row"
-                title="2 columns"
-              >
-                ☷
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* ACTIVE FILTER PILLS */}
-        {activeFilterCount > 0 && (
-          <div className="active-filters-bar" aria-label="Active filters">
-            <span className="active-filters-label">Active filters:</span>
-            <div className="active-filters-list">
-              {selectedCategories.map((cat) => (
-                <button
-                  key={cat}
-                  type="button"
-                  className="filter-pill"
-                  onClick={() => toggleCategory(cat)}
-                  aria-label={`Remove category filter ${cat}`}
-                >
-                  <span>{cat}</span>
-                  <span className="pill-remove">×</span>
-                </button>
-              ))}
-              {selectedColors.map((hex) => (
-                <button
-                  key={hex}
-                  type="button"
-                  className="filter-pill"
-                  onClick={() => toggleColor(hex)}
-                  aria-label={`Remove color filter ${getColorLabel(hex)}`}
-                >
-                  <span
-                    className="pill-swatch"
-                    style={{ backgroundColor: hex }}
-                  />
-                  <span>{getColorLabel(hex)}</span>
-                  <span className="pill-remove">×</span>
-                </button>
-              ))}
-              {selectedSizes.map((size) => (
-                <button
-                  key={size}
-                  type="button"
-                  className="filter-pill"
-                  onClick={() => toggleSize(size)}
-                  aria-label={`Remove size filter ${size}`}
-                >
-                  <span>Size: {size}</span>
-                  <span className="pill-remove">×</span>
-                </button>
-              ))}
-              {(priceMin !== "" || priceMax !== "") && (
-                <button
-                  type="button"
-                  className="filter-pill"
-                  onClick={() => {
-                    setPriceMin("");
-                    setPriceMax("");
-                  }}
-                  aria-label="Remove price filter"
-                >
-                  <span>
-                    Price: ₹{priceMin || departmentMinPrice} – ₹
-                    {priceMax || departmentMaxPrice}
-                  </span>
-                  <span className="pill-remove">×</span>
-                </button>
-              )}
-              {availability.inStock && (
-                <button
-                  type="button"
-                  className="filter-pill"
-                  onClick={() =>
-                    setAvailability((prev) => ({ ...prev, inStock: false }))
-                  }
-                  aria-label="Remove In Stock filter"
-                >
-                  <span>In stock</span>
-                  <span className="pill-remove">×</span>
-                </button>
-              )}
-              {availability.outOfStock && (
-                <button
-                  type="button"
-                  className="filter-pill"
-                  onClick={() =>
-                    setAvailability((prev) => ({ ...prev, outOfStock: false }))
-                  }
-                  aria-label="Remove Out of Stock filter"
-                >
-                  <span>Out of stock</span>
-                  <span className="pill-remove">×</span>
-                </button>
-              )}
-              <button
-                type="button"
-                className="filter-clear-all-pill"
-                onClick={handleClearAll}
-              >
-                Clear all
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* 4-COLUMN PRODUCT GRID */}
-        {sortedProducts.length > 0 ? (
-          <div
-            className={`collection-product-grid collection-product-grid--${gridCols}`}
-          >
-            {sortedProducts.map((product) => (
+        {filteredProducts.length > 0 ? (
+          <div className="collection-product-grid collection-product-grid--4">
+            {filteredProducts.map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}
           </div>
@@ -745,6 +762,369 @@ export default function DepartmentListingContent({
           </div>
         )}
       </section>
+
+      {/* ═══════════════════════════════════════════════════════════
+          SNITCH-STYLE SLIDE-OUT FILTER DRAWER & BACKDROP
+          ═══════════════════════════════════════════════════════════ */}
+      {/* Semi-transparent Dimmed Backdrop */}
+      <div
+        className={`snitch-drawer-backdrop ${drawerOpen ? "open" : ""}`}
+        onClick={closeDrawer}
+        aria-hidden={!drawerOpen}
+      />
+
+      {/* Fixed Off-Canvas Drawer (Slides in from Right) */}
+      <div
+        ref={drawerRef}
+        className={`snitch-filter-drawer ${drawerOpen ? "open" : ""}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Filter products"
+        aria-hidden={!drawerOpen}
+      >
+        {/* Drawer Header: Centered FILTER title + Close '×' button */}
+        <div className="drawer-header">
+          <div className="drawer-header-spacer" aria-hidden="true" />
+          <h2 className="drawer-title">FILTER</h2>
+          <button
+            type="button"
+            className="drawer-close-btn"
+            onClick={closeDrawer}
+            aria-label="Close filters"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Scrollable Filter Content (Vertical list of clean expandable groups) */}
+        <div className="drawer-content">
+          {/* 1. SIZE GROUP */}
+          <div className="drawer-filter-group">
+            <button
+              type="button"
+              className="drawer-group-header"
+              onClick={() => toggleSection("size")}
+              aria-expanded={expandedSections.size}
+            >
+              <span className="drawer-group-label">SIZE</span>
+              <span className="drawer-group-toggle" aria-hidden="true">
+                {expandedSections.size ? "−" : "+"}
+              </span>
+            </button>
+            {expandedSections.size && (
+              <div className="drawer-group-body">
+                <div
+                  className="size-chips-row"
+                  role="group"
+                  aria-label="Filter by size"
+                >
+                  {CATALOGUE_FILTER_SIZES.map((size) => {
+                    const isSelected = draftSizes.includes(size);
+                    return (
+                      <button
+                        key={size}
+                        type="button"
+                        className={`filter-chip-btn size-chip-btn ${
+                          isSelected ? "selected" : ""
+                        }`}
+                        onClick={() => toggleDraftSize(size)}
+                        aria-pressed={isSelected}
+                      >
+                        {size}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 2. COLOR GROUP (Multi-select dropdown) */}
+          <div className="drawer-filter-group">
+            <button
+              type="button"
+              className="drawer-group-header"
+              onClick={() => toggleSection("color")}
+              aria-expanded={expandedSections.color}
+            >
+              <span className="drawer-group-label">COLOUR</span>
+              <span className="drawer-group-toggle" aria-hidden="true">
+                {expandedSections.color ? "−" : "+"}
+              </span>
+            </button>
+            {expandedSections.color && (
+              <div className="drawer-group-body">
+                <div className="color-dropdown-wrap" ref={colorDropdownRef}>
+                  <button
+                    type="button"
+                    className={`color-dropdown-trigger ${
+                      colorDropdownOpen ? "open" : ""
+                    } ${draftColors.length > 0 ? "active" : ""}`}
+                    onClick={() => setColorDropdownOpen((prev) => !prev)}
+                    aria-expanded={colorDropdownOpen}
+                    aria-haspopup="listbox"
+                    aria-label="Select colors"
+                  >
+                    <div className="color-trigger-left">
+                      {draftColors.length === 1 && (
+                        <span
+                          className="color-swatch-dot color-swatch-dot--small"
+                          style={{ backgroundColor: draftColors[0] }}
+                          aria-hidden="true"
+                        />
+                      )}
+                      <span>{draftColorDropdownLabel}</span>
+                    </div>
+                    <span className="color-trigger-arrow" aria-hidden="true">
+                      ▼
+                    </span>
+                  </button>
+
+                  {colorDropdownOpen && (
+                    <div
+                      className="color-dropdown-menu"
+                      role="listbox"
+                      aria-multiselectable="true"
+                    >
+                      <div className="color-dropdown-header">
+                        <span className="color-dropdown-title">
+                          Available Colors
+                        </span>
+                        {draftColors.length > 0 && (
+                          <button
+                            type="button"
+                            className="color-dropdown-clear-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDraftColors([]);
+                            }}
+                          >
+                            Reset
+                          </button>
+                        )}
+                      </div>
+                      <div className="color-dropdown-list">
+                        {availableColors.map((hex) => {
+                          const isChecked = draftColors.includes(hex);
+                          const label = getColorLabel(hex);
+                          return (
+                            <label
+                              key={hex}
+                              className={`color-dropdown-item ${
+                                isChecked ? "active" : ""
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => toggleDraftColor(hex)}
+                              />
+                              <span
+                                className="color-swatch-dot"
+                                style={{ backgroundColor: hex }}
+                                aria-hidden="true"
+                              />
+                              <span className="filter-item-label">{label}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 3. PRICE GROUP (Horizontal quick-filter buttons: ↓ ₹500, ↓ ₹1,000) */}
+          <div className="drawer-filter-group">
+            <button
+              type="button"
+              className="drawer-group-header"
+              onClick={() => toggleSection("price")}
+              aria-expanded={expandedSections.price}
+            >
+              <span className="drawer-group-label">PRICE</span>
+              <span className="drawer-group-toggle" aria-hidden="true">
+                {expandedSections.price ? "−" : "+"}
+              </span>
+            </button>
+            {expandedSections.price && (
+              <div className="drawer-group-body">
+                <div
+                  className="price-presets-row"
+                  role="group"
+                  aria-label="Filter by price"
+                >
+                  <button
+                    type="button"
+                    className={`filter-chip-btn price-preset-btn ${
+                      draftPricePreset === 500 ? "selected" : ""
+                    }`}
+                    onClick={() => toggleDraftPricePreset(500)}
+                    aria-pressed={draftPricePreset === 500}
+                  >
+                    ↓ ₹500
+                  </button>
+                  <button
+                    type="button"
+                    className={`filter-chip-btn price-preset-btn ${
+                      draftPricePreset === 1000 ? "selected" : ""
+                    }`}
+                    onClick={() => toggleDraftPricePreset(1000)}
+                    aria-pressed={draftPricePreset === 1000}
+                  >
+                    ↓ ₹1,000
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 4. CATEGORY GROUP (Department-specific expandable submenus) */}
+          <div className="drawer-filter-group category-filter-group">
+            <button
+              type="button"
+              className="drawer-group-header"
+              onClick={() => toggleSection("category")}
+              aria-expanded={expandedSections.category}
+            >
+              <span className="drawer-group-label">CATEGORY</span>
+              <span className="drawer-group-toggle" aria-hidden="true">
+                {expandedSections.category ? "−" : "+"}
+              </span>
+            </button>
+            {expandedSections.category && (
+              <div className="drawer-group-body category-group-body">
+                <div
+                  className="category-items-list"
+                  role="group"
+                  aria-label={`${department} categories`}
+                >
+                  {currentDepartmentCategories.map((catName) => {
+                    const isChecked = draftCategories.includes(catName);
+                    const count = getCategoryProductCount(catName);
+                    return (
+                      <label
+                        key={catName}
+                        className={`category-item-row ${
+                          isChecked ? "checked" : ""
+                        }`}
+                      >
+                        <span className="category-checkbox-wrapper">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => toggleDraftCategory(catName)}
+                            className="category-checkbox-native"
+                          />
+                          <span
+                            className="category-custom-checkbox"
+                            aria-hidden="true"
+                          >
+                            {isChecked && (
+                              <svg
+                                width="10"
+                                height="8"
+                                viewBox="0 0 10 8"
+                                fill="none"
+                              >
+                                <path
+                                  d="M1 4L3.5 6.5L9 1"
+                                  stroke="currentColor"
+                                  strokeWidth="1.75"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              </svg>
+                            )}
+                          </span>
+                        </span>
+                        <span className="category-item-name">{catName}</span>
+                        <span className="category-item-count">({count})</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 5. AVAILABILITY GROUP (Horizontal chips) */}
+          <div className="drawer-filter-group">
+            <button
+              type="button"
+              className="drawer-group-header"
+              onClick={() => toggleSection("availability")}
+              aria-expanded={expandedSections.availability}
+            >
+              <span className="drawer-group-label">AVAILABILITY</span>
+              <span className="drawer-group-toggle" aria-hidden="true">
+                {expandedSections.availability ? "−" : "+"}
+              </span>
+            </button>
+            {expandedSections.availability && (
+              <div className="drawer-group-body">
+                <div
+                  className="availability-chips-row"
+                  role="group"
+                  aria-label="Filter by availability"
+                >
+                  <button
+                    type="button"
+                    className={`filter-chip-btn availability-chip-btn ${
+                      draftAvailability.inStock ? "selected" : ""
+                    }`}
+                    onClick={() =>
+                      setDraftAvailability((prev) => ({
+                        ...prev,
+                        inStock: !prev.inStock,
+                      }))
+                    }
+                    aria-pressed={draftAvailability.inStock}
+                  >
+                    In stock
+                  </button>
+                  <button
+                    type="button"
+                    className={`filter-chip-btn availability-chip-btn ${
+                      draftAvailability.outOfStock ? "selected" : ""
+                    }`}
+                    onClick={() =>
+                      setDraftAvailability((prev) => ({
+                        ...prev,
+                        outOfStock: !prev.outOfStock,
+                      }))
+                    }
+                    aria-pressed={draftAvailability.outOfStock}
+                  >
+                    Out of stock
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Persistent Bottom Action Bar: CLEAR & APPLY */}
+        <div className="drawer-actions-bar">
+          <button
+            type="button"
+            className="drawer-clear-btn"
+            onClick={clearDraftFilters}
+          >
+            CLEAR
+          </button>
+          <button
+            type="button"
+            className="drawer-apply-btn"
+            onClick={applyFilters}
+          >
+            APPLY {draftFilterCount > 0 ? `(${draftFilterCount})` : ""}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
+

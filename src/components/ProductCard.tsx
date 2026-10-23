@@ -1,5 +1,5 @@
-// ProductCard — reusable product card used on home, listing, and related sections.
-// Server component: the link is a standard Next.js Link, no client state needed.
+// ProductCard — reusable product card used on catalogue and related sections.
+// Server component with refined typography and spacing. Color swatches removed from cards.
 
 import Link from "next/link";
 import type { Product } from "@/data/products";
@@ -10,6 +10,9 @@ interface ProductCardProps {
 }
 
 export default function ProductCard({ product }: ProductCardProps) {
+  const hasDiscount =
+    typeof product.sale === "number" && product.sale < product.price;
+
   return (
     <article className="product-card">
       <Link
@@ -18,7 +21,7 @@ export default function ProductCard({ product }: ProductCardProps) {
         aria-label={`View ${product.name}`}
         tabIndex={0}
       >
-        {product.sale && <span className="sale-tag">EDIT PRICE</span>}
+        {hasDiscount && <span className="sale-tag">EDIT PRICE</span>}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           className="product-image"
@@ -28,19 +31,21 @@ export default function ProductCard({ product }: ProductCardProps) {
         />
       </Link>
       <div className="product-meta">
-        <div>
-          <h3>{product.name}</h3>
-          <div className="price">
-            {product.sale && (
-              <span className="old-price">{formatPrice(product.price)}</span>
-            )}{" "}
+        <h3 className="product-card-title">
+          <Link
+            href={`/product/${product.slug}`}
+            className="product-card-title-link"
+          >
+            {product.name}
+          </Link>
+        </h3>
+        <div className="price product-card-price">
+          {hasDiscount && (
+            <span className="old-price">{formatPrice(product.price)}</span>
+          )}
+          <span className="current-price">
             {formatPrice(product.sale ?? product.price)}
-          </div>
-        </div>
-        <div className="swatches" aria-label="Available colors">
-          {product.colors.map((color) => (
-            <span key={color} style={{ backgroundColor: color }} />
-          ))}
+          </span>
         </div>
       </div>
     </article>
