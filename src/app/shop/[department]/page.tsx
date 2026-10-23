@@ -54,10 +54,7 @@ export default async function DepartmentPage({ params }: Props) {
 
   return (
     <main className="collection-page">
-      {/* Department Title Header */}
-      <header className="collection-title-header">
-        <h1 className="collection-title">{department}</h1>
-      </header>
+      <h1 className="sr-only">{department} Collection</h1>
 
       {/* Main Collection Layout: 30% Filter Sidebar + 70% Product Area */}
       <DepartmentListingContent
