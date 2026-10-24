@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import AdminApp from "../../wireframe-ui";
 
-export default function AdminProductsBulkPage() {
-  redirect("/admin");
+export default function AdminBulkUploadPage() {
+  return <AdminApp initialPage="intake" />;
 }

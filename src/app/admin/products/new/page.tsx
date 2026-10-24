@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import AdminApp from "../../wireframe-ui";
 
-export default function AdminProductsNewPage() {
-  redirect("/admin");
+export default function AdminNewProductPage() {
+  return <AdminApp initialPage="editor" />;
 }

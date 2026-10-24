@@ -101,7 +101,7 @@ export async function DELETE(
     if (deleteError) {
       console.error(
         `[delete-image] ORPHAN WARNING: R2 object "${objectKey}" deleted but DB record ` +
-          `"${imageRecord.id}" could not be removed: ${deleteError.message}`
+        `"${imageRecord.id}" could not be removed: ${deleteError.message}`
       );
       return Response.json(
         {

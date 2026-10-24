@@ -65,13 +65,13 @@ export async function fetchPublishedProductsByDepartment(
       // Map client-safe variant options (omitting sensitive sku and stock_quantity)
       const variants = Array.isArray(p.product_variants)
         ? p.product_variants.map((v: { id?: string; size?: string | null; color?: string | null; is_available?: boolean | null; stock_quantity?: number | null }) => ({
-            id: v.id,
-            size: (v.size || "").trim(),
-            color: (v.color || "").trim(),
-            is_available:
-              Boolean(v.is_available) &&
-              (typeof v.stock_quantity === "number" ? v.stock_quantity > 0 : true),
-          }))
+          id: v.id,
+          size: (v.size || "").trim(),
+          color: (v.color || "").trim(),
+          is_available:
+            Boolean(v.is_available) &&
+            (typeof v.stock_quantity === "number" ? v.stock_quantity > 0 : true),
+        }))
         : [];
 
       return {
@@ -154,13 +154,13 @@ export async function fetchProductBySlug(
       // Map client-safe variant options (omitting sensitive sku and stock_quantity)
       const variants = Array.isArray(p.product_variants)
         ? p.product_variants.map((v: { id?: string; size?: string | null; color?: string | null; is_available?: boolean | null; stock_quantity?: number | null }) => ({
-            id: v.id,
-            size: (v.size || "").trim(),
-            color: (v.color || "").trim(),
-            is_available:
-              Boolean(v.is_available) &&
-              (typeof v.stock_quantity === "number" ? v.stock_quantity > 0 : true),
-          }))
+          id: v.id,
+          size: (v.size || "").trim(),
+          color: (v.color || "").trim(),
+          is_available:
+            Boolean(v.is_available) &&
+            (typeof v.stock_quantity === "number" ? v.stock_quantity > 0 : true),
+        }))
         : [];
 
       return {
