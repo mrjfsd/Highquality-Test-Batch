@@ -341,6 +341,8 @@ export function Button({
   disabled,
   type = "button",
   style,
+  className,
+  "aria-label": ariaLabel,
 }: {
   children: ReactNode;
   variant?: "primary" | "secondary" | "danger" | "text";
@@ -349,14 +351,17 @@ export function Button({
   disabled?: boolean;
   type?: "button" | "submit";
   style?: React.CSSProperties;
+  className?: string;
+  "aria-label"?: string;
 }) {
   return (
     <button
       type={type}
-      className={`button button-${variant}`}
+      className={`button button-${variant}${className ? ` ${className}` : ""}`}
       onClick={onClick}
       disabled={disabled}
       style={style}
+      aria-label={ariaLabel}
     >
       {icon && <Icon name={icon} size={16} />}
       {children}
@@ -393,7 +398,7 @@ export function Field({
       <span className="field-label">
         {cleanLabel}
         {required && <b className="field-required"> *</b>}
-        {isOptional && <span className="field-optional">(optional)</span>}
+        {isOptional && <span className="field-optional"> (optional)</span>}
       </span>
       {children}
       {hint && <small className="field-hint">{hint}</small>}
@@ -1644,21 +1649,17 @@ export function Intake({
 
       {restoredBannerVisible && session.groups.length > 0 && (
         <div className="recovery-banner">
-          <Icon name="refresh" />
-          <div>
-            <strong>Your work was restored</strong>
-            <span>Your saved garment details and photo groups are ready to continue.</span>
+          <div className="recovery-content">
+            <span className="recovery-icon"><Icon name="refresh" size={16} /></span>
+            <div className="recovery-text">
+              <strong>Your work was restored</strong>
+              <span className="recovery-desc">Your saved garment details and photo groups are ready to continue.</span>
+            </div>
           </div>
-          <div style={{ display: "flex", gap: "8px", marginLeft: "auto", alignItems: "center" }}>
+          <div className="recovery-actions">
             <button
-              style={{
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                fontSize: "0.85rem",
-                color: "#8c7b75",
-                textDecoration: "underline",
-              }}
+              type="button"
+              className="recovery-action-btn fresh-batch-btn"
               onClick={() => {
                 const nextBatchId = getNextBatchId(session.batchId);
                 const cleanSession: IntakeSession = {
@@ -1683,7 +1684,13 @@ export function Intake({
             >
               Start fresh batch
             </button>
-            <button onClick={() => setRestoredBannerVisible(false)}>Dismiss</button>
+            <button
+              type="button"
+              className="recovery-action-btn dismiss-btn"
+              onClick={() => setRestoredBannerVisible(false)}
+            >
+              Dismiss
+            </button>
           </div>
         </div>
       )}
@@ -1696,9 +1703,11 @@ export function Intake({
           className={`workflow-tab ${tab === "unassigned" ? "active" : ""}`}
           onClick={() => setTab("unassigned")}
           aria-current={tab === "unassigned" ? "step" : undefined}
+          aria-label="Step 1: Photos to Group"
         >
           <span className="tab-step-num">1</span>
-          <span className="tab-label">Photos to Group</span>
+          <span className="tab-label desktop-tab-label">Photos to Group</span>
+          <span className="tab-label mobile-tab-label">Photos</span>
         </button>
 
         <button
@@ -1706,9 +1715,11 @@ export function Intake({
           className={`workflow-tab ${tab === "groups" ? "active" : ""}`}
           onClick={() => setTab("groups")}
           aria-current={tab === "groups" ? "step" : undefined}
+          aria-label="Step 2: Add Garment Details"
         >
           <span className="tab-step-num">2</span>
-          <span className="tab-label">Add Details</span>
+          <span className="tab-label desktop-tab-label">Add Details</span>
+          <span className="tab-label mobile-tab-label">Details</span>
         </button>
 
         <button
@@ -1722,9 +1733,11 @@ export function Intake({
             }
           }}
           aria-current={tab === "review" ? "step" : undefined}
+          aria-label="Step 3: Review and Publish"
         >
           <span className="tab-step-num">3</span>
-          <span className="tab-label">Review &amp; Publish</span>
+          <span className="tab-label desktop-tab-label">Review &amp; Publish</span>
+          <span className="tab-label mobile-tab-label">Review</span>
         </button>
       </nav>
 
@@ -1893,18 +1906,6 @@ export function Intake({
                 <p>Choose or drop photos above to add them to this intake batch.</p>
                 <Button variant="primary" onClick={() => fileRef.current?.click()}>
                   Choose Photos
-                </Button>
-              </div>
-            )}
-
-            {session.groups.length > 0 && (
-              <div className="step-continue-bar">
-                <div>
-                  <strong>{session.groups.length} garment{session.groups.length === 1 ? "" : "s"} grouped</strong>
-                  <span>Ready to add garment details, prices, and sizes.</span>
-                </div>
-                <Button variant="primary" onClick={() => setTab("groups")}>
-                  Continue to Garment Details →
                 </Button>
               </div>
             )}
@@ -2217,12 +2218,14 @@ export function Intake({
                   variant="secondary"
                   disabled={isSavingDrafts}
                   onClick={handleSaveAllDrafts}
+                  className="details-save-draft-btn"
                 >
                   {isSavingDrafts ? "Saving..." : "Save Draft"}
                 </Button>
                 <Button
                   variant="primary"
                   onClick={handleNextToReview}
+                  className="details-next-btn"
                 >
                   Next →
                 </Button>
@@ -2304,13 +2307,6 @@ export function Intake({
                           {hasError ? "Publish failed" : isReady ? "Ready to publish" : "Needs more details"}
                         </Status>
                         {hasError && <span className="field-error" style={{ marginLeft: "8px" }}>{group.error}</span>}
-                        <Button
-                          variant="text"
-                          onClick={() => setTab("groups")}
-                          style={{ marginLeft: "auto" }}
-                        >
-                          Edit Details <Icon name="arrow" size={14} />
-                        </Button>
                       </div>
                     </div>
                   </div>
@@ -2326,31 +2322,29 @@ export function Intake({
 
           {session.groups.length > 0 && (
             <div className="review-footer-simple">
-              <Button variant="secondary" onClick={() => setTab("groups")}>
-                ← Back to Garment Details
+              <Button
+                variant="secondary"
+                onClick={() => setTab("groups")}
+                aria-label="Back to Garment Details"
+                className="review-back-btn"
+              >
+                <span className="desktop-btn-text">← Back to Garment Details</span>
+                <span className="mobile-btn-text">← Back to details</span>
               </Button>
-              <div className="review-publish-action-group">
-                <span className="ready-count-badge">
-                  <strong>
-                    {
-                      session.groups.filter(
-                        (g) =>
-                          g.name.trim().length > 0 &&
-                          parseFloat(g.price) > 0 &&
-                          g.photoIds.length > 0
-                      ).length
-                    }
-                  </strong>{" "}
-                  of {session.groups.length} garments ready
-                </span>
-                <Button
-                  variant="primary"
-                  disabled={isPublishing}
-                  onClick={() => setConfirm("Publish ready garments?")}
-                >
+              <Button
+                variant="primary"
+                disabled={isPublishing}
+                onClick={() => setConfirm("Publish ready garments?")}
+                aria-label="Publish Ready Garments"
+                className="review-publish-btn"
+              >
+                <span className="desktop-btn-text">
                   {isPublishing ? "Publishing..." : "Publish Ready Garments"}
-                </Button>
-              </div>
+                </span>
+                <span className="mobile-btn-text">
+                  {isPublishing ? "Publishing..." : "Publish ready"}
+                </span>
+              </Button>
             </div>
           )}
         </section>

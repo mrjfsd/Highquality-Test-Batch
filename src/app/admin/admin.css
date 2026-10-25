@@ -985,35 +985,89 @@ button.button:disabled * {
 }
 
 .recovery-banner {
-  min-height: 45px;
-  margin: 18px 0 12px;
-  padding: 8px 14px;
-  border: 1px solid var(--admin-stone-dark);
-  border-radius: 5px;
+  min-height: 44px;
+  margin: 14px 0 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--admin-stone);
+  border-radius: 6px;
   background: var(--admin-cream-soft);
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 11px;
+  justify-content: space-between;
+  gap: 16px;
+  box-sizing: border-box;
+  width: 100%;
 }
 
-.recovery-banner div {
+.recovery-content {
   display: flex;
-  flex: 1;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.recovery-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--admin-charcoal);
+  flex-shrink: 0;
+}
+
+.recovery-text {
+  display: flex;
+  align-items: baseline;
   gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--admin-charcoal);
+  min-width: 0;
 }
 
-.recovery-banner span {
+.recovery-text strong {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.recovery-desc {
   color: var(--admin-muted);
+  font-size: 12px;
 }
 
-.recovery-banner button {
+.recovery-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.recovery-action-btn {
   border: 0;
   background: transparent;
-  text-decoration: underline;
-  font-size: 10px;
-  color: var(--admin-burgundy);
+  font-size: 12px;
   cursor: pointer;
+  padding: 4px 0;
+}
+
+.fresh-batch-btn {
+  color: var(--admin-muted);
+  text-decoration: underline;
+}
+
+.fresh-batch-btn:hover {
+  color: var(--admin-charcoal);
+}
+
+.dismiss-btn {
+  color: var(--admin-charcoal);
+  text-decoration: underline;
+}
+
+.dismiss-btn:hover {
+  color: var(--admin-burgundy);
 }
 
 /* Upload Panel & Zone */
@@ -3285,24 +3339,31 @@ button.button:disabled * {
   cursor: not-allowed;
 }
 
+/* Step 2 Details Footer Actions (Clean Row without Redundant Card Box) */
 .details-footer-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
-  background: var(--admin-white);
-  border: 1px solid var(--admin-stone);
-  border-radius: 6px;
+  padding: 18px 0;
   margin-top: 24px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  width: 100%;
+  box-sizing: border-box;
 }
 
-@media (max-width: 600px) {
-  .details-footer-actions {
-    flex-direction: column;
-    gap: 10px;
-    align-items: stretch;
-  }
+/* Step 3 Review & Publish Footer */
+.review-footer-simple {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 0;
+  margin-top: 24px;
+  border-top: 1px solid var(--admin-stone);
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .review-cards-list {
@@ -3444,9 +3505,9 @@ button.button:disabled * {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-top: auto;
-  padding-top: 10px;
-  border-top: 1px solid var(--admin-stone-light);
+  margin-top: 10px;
+  padding-top: 0;
+  border-top: none;
 }
 
 .review-footer {
@@ -3486,15 +3547,20 @@ button.button:disabled * {
 /* ==========================================================================
    Workflow Steps Navigation Tabs (Clean 1, 2, 3 indicators)
    ========================================================================== */
+/* ==========================================================================
+   Workflow Steps Navigation Tabs (Real Tab Design)
+   ========================================================================== */
 .workflow-tabs {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: stretch;
+  gap: 6px;
   border-bottom: 1px solid var(--admin-stone);
   margin-top: 18px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
+  margin-bottom: 0;
+  padding: 0 4px;
+  background: transparent;
+  box-sizing: border-box;
+  width: 100%;
 }
 
 .workflow-tabs::-webkit-scrollbar {
@@ -3504,27 +3570,37 @@ button.button:disabled * {
 .workflow-tab {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 10px 18px;
-  background: transparent;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  color: var(--admin-muted);
+  padding: 10px 20px;
+  background: var(--admin-cream-tint, #f5f2ee);
+  border: 1px solid var(--admin-stone, #dcd5cc);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  color: var(--admin-muted, #716b65);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
+  position: relative;
+  bottom: -1px;
   transition: all 0.15s ease;
 }
 
 .workflow-tab:hover {
   color: var(--admin-charcoal);
+  background: #ede8e1;
 }
 
 .workflow-tab.active {
-  color: var(--admin-burgundy);
-  border-bottom-color: var(--admin-burgundy);
+  background: #ffffff;
+  color: var(--admin-burgundy, #6b1d2f);
+  border-color: var(--admin-stone, #dcd5cc);
+  border-top: 3px solid var(--admin-burgundy, #6b1d2f);
+  border-bottom: 1px solid #ffffff;
   font-weight: 600;
+  z-index: 2;
+  box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.02);
 }
 
 .tab-step-num {
@@ -3538,15 +3614,20 @@ button.button:disabled * {
   color: var(--admin-charcoal);
   font-size: 11px;
   font-weight: 700;
+  flex-shrink: 0;
 }
 
 .workflow-tab.active .tab-step-num {
-  background: var(--admin-burgundy);
+  background: var(--admin-burgundy, #6b1d2f);
   color: #ffffff;
 }
 
-.tab-label {
+.desktop-tab-label {
   display: inline;
+}
+
+.mobile-tab-label {
+  display: none;
 }
 
 /* Header refinement styles */
@@ -3786,6 +3867,75 @@ button.button:disabled * {
     display: none !important;
   }
 
+  /* Recovery banner mobile layout */
+  .recovery-banner {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    padding: 12px !important;
+  }
+
+  .recovery-content {
+    align-items: flex-start !important;
+  }
+
+  .recovery-text {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 3px !important;
+  }
+
+  .recovery-text strong {
+    white-space: normal !important;
+  }
+
+  .recovery-desc {
+    white-space: normal !important;
+  }
+
+  .recovery-actions {
+    margin-left: 0 !important;
+    justify-content: flex-end !important;
+    gap: 14px !important;
+    padding-top: 6px !important;
+    border-top: 1px dashed var(--admin-stone) !important;
+  }
+
+  /* Mobile workflow tabs: responsive 3-column grid without horizontal scrolling */
+  .workflow-tabs {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 4px !important;
+    padding: 0 !important;
+    overflow-x: visible !important;
+  }
+
+  .workflow-tab {
+    padding: 8px 4px !important;
+    gap: 5px !important;
+    font-size: 12px !important;
+    justify-content: center !important;
+    text-align: center !important;
+    border-radius: 4px 4px 0 0 !important;
+  }
+
+  .tab-step-num {
+    width: 18px !important;
+    height: 18px !important;
+    font-size: 10px !important;
+  }
+
+  .desktop-tab-label {
+    display: none !important;
+  }
+
+  .mobile-tab-label {
+    display: inline !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+  }
+
+  /* Selection bar mobile */
   .selection-bar {
     position: static !important;
     display: flex !important;
@@ -3893,17 +4043,83 @@ button.button:disabled * {
     display: inline !important;
   }
 
+  /* Step 2 Details Footer Actions on mobile: clean 2-column row */
   .details-footer-actions {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: space-between !important;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 12px !important;
     padding: 14px 0 !important;
     margin-top: 18px !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    width: 100% !important;
+  }
+
+  .details-footer-actions .button {
+    width: 100% !important;
+    justify-content: center !important;
+    min-height: 42px !important;
+    font-size: 13px !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Step 3 Review Footer on mobile: clean 2-column row matching Step 2 */
+  .review-footer-simple {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 12px !important;
+    align-items: center !important;
+    padding: 14px 0 !important;
+    margin-top: 18px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .review-footer-simple .button {
+    width: 100% !important;
+    justify-content: center !important;
+    min-height: 42px !important;
+    font-size: 13px !important;
+    box-sizing: border-box !important;
   }
 }
 
 @media (max-width: 480px) {
   .variant-editor-row {
     grid-template-columns: 1fr !important;
+  }
+
+  .workflow-tab {
+    padding: 7px 2px !important;
+    font-size: 11px !important;
+  }
+
+  .mobile-tab-label {
+    font-size: 11px !important;
+  }
+}
+
+@media (max-width: 340px) {
+  .details-footer-actions {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 6px !important;
+  }
+
+  .details-footer-actions .button {
+    font-size: 11px !important;
+    padding: 8px 4px !important;
+    min-height: 38px !important;
+  }
+
+  .review-footer-simple {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 6px !important;
+  }
+
+  .review-footer-simple .button {
+    font-size: 11px !important;
+    padding: 8px 4px !important;
+    min-height: 38px !important;
   }
 }
