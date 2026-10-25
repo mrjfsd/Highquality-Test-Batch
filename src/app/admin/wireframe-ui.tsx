@@ -79,7 +79,7 @@ export interface GarmentGroup {
   primaryPhotoId?: string;
   savedProductId?: string;
   error?: string;
-  variants: Array<{ size: string; color: string; sku: string; qty: string }>;
+  variants: Array<{ size: string; color: string; sku: string; qty: string; is_available?: boolean }>;
 }
 
 export interface IntakeSession {
@@ -133,7 +133,7 @@ export interface ReviewGarmentItem {
   photoCount: number;
   photoStoragePaths: string[];
   savedProductId?: string;
-  variants: Array<{ size: string; color: string; sku: string; qty: string }>;
+  variants: Array<{ size: string; color: string; sku: string; qty: string; is_available?: boolean }>;
 }
 
 export async function authFetch(url: string, init: RequestInit = {}): Promise<Response> {
@@ -205,7 +205,6 @@ export const nav: { id: Page; label: string; icon: string }[] = [
   { id: "intake", label: "Add Clothes", icon: "upload" },
   { id: "catalogue", label: "All Clothes", icon: "list" },
   { id: "editor", label: "Edit Garment", icon: "edit" },
-  { id: "media", label: "Photo Library", icon: "image" },
 ];
 
 export function Icon({ name, size = 18 }: { name: string; size?: number }) {
@@ -341,6 +340,7 @@ export function Button({
   onClick,
   disabled,
   type = "button",
+  style,
 }: {
   children: ReactNode;
   variant?: "primary" | "secondary" | "danger" | "text";
@@ -348,6 +348,7 @@ export function Button({
   onClick?: () => void;
   disabled?: boolean;
   type?: "button" | "submit";
+  style?: React.CSSProperties;
 }) {
   return (
     <button
@@ -355,6 +356,7 @@ export function Button({
       className={`button button-${variant}`}
       onClick={onClick}
       disabled={disabled}
+      style={style}
     >
       {icon && <Icon name={icon} size={16} />}
       {children}
@@ -383,14 +385,18 @@ export function Field({
   hint?: string;
   required?: boolean;
 }) {
+  const isOptional = label.toLowerCase().includes("(optional)");
+  const cleanLabel = isOptional ? label.replace(/\s*\(\s*optional\s*\)/i, "").trim() : label;
+
   return (
     <label className="field">
       <span className="field-label">
-        {label}
-        {required && <b> *</b>}
+        {cleanLabel}
+        {required && <b className="field-required"> *</b>}
+        {isOptional && <span className="field-optional">(optional)</span>}
       </span>
       {children}
-      {hint && <small>{hint}</small>}
+      {hint && <small className="field-hint">{hint}</small>}
     </label>
   );
 }
@@ -807,6 +813,80 @@ function getNextBatchId(current: string): string {
   return "SE-02";
 }
 
+
+
+export const PREDEFINED_SIZES = [
+  "XS",
+  "S",
+  "M",
+  "L",
+  "XL",
+  "XXL",
+  "XXXL",
+  "Free Size",
+] as const;
+
+export const PREDEFINED_COLOURS = [
+  "Black",
+  "White",
+  "Grey",
+  "Charcoal",
+  "Navy Blue",
+  "Blue",
+  "Sky Blue",
+  "Red",
+  "Maroon",
+  "Green",
+  "Olive",
+  "Beige",
+  "Cream",
+  "Brown",
+  "Pink",
+  "Purple",
+  "Yellow",
+  "Orange",
+  "Multicolour",
+  "Other",
+] as const;
+
+const DEPARTMENT_CATEGORIES: Record<string, string[]> = {
+  Women: [
+    "T-Shirts",
+    "Track Pants",
+    "Short Kurtis",
+    "Crop Tops",
+    "Jeans",
+    "Hoodies",
+    "Oversized T-Shirts",
+    "Sleepwear Sets",
+    "Korean-Style Sleepwear Sets",
+    "Korean-Style Pants",
+    "Korean-Style Formal Trousers",
+    "Palazzo Pants",
+    "Dresses",
+    "Jackets",
+    "Shirts",
+  ],
+  Men: [
+    "Oversized T-Shirts",
+    "Track Pants",
+    "Hoodies",
+    "Jeans",
+    "Shirts",
+    "Jackets",
+    "Trousers",
+  ],
+  Kids: [
+    "T-Shirts",
+    "Pants",
+    "Co-ord Sets",
+    "Sleepwear Sets",
+    "Frocks",
+    "Korean-Style Sets",
+    "Korean-Style Frocks",
+  ],
+};
+
 export function Intake({
   products = [],
   navigate,
@@ -832,17 +912,17 @@ export function Intake({
   const [confirm, setConfirm] = useState<string | null>(null);
   const [restoredBannerVisible, setRestoredBannerVisible] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [isSavingDrafts, setIsSavingDrafts] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<Record<string, { name?: string; price?: string }>>({});
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      // 1. Clear any obsolete review key from localStorage
       try {
         localStorage.removeItem(INTAKE_REVIEW_KEY);
       } catch {
         // ignore
       }
 
-      // 2. Load and reconcile active intake session against live database records
       try {
         const saved = localStorage.getItem(INTAKE_STORAGE_KEY);
         if (saved) {
@@ -851,7 +931,6 @@ export function Intake({
             let activeGroups: GarmentGroup[] = Array.isArray(parsed.groups) ? parsed.groups : [];
             let activePhotos: IntakePhoto[] = Array.isArray(parsed.photos) ? parsed.photos : [];
 
-            // Reconcile: prune any groups that are already published in the database (or marked Published)
             if (products && products.length > 0) {
               const publishedProductIds = new Set(
                 products.filter((p) => p.status === "published").map((p) => p.id)
@@ -861,23 +940,15 @@ export function Intake({
                   g.status !== "Published" &&
                   !(g.savedProductId && publishedProductIds.has(g.savedProductId))
               );
-            } else {
-              activeGroups = activeGroups.filter((g) => g.status !== "Published");
             }
 
-            // Only keep photos assigned to remaining active groups or genuinely unassigned
-            const activeGroupIds = new Set(activeGroups.map((g) => g.id));
-            activePhotos = activePhotos.filter(
-              (p) => !p.assignedGroup || activeGroupIds.has(p.assignedGroup)
-            );
-
-            if (activeGroups.length > 0 || activePhotos.length > 0) {
+            if (activePhotos.length > 0 || activeGroups.length > 0) {
               const reconciledSession: IntakeSession = {
-                batchId: parsed.batchId || "SE-01",
+                batchId: typeof parsed.batchId === "string" ? parsed.batchId : "SE-01",
                 createdAt: parsed.createdAt || new Date().toISOString(),
                 updatedAt: parsed.updatedAt || new Date().toISOString(),
-                groups: activeGroups,
                 photos: activePhotos,
+                groups: activeGroups,
               };
               setSession(reconciledSession);
               if (activeGroups.length > 0) {
@@ -885,7 +956,6 @@ export function Intake({
               }
               localStorage.setItem(INTAKE_STORAGE_KEY, JSON.stringify(reconciledSession));
             } else {
-              // Entire session was completed/stale, clear it
               localStorage.removeItem(INTAKE_STORAGE_KEY);
             }
           }
@@ -898,7 +968,6 @@ export function Intake({
 
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Sync session to localStorage
   const persistSession = useCallback((updated: IntakeSession) => {
     setSession(updated);
     setSavedBadge(true);
@@ -940,19 +1009,15 @@ export function Intake({
     };
     persistSession(newSession);
 
-    // Reset input
     if (event.target) event.target.value = "";
 
-    // Upload each file
     for (let i = 0; i < fileList.length; i++) {
       const file = fileList[i];
       const photoItem = newPhotos[i];
 
       try {
-        // 1. Browser compression
         const processed = await compressImageForUpload(file);
 
-        // 2. Request presigned upload URL
         const presignRes = await authFetch("/api/admin/images/upload-url", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -971,7 +1036,6 @@ export function Intake({
 
         const { presignedUrl, objectKey } = await presignRes.json();
 
-        // 3. Direct binary upload to R2 with progress
         await uploadToR2WithProgress(
           presignedUrl,
           processed.file,
@@ -987,7 +1051,6 @@ export function Intake({
           }
         );
 
-        // 4. Mark uploaded and store storagePath + proxy URL
         setSession((curr) => {
           const updated = {
             ...curr,
@@ -1030,7 +1093,6 @@ export function Intake({
   };
 
   const retryUpload = async (photoId: string) => {
-    // Find photo
     const photo = session.photos.find((p) => p.id === photoId);
     if (!photo) return;
 
@@ -1042,7 +1104,6 @@ export function Intake({
     }));
 
     showToast(`Retrying upload for ${photo.name}...`);
-    // Retry file picker for that photo if blob is expired, or re-run
     fileRef.current?.click();
   };
 
@@ -1054,12 +1115,12 @@ export function Intake({
       id: `grp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       name: `New Garment ${groupNum}`,
       department: "Women",
-      category: "Dresses",
+      category: "T-Shirts",
       price: "1200.00",
       status: "Draft",
       photoIds: [...selectedPhotos],
       primaryPhotoId: selectedPhotos[0],
-      variants: [{ size: "M", color: "Standard", sku: "", qty: "1" }],
+      variants: [{ size: "M", color: "Black", sku: "", qty: "1", is_available: true }],
     };
 
     const updatedPhotos = session.photos.map((p) =>
@@ -1109,6 +1170,121 @@ export function Intake({
     showToast("Selected photos removed.");
   };
 
+  const updateGroupField = (groupId: string, field: keyof GarmentGroup, value: any) => {
+    setSession((curr) => {
+      const updatedGroups = curr.groups.map((g) => {
+        if (g.id !== groupId) return g;
+        if (field === "department") {
+          const validCategories = DEPARTMENT_CATEGORIES[value] || DEPARTMENT_CATEGORIES.Women;
+          const currentCategoryValid = validCategories.includes(g.category);
+          return {
+            ...g,
+            department: value,
+            category: currentCategoryValid ? g.category : validCategories[0],
+          };
+        }
+        return { ...g, [field]: value };
+      });
+      const updated = { ...curr, groups: updatedGroups, updatedAt: new Date().toISOString() };
+      if (typeof window !== "undefined") {
+        localStorage.setItem(INTAKE_STORAGE_KEY, JSON.stringify(updated));
+      }
+      return updated;
+    });
+  };
+
+  const updateVariantInGroup = (groupId: string, variantIndex: number, field: string, value: any) => {
+    setSession((curr) => {
+      const updatedGroups = curr.groups.map((g) => {
+        if (g.id !== groupId) return g;
+        const newVariants = [...g.variants];
+        newVariants[variantIndex] = { ...newVariants[variantIndex], [field]: value };
+        return { ...g, variants: newVariants };
+      });
+      const updated = { ...curr, groups: updatedGroups, updatedAt: new Date().toISOString() };
+      if (typeof window !== "undefined") {
+        localStorage.setItem(INTAKE_STORAGE_KEY, JSON.stringify(updated));
+      }
+      return updated;
+    });
+  };
+
+  const toggleGarmentForSale = (groupId: string, forSale: boolean) => {
+    setSession((curr) => {
+      const updatedGroups = curr.groups.map((g) => {
+        if (g.id !== groupId) return g;
+        return {
+          ...g,
+          variants: g.variants.map((v) => ({ ...v, is_available: forSale })),
+        };
+      });
+      const updated = { ...curr, groups: updatedGroups, updatedAt: new Date().toISOString() };
+      if (typeof window !== "undefined") {
+        localStorage.setItem(INTAKE_STORAGE_KEY, JSON.stringify(updated));
+      }
+      return updated;
+    });
+  };
+
+  const addVariantToGroup = (groupId: string) => {
+    setSession((curr) => {
+      const updatedGroups = curr.groups.map((g) => {
+        if (g.id !== groupId) return g;
+        const groupForSale = g.variants.some((v) => v.is_available !== false);
+        return {
+          ...g,
+          variants: [
+            ...g.variants,
+            { size: "L", color: "Black", sku: "", qty: "1", is_available: groupForSale },
+          ],
+        };
+      });
+      const updated = { ...curr, groups: updatedGroups, updatedAt: new Date().toISOString() };
+      if (typeof window !== "undefined") {
+        localStorage.setItem(INTAKE_STORAGE_KEY, JSON.stringify(updated));
+      }
+      return updated;
+    });
+  };
+
+  const removeVariantFromGroup = (groupId: string, variantIndex: number) => {
+    setSession((curr) => {
+      const updatedGroups = curr.groups.map((g) => {
+        if (g.id !== groupId) return g;
+        if (g.variants.length <= 1) return g;
+        return {
+          ...g,
+          variants: g.variants.filter((_, idx) => idx !== variantIndex),
+        };
+      });
+      const updated = { ...curr, groups: updatedGroups, updatedAt: new Date().toISOString() };
+      if (typeof window !== "undefined") {
+        localStorage.setItem(INTAKE_STORAGE_KEY, JSON.stringify(updated));
+      }
+      return updated;
+    });
+  };
+
+  const ungroupGarment = (groupId: string) => {
+    const groupToUngroup = session.groups.find((g) => g.id === groupId);
+    if (!groupToUngroup) return;
+
+    const photoIdsToUnassign = new Set(groupToUngroup.photoIds);
+    const updatedPhotos = session.photos.map((p) =>
+      photoIdsToUnassign.has(p.id) ? { ...p, assignedGroup: undefined } : p
+    );
+    const updatedGroups = session.groups.filter((g) => g.id !== groupId);
+
+    const updatedSession: IntakeSession = {
+      ...session,
+      updatedAt: new Date().toISOString(),
+      photos: updatedPhotos,
+      groups: updatedGroups,
+    };
+    persistSession(updatedSession);
+    showToast(`"${groupToUngroup.name}" ungrouped. Photos returned to Photos to Group.`);
+  };
+
   const saveGroupToDb = async (
     group: GarmentGroup,
     targetStatus: "draft" | "published" = "draft"
@@ -1123,29 +1299,30 @@ export function Intake({
       storage_path: p.storagePath!,
       alt_text: `${group.name} image ${idx + 1}`,
       display_order: idx,
-      is_primary: p.id === group.primaryPhotoId || idx === 0,
+      is_primary: p.id === (group.primaryPhotoId || groupPhotos[0]?.id) || idx === 0,
       mime_type: p.mimeType,
       file_size_bytes: p.size,
     }));
 
     const variantsPayload = group.variants.map((v) => ({
-      size: v.size || "One Size",
-      color: v.color || "Standard",
-      sku: v.sku || null,
+      size: v.size?.trim() || "One Size",
+      color: v.color?.trim() || "Standard",
+      sku: v.sku?.trim() || null,
       stock_quantity: parseInt(v.qty, 10) || 1,
-      is_available: true,
+      is_available: v.is_available !== false,
     }));
 
     try {
       let res: Response;
       const payload = {
-        name: group.name,
+        name: group.name.trim(),
+        description: group.description?.trim() || null,
         department: group.department.toLowerCase(),
-        category: group.category,
+        category: group.category.trim(),
         price: parseFloat(group.price) || 0,
         sale_price: group.salePrice ? parseFloat(group.salePrice) : null,
-        fabric: group.fabric || null,
-        fit: group.fit || null,
+        fabric: group.fabric?.trim() || null,
+        fit: group.fit?.trim() || null,
         status: targetStatus,
         variants: variantsPayload,
         images: imagesPayload,
@@ -1176,47 +1353,90 @@ export function Intake({
     return group.savedProductId;
   };
 
-  const saveGroupDraft = async (group: GarmentGroup) => {
-    if (!group.name.trim()) {
-      showToast("Garment name is required.");
+  const handleSaveAllDrafts = async () => {
+    if (session.groups.length === 0) {
+      showToast("No garment groups to save.");
       return;
     }
 
-    try {
-      const savedId = await saveGroupToDb(group, "draft");
-      if (!savedId) {
-        throw new Error("Failed to save draft to database.");
-      }
+    setIsSavingDrafts(true);
+    let savedCount = 0;
+    const updatedGroups = [...session.groups];
 
-      group.savedProductId = savedId;
-      const updatedGroups = session.groups.map((g) =>
-        g.id === group.id ? { ...g, savedProductId: savedId, status: "Draft" as const } : g
-      );
-      persistSession({ ...session, groups: updatedGroups, updatedAt: new Date().toISOString() });
-      onProductCreated?.();
-      showToast(`${group.name} saved as a draft.`);
-    } catch (err: unknown) {
-      showToast(err instanceof Error ? err.message : "Error saving draft.");
+    for (let i = 0; i < updatedGroups.length; i++) {
+      const group = updatedGroups[i];
+      if (group.name.trim()) {
+        try {
+          const savedId = await saveGroupToDb(group, "draft");
+          if (savedId) {
+            updatedGroups[i] = { ...group, savedProductId: savedId, status: "Draft" };
+            savedCount++;
+          }
+        } catch (err) {
+          console.warn("Error saving draft for group:", group.name, err);
+        }
+      }
     }
+
+    persistSession({ ...session, groups: updatedGroups, updatedAt: new Date().toISOString() });
+    onProductCreated?.();
+    setIsSavingDrafts(false);
+    showToast(`${savedCount} garment draft${savedCount === 1 ? "" : "s"} saved successfully.`);
   };
 
-  const handleEnterReview = async () => {
-    // If there are unsaved groups, save them as drafts so work is never lost
+  const handleNextToReview = async () => {
+    if (session.groups.length === 0) {
+      showToast("No garment groups created yet. Please group photos first.");
+      setTab("unassigned");
+      return;
+    }
+
+    const errors: Record<string, { name?: string; price?: string }> = {};
+    let hasError = false;
+
     for (const group of session.groups) {
+      const groupErrors: { name?: string; price?: string } = {};
+      if (!group.name || !group.name.trim()) {
+        groupErrors.name = "Garment name is required";
+        hasError = true;
+      }
+      const priceNum = parseFloat(group.price);
+      if (isNaN(priceNum) || priceNum <= 0) {
+        groupErrors.price = "Valid selling price is required (greater than 0)";
+        hasError = true;
+      }
+      if (Object.keys(groupErrors).length > 0) {
+        errors[group.id] = groupErrors;
+      }
+    }
+
+    if (hasError) {
+      setValidationErrors(errors);
+      showToast("Please complete required fields (Garment Name and Price) before proceeding.");
+      return;
+    }
+
+    setValidationErrors({});
+
+    // Auto-save any unsaved drafts to preserve state
+    for (let i = 0; i < session.groups.length; i++) {
+      const group = session.groups[i];
       if (!group.savedProductId && group.name.trim()) {
         try {
           const savedId = await saveGroupToDb(group, "draft");
           if (savedId) {
-            group.savedProductId = savedId;
+            session.groups[i].savedProductId = savedId;
           }
         } catch (err) {
-          console.warn("Could not auto-save draft for group:", group.name, err);
+          console.warn("Could not auto-save draft:", group.name, err);
         }
       }
     }
+
     persistSession({ ...session, groups: [...session.groups], updatedAt: new Date().toISOString() });
     onProductCreated?.();
     setTab("review");
+    showToast("Garment details validated. Review your garments before publishing.");
   };
 
   const publishReadyGarments = async () => {
@@ -1244,29 +1464,30 @@ export function Intake({
         storage_path: p.storagePath!,
         alt_text: `${group.name} image ${idx + 1}`,
         display_order: idx,
-        is_primary: p.id === group.primaryPhotoId || idx === 0,
+        is_primary: p.id === (group.primaryPhotoId || groupPhotos[0]?.id) || idx === 0,
         mime_type: p.mimeType,
         file_size_bytes: p.size,
       }));
 
       const variantsPayload = group.variants.map((v) => ({
-        size: v.size || "One Size",
-        color: v.color || "Standard",
-        sku: v.sku || null,
+        size: v.size?.trim() || "One Size",
+        color: v.color?.trim() || "Standard",
+        sku: v.sku?.trim() || null,
         stock_quantity: parseInt(v.qty, 10) || 1,
-        is_available: true,
+        is_available: v.is_available !== false,
       }));
 
       try {
         let res: Response;
         const payload = {
-          name: group.name,
+          name: group.name.trim(),
+          description: group.description?.trim() || null,
           department: group.department.toLowerCase(),
-          category: group.category,
+          category: group.category.trim(),
           price: parseFloat(group.price) || 0,
           sale_price: group.salePrice ? parseFloat(group.salePrice) : null,
-          fabric: group.fabric || null,
-          fit: group.fit || null,
+          fabric: group.fabric?.trim() || null,
+          fit: group.fit?.trim() || null,
           status: "published",
           variants: variantsPayload,
           images: imagesPayload,
@@ -1311,19 +1532,16 @@ export function Intake({
       }
     }
 
-    // Identify photos associated with published groups
     const publishedPhotoIds = new Set(
       session.groups
         .filter((g) => successfulGroupIds.has(g.id))
         .flatMap((g) => g.photoIds)
     );
 
-    // Filter out published groups and published photos
     const remainingGroups = updatedGroups.filter((g) => !successfulGroupIds.has(g.id));
     const remainingPhotos = session.photos.filter((p) => !publishedPhotoIds.has(p.id));
 
     if (remainingGroups.length === 0) {
-      // All garments published successfully!
       const nextBatchId = getNextBatchId(session.batchId);
       const cleanSession: IntakeSession = {
         batchId: nextBatchId,
@@ -1344,7 +1562,6 @@ export function Intake({
       }
       showToast(`${publishedCount} garment(s) published successfully. Intake batch completed.`);
     } else {
-      // Partial publish: keep failed / incomplete garments with error feedback
       const partialSession: IntakeSession = {
         ...session,
         updatedAt: new Date().toISOString(),
@@ -1369,16 +1586,38 @@ export function Intake({
   return (
     <div className="page intake-page">
       <div className="batch-head">
-        <div>
-          <div className="eyebrow">ADD CLOTHES / BATCH #{session.batchId}</div>
-          <h1>Add Clothes</h1>
-          <p>
-            {session.groups.length} garment{session.groups.length === 1 ? "" : "s"} · {session.photos.length} photo{session.photos.length === 1 ? "" : "s"} · Last saved {formatTimeAgo(session.updatedAt)}
-          </p>
+        <div className="batch-head-info">
+          <div className="batch-eyebrow">ADD CLOTHES / BATCH #{session.batchId}</div>
+          <div className="batch-title-row">
+            <h1>Add Clothes</h1>
+            <div className="mobile-header-actions">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  persistSession({ ...session, updatedAt: new Date().toISOString() });
+                  showToast("Your garment details and photo groups were saved.");
+                }}
+              >
+                Save Progress
+              </Button>
+            </div>
+          </div>
+          <div className="batch-meta-row">
+            <span className="batch-meta-counts">
+              {session.groups.length} garment{session.groups.length === 1 ? "" : "s"} · {session.photos.length} photo{session.photos.length === 1 ? "" : "s"}
+            </span>
+            <span className="batch-meta-dot">·</span>
+            <span className={`save-state ${savedBadge ? "saved" : ""}`}>
+              <span className="save-dot" />
+              {savedBadge ? "All changes saved" : "Unsaved changes"}
+            </span>
+            <span className="desktop-save-time">· Last saved {formatTimeAgo(session.updatedAt)}</span>
+          </div>
         </div>
-        <div className="batch-actions">
+
+        <div className="batch-actions desktop-header-actions">
           <span className={`save-state ${savedBadge ? "saved" : ""}`}>
-            <span />
+            <span className="save-dot" />
             {savedBadge ? "All changes saved" : "Unsaved changes"}
           </span>
           <Button
@@ -1389,11 +1628,19 @@ export function Intake({
           >
             Save Progress
           </Button>
-          <Button variant="primary" onClick={handleEnterReview}>
-            Review and Publish
-          </Button>
-        </div>
-      </div>
+          {session.groups.length > 0 && (
+            <Button
+              variant="primary"
+              onClick={() => {
+                if (tab === "unassigned") setTab("groups");
+                else if (tab === "groups") handleNextToReview();
+                else setConfirm("Publish ready garments?");
+              }}
+            >
+              {tab === "review" ? "Publish Ready Garments" : tab === "groups" ? "Next →" : "Continue to Details →"}
+            </Button>
+          )}
+        </div>      </div>
 
       {restoredBannerVisible && session.groups.length > 0 && (
         <div className="recovery-banner">
@@ -1441,341 +1688,570 @@ export function Intake({
         </div>
       )}
 
-      <section className="upload-panel">
-        <div className="upload-zone" onClick={() => fileRef.current?.click()}>
-          <input
-            ref={fileRef}
-            type="file"
-            multiple
-            accept="image/jpeg,image/png,image/webp,image/avif"
-            hidden
-            onChange={handleRealFileUpload}
-          />
-          <span className="upload-icon">
-            <Icon name="upload" size={22} />
-          </span>
-          <div>
-            <strong>Upload Photos</strong>
-            <p>Drop photos here, or choose several photos from your computer.</p>
-          </div>
-          <Button>Choose Photos</Button>
-        </div>
+      {/* Main 3-Step Navigation Tabs Strip */}
+            {/* Main 3-Step Navigation Tabs Strip */}
+      <nav className="workflow-tabs" aria-label="Workflow Steps">
+        <button
+          type="button"
+          className={`workflow-tab ${tab === "unassigned" ? "active" : ""}`}
+          onClick={() => setTab("unassigned")}
+          aria-current={tab === "unassigned" ? "step" : undefined}
+        >
+          <span className="tab-step-num">1</span>
+          <span className="tab-label">Photos to Group</span>
+        </button>
 
-        {session.photos.length > 0 && (
-          <div className="upload-summary">
-            <div className="upload-stat">
-              <span>Photo upload</span>
-              <strong>
-                {totalUploaded} of {session.photos.length} complete
-              </strong>
-            </div>
-            <div className="progress">
-              <span
-                style={{
-                  width: `${session.photos.length > 0 ? Math.round((totalUploaded / session.photos.length) * 100) : 0}%`,
-                }}
+        <button
+          type="button"
+          className={`workflow-tab ${tab === "groups" ? "active" : ""}`}
+          onClick={() => setTab("groups")}
+          aria-current={tab === "groups" ? "step" : undefined}
+        >
+          <span className="tab-step-num">2</span>
+          <span className="tab-label">Add Details</span>
+        </button>
+
+        <button
+          type="button"
+          className={`workflow-tab ${tab === "review" ? "active" : ""}`}
+          onClick={() => {
+            if (session.groups.length > 0) {
+              handleNextToReview();
+            } else {
+              setTab("review");
+            }
+          }}
+          aria-current={tab === "review" ? "step" : undefined}
+        >
+          <span className="tab-step-num">3</span>
+          <span className="tab-label">Review &amp; Publish</span>
+        </button>
+      </nav>
+
+{/* STEP 1: Photos to Group (Upload area strictly rendered here) */}
+      {tab === "unassigned" && (
+        <>
+          <section className="upload-panel">
+            <div className="upload-zone" onClick={() => fileRef.current?.click()}>
+              <input
+                ref={fileRef}
+                type="file"
+                multiple
+                accept="image/jpeg,image/png,image/webp,image/avif"
+                hidden
+                onChange={handleRealFileUpload}
               />
+              <span className="upload-icon">
+                <Icon name="upload" size={22} />
+              </span>
+              <div>
+                <strong>Upload Photos</strong>
+                <p>Drop photos here, or choose several photos from your computer.</p>
+              </div>
+              <Button>Choose Photos</Button>
             </div>
-            <span>
-              {session.photos.length > 0 ? Math.round((totalUploaded / session.photos.length) * 100) : 0}%
-            </span>
-            {failedUploads.length > 0 && (
-              <Status tone="error">
-                {failedUploads.length} failed
-              </Status>
-            )}
-          </div>
-        )}
 
-        {failedUploads.length > 0 && (
-          <div className="file-rows">
-            {failedUploads.map((fail) => (
-              <div className="file-row" key={fail.id}>
-                <ProductThumb src={fail.previewUrl} label={fail.name.slice(0, 4)} />
-                <div>
-                  <strong>{fail.name}</strong>
-                  <span>
-                    {(fail.size / (1024 * 1024)).toFixed(1)} MB · {fail.error || "Upload failed — try again"}
-                  </span>
+            {session.photos.length > 0 && (
+              <div className="upload-summary">
+                <div className="upload-stat">
+                  <span>Photo upload</span>
+                  <strong>
+                    {totalUploaded} of {session.photos.length} complete
+                  </strong>
                 </div>
-                <Status tone="error">Upload failed</Status>
-                <button onClick={() => retryUpload(fail.id)}>
-                  <Icon name="refresh" size={15} /> Retry
-                </button>
+                <div className="progress">
+                  <span
+                    style={{
+                      width: `${session.photos.length > 0 ? Math.round((totalUploaded / session.photos.length) * 100) : 0}%`,
+                    }}
+                  />
+                </div>
+                <span>
+                  {session.photos.length > 0 ? Math.round((totalUploaded / session.photos.length) * 100) : 0}%
+                </span>
+                {failedUploads.length > 0 && (
+                  <Status tone="error">
+                    {failedUploads.length} failed
+                  </Status>
+                )}
+              </div>
+            )}
+
+            {failedUploads.length > 0 && (
+              <div className="file-rows">
+                {failedUploads.map((fail) => (
+                  <div className="file-row" key={fail.id}>
+                    <ProductThumb src={fail.previewUrl} label={fail.name.slice(0, 4)} />
+                    <div>
+                      <strong>{fail.name}</strong>
+                      <span>
+                        {(fail.size / (1024 * 1024)).toFixed(1)} MB · {fail.error || "Upload failed — try again"}
+                      </span>
+                    </div>
+                    <Status tone="error">Upload failed</Status>
+                    <button onClick={() => retryUpload(fail.id)}>
+                      <Icon name="refresh" size={15} /> Retry
+                    </button>
+                    <button
+                      aria-label="Remove file"
+                      onClick={() => {
+                        const filtered = session.photos.filter((p) => p.id !== fail.id);
+                        persistSession({ ...session, photos: filtered });
+                      }}
+                    >
+                      <Icon name="close" size={16} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="workspace photo-grouping-workspace">
+
+            {selectedPhotos.length > 0 && (
+            <div className="selection-bar">
+              <div className="selection-info-group">
+                <strong className="selection-count">{selectedPhotos.length} selected</strong>
                 <button
-                  aria-label="Remove file"
+                  type="button"
+                  className="select-all-btn"
                   onClick={() => {
-                    const filtered = session.photos.filter((p) => p.id !== fail.id);
-                    persistSession({ ...session, photos: filtered });
+                    if (selectedPhotos.length === unassignedPhotos.length) {
+                      setSelectedPhotos([]);
+                    } else {
+                      setSelectedPhotos(unassignedPhotos.map((p) => p.id));
+                    }
                   }}
                 >
-                  <Icon name="close" size={16} />
+                  {selectedPhotos.length === unassignedPhotos.length ? "Deselect all" : "Select all"}
                 </button>
               </div>
-            ))}
-          </div>
-        )}
-      </section>
 
-      <div className="workspace-tabs">
-        <button
-          className={tab === "unassigned" ? "active" : ""}
-          onClick={() => setTab("unassigned")}
-        >
-          Photos to Group <span>{unassignedPhotos.length}</span>
-        </button>
-        <button
-          className={tab === "groups" ? "active" : ""}
-          onClick={() => setTab("groups")}
-        >
-          Add Garment Details <span>{session.groups.length}</span>
-        </button>
-        <button
-          className={tab === "review" ? "active" : ""}
-          onClick={handleEnterReview}
-        >
-          Review and Publish <span>{session.groups.length}</span>
-        </button>
-      </div>
-
-      {tab === "unassigned" && (
-        <section className="workspace">
-          <div className="workspace-head">
-            <div>
-              <h2>Group Photos into a Garment</h2>
-              <p>
-                Select every photo of the same physical garment, then group them together. We never create a separate garment from each photo.
-              </p>
-            </div>
-          </div>
-          {selectedPhotos.length > 0 && (
-            <div className="selection-bar">
-              <strong>{selectedPhotos.length} selected</strong>
-              <button onClick={() => setSelectedPhotos(unassignedPhotos.map((p) => p.id))}>
-                Select all
-              </button>
-              <span />
-              <Button variant="primary" icon="plus" onClick={createGroupFromSelected}>
-                Group Photos into a Garment
-              </Button>
-              <Button
-                variant="danger"
-                icon="trash"
-                onClick={() => setConfirm("Delete selected photos?")}
-              >
-                Delete Selected
-              </Button>
+              <div className="selection-actions-group">
+                <Button
+                  variant="primary"
+                  icon="plus"
+                  onClick={createGroupFromSelected}
+                >
+                  <span className="desktop-btn-text">Group Photos into a Garment</span>
+                  <span className="mobile-btn-text">Group photos</span>
+                </Button>
+                <Button
+                  variant="danger"
+                  icon="trash"
+                  onClick={() => setConfirm("Delete selected photos?")}
+                >
+                  Delete Selected
+                </Button>
+              </div>
             </div>
           )}
 
           {unassignedPhotos.length > 0 ? (
-            <div className="photo-grid">
-              {unassignedPhotos.map((photo) => (
-                <button
-                  key={photo.id}
-                  className={`photo-card ${selectedPhotos.includes(photo.id) ? "selected" : ""} ${photo.state === "Failed" ? "failed" : ""}`}
-                  onClick={() => togglePhoto(photo.id)}
-                >
-                  <span className="photo-check">
-                    {selectedPhotos.includes(photo.id) && <Icon name="check" size={13} />}
-                  </span>
-                  <div className="photo-placeholder">
-                    {photo.previewUrl ? (
-                      <img
-                        src={photo.previewUrl}
-                        alt={photo.name}
-                        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-                      />
-                    ) : (
-                      <>
-                        <Icon name="image" size={26} />
-                        <span>PHOTO</span>
-                      </>
-                    )}
-                  </div>
-                  <div className="photo-meta">
-                    <strong>{photo.name}</strong>
-                    <span>
-                      {photo.state === "Failed"
-                        ? "Upload failed — try again"
-                        : photo.state === "Uploading"
-                        ? `Uploading ${photo.uploadProgress || 0}%`
-                        : "Waiting to be grouped"}
+              <div className="photo-grid">
+                {unassignedPhotos.map((photo) => (
+                  <button
+                    key={photo.id}
+                    className={`photo-card ${selectedPhotos.includes(photo.id) ? "selected" : ""} ${photo.state === "Failed" ? "failed" : ""}`}
+                    onClick={() => togglePhoto(photo.id)}
+                  >
+                    <span className="photo-check">
+                      {selectedPhotos.includes(photo.id) && <Icon name="check" size={13} />}
                     </span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="empty-state" style={{ padding: "40px 20px" }}>
-              <span><Icon name="image" size={28} /></span>
-              <h3>No unassigned photos</h3>
-              <p>Choose or drop photos above to add them to this intake batch.</p>
-              <Button variant="primary" onClick={() => fileRef.current?.click()}>
-                Choose Photos
-              </Button>
-            </div>
-          )}
-        </section>
+                    <div className="photo-placeholder">
+                      {photo.previewUrl ? (
+                        <img
+                          src={photo.previewUrl}
+                          alt={photo.name}
+                          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                        />
+                      ) : (
+                        <>
+                          <Icon name="image" size={26} />
+                          <span>PHOTO</span>
+                        </>
+                      )}
+                    </div>
+                    <div className="photo-meta">
+                      <strong>{photo.name}</strong>
+                      <span>
+                        {photo.state === "Failed"
+                          ? "Upload failed — try again"
+                          : photo.state === "Uploading"
+                          ? `Uploading ${photo.uploadProgress || 0}%`
+                          : "Waiting to be grouped"}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state" style={{ padding: "40px 20px" }}>
+                <span><Icon name="image" size={28} /></span>
+                <h3>No unassigned photos</h3>
+                <p>Choose or drop photos above to add them to this intake batch.</p>
+                <Button variant="primary" onClick={() => fileRef.current?.click()}>
+                  Choose Photos
+                </Button>
+              </div>
+            )}
+
+            {session.groups.length > 0 && (
+              <div className="step-continue-bar">
+                <div>
+                  <strong>{session.groups.length} garment{session.groups.length === 1 ? "" : "s"} grouped</strong>
+                  <span>Ready to add garment details, prices, and sizes.</span>
+                </div>
+                <Button variant="primary" onClick={() => setTab("groups")}>
+                  Continue to Garment Details →
+                </Button>
+              </div>
+            )}
+          </section>
+        </>
       )}
 
+      {/* STEP 2: Add Garment Details (Complete Inline Editor) */}
       {tab === "groups" && (
         <section className="workspace">
           <div className="workspace-head">
             <div>
               <h2>Add Garment Details</h2>
-              <p>Each group is one physical garment. Add basic details or open the full garment form.</p>
+              <p>Complete details, pricing, fabric, and inventory for each grouped garment right here.</p>
             </div>
           </div>
+
           {session.groups.length > 0 ? (
-            <div className="group-list">
+            <div className="garment-cards-container">
               {session.groups.map((group, index) => {
                 const groupPhotos = session.photos.filter((p) => group.photoIds.includes(p.id));
                 const primaryPhoto =
                   groupPhotos.find((p) => p.id === group.primaryPhotoId) || groupPhotos[0];
+                const groupErrors = validationErrors[group.id] || {};
+                const validCategories = DEPARTMENT_CATEGORIES[group.department] || DEPARTMENT_CATEGORIES.Women;
 
                 return (
-                  <article className="group-card" key={group.id}>
-                    <div className="group-gallery">
-                      <div className="primary-image">
-                        <ProductThumb src={primaryPhoto?.previewUrl} label="MAIN" large />
-                        <span>Main photo</span>
-                      </div>
-                      <div className="gallery-strip">
-                        {groupPhotos.slice(0, 4).map((p) => (
-                          <button
-                            key={p.id}
-                            className={p.id === group.primaryPhotoId ? "active" : ""}
-                            onClick={() => {
-                              const updated = session.groups.map((g) =>
-                                g.id === group.id ? { ...g, primaryPhotoId: p.id } : g
-                              );
-                              persistSession({ ...session, groups: updated });
-                            }}
-                            title="Click to set as main photo"
-                          >
-                            <ProductThumb src={p.previewUrl} />
-                          </button>
-                        ))}
-                      </div>
-                      <small>{groupPhotos.length} photo{groupPhotos.length === 1 ? "" : "s"} · Click to select main</small>
-                    </div>
-
-                    <div className="quick-fields">
-                      <div className="group-title">
-                        <div>
-                          <span>GARMENT {String(index + 1).padStart(2, "0")}</span>
-                          <Status tone={group.name.trim() && group.price ? "dark" : "outline"}>
-                            {group.name.trim() && group.price ? "Ready to publish" : "Needs more details"}
-                          </Status>
+                  <article className="garment-editor-card" key={group.id}>
+                    <div className="garment-card-layout">
+                      {/* Left: Photos Reference & Selection */}
+                      <div className="garment-photos-panel">
+                        <div className="primary-image-container">
+                          <ProductThumb src={primaryPhoto?.previewUrl} label="MAIN" large />
+                          <span className="main-photo-tag">Main photo</span>
                         </div>
-                        <Button
-                          variant="text"
-                          onClick={async () => {
-                            if (!group.savedProductId) {
-                              await saveGroupDraft(group);
-                            }
-                            if (group.savedProductId) {
-                              navigate("editor", group.savedProductId);
-                            }
-                          }}
-                        >
-                          Edit Garment <Icon name="arrow" size={14} />
-                        </Button>
+                        {groupPhotos.length > 1 && (
+                          <div className="garment-thumbnails-strip">
+                            {groupPhotos.map((p) => (
+                              <button
+                                key={p.id}
+                                type="button"
+                                className={`thumb-btn ${p.id === (group.primaryPhotoId || primaryPhoto?.id) ? "active" : ""}`}
+                                onClick={() => updateGroupField(group.id, "primaryPhotoId", p.id)}
+                                title="Click to set as main photo"
+                              >
+                                <ProductThumb src={p.previewUrl} />
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        <div className="photos-meta-caption">
+                          <span>{groupPhotos.length} photo{groupPhotos.length === 1 ? "" : "s"}</span>
+                          <small>Click thumbnail to set as main photo</small>
+                        </div>
+
+                        {/* Compact Garment-level For Sale Toggle Card */}
+                        <div className="garment-forsale-card">
+                          <span className="garment-forsale-label">For sale</span>
+                          <label className="toggle" title="Available for purchase">
+                            <input
+                              type="checkbox"
+                              checked={group.variants.some((v) => v.is_available !== false)}
+                              onChange={(e) => toggleGarmentForSale(group.id, e.target.checked)}
+                              aria-label="For sale"
+                            />
+                            <span />
+                          </label>
+                        </div>
                       </div>
 
-                      <div className="form-grid">
-                        <Field label="Garment name" required>
-                          <input
-                            value={group.name}
-                            onChange={(e) => {
-                              const updated = session.groups.map((g) =>
-                                g.id === group.id ? { ...g, name: e.target.value } : g
-                              );
-                              persistSession({ ...session, groups: updated });
-                            }}
-                          />
-                        </Field>
-                        <Field label="Department" required>
-                          <select
-                            value={group.department}
-                            onChange={(e) => {
-                              const updated = session.groups.map((g) =>
-                                g.id === group.id ? { ...g, department: e.target.value } : g
-                              );
-                              persistSession({ ...session, groups: updated });
-                            }}
+                      {/* Right: Complete Inline Editor Form */}
+                      <div className="garment-fields-panel">
+                        <div className="garment-card-header">
+                          <div className="garment-badge-row">
+                            <span className="garment-index-label">GARMENT {String(index + 1).padStart(2, "0")}</span>
+                            <Status tone={group.name.trim() && parseFloat(group.price) > 0 ? "dark" : "outline"}>
+                              {group.name.trim() && parseFloat(group.price) > 0 ? "Ready to publish" : "Needs more details"}
+                            </Status>
+                            {group.savedProductId && (
+                              <span className="saved-draft-pill">Draft saved</span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            className="ungroup-action-btn"
+                            onClick={() => ungroupGarment(group.id)}
+                            title="Ungroup this garment and return its photos to Photos to Group"
                           >
-                            <option>Women</option>
-                            <option>Men</option>
-                            <option>Kids</option>
-                          </select>
-                        </Field>
-                        <Field label="Category" required>
-                          <select
-                            value={group.category}
-                            onChange={(e) => {
-                              const updated = session.groups.map((g) =>
-                                g.id === group.id ? { ...g, category: e.target.value } : g
-                              );
-                              persistSession({ ...session, groups: updated });
-                            }}
-                          >
-                            <option>Jackets</option>
-                            <option>Shirts</option>
-                            <option>Jeans</option>
-                            <option>Trousers</option>
-                            <option>Dresses</option>
-                          </select>
-                        </Field>
-                        <Field label="Selling price" required>
-                          <div className="money-input">
-                            <span>₹</span>
+                            <Icon name="trash" size={13} /> Ungroup
+                          </button>
+                        </div>
+
+                        <div className="garment-form-section">
+                          <Field label="Garment name" required>
                             <input
-                              value={group.price}
+                              className={groupErrors.name ? "input-error" : ""}
+                              value={group.name}
+                              placeholder="e.g. Silk Blend Midi Dress"
                               onChange={(e) => {
-                                const updated = session.groups.map((g) =>
-                                  g.id === group.id ? { ...g, price: e.target.value } : g
-                                );
-                                persistSession({ ...session, groups: updated });
+                                updateGroupField(group.id, "name", e.target.value);
+                                if (validationErrors[group.id]?.name) {
+                                  setValidationErrors((prev) => ({
+                                    ...prev,
+                                    [group.id]: { ...prev[group.id], name: undefined },
+                                  }));
+                                }
                               }}
                             />
-                          </div>
-                        </Field>
-                      </div>
-                    </div>
+                          </Field>
+                          {groupErrors.name && (
+                            <span className="field-error">
+                              <Icon name="alert" size={13} /> {groupErrors.name}
+                            </span>
+                          )}
 
-                    <div className="group-actions">
-                      <Button onClick={() => saveGroupDraft(group)}>
-                        Save Draft
-                      </Button>
+                          <Field label="Product description (optional)">
+                            <textarea
+                              rows={3}
+                              value={group.description || ""}
+                              placeholder="Describe fabric texture, fit, styling notes, or details..."
+                              onChange={(e) => updateGroupField(group.id, "description", e.target.value)}
+                            />
+                          </Field>
+
+                          <div className="form-grid two">
+                            <Field label="Department" required>
+                              <select
+                                value={group.department}
+                                onChange={(e) => updateGroupField(group.id, "department", e.target.value)}
+                              >
+                                <option value="Women">Women</option>
+                                <option value="Men">Men</option>
+                                <option value="Kids">Kids</option>
+                              </select>
+                            </Field>
+
+                            <Field label="Category" required>
+                              <select
+                                value={group.category}
+                                onChange={(e) => updateGroupField(group.id, "category", e.target.value)}
+                              >
+                                {validCategories.map((cat) => (
+                                  <option key={cat} value={cat}>{cat}</option>
+                                ))}
+                              </select>
+                            </Field>
+
+                            <Field label="Fabric (optional)">
+                              <input
+                                value={group.fabric || ""}
+                                placeholder="e.g. 100% Cotton / Linen blend"
+                                onChange={(e) => updateGroupField(group.id, "fabric", e.target.value)}
+                              />
+                            </Field>
+
+                            <Field label="Fit (optional)">
+                              <select
+                                value={group.fit || "Regular"}
+                                onChange={(e) => updateGroupField(group.id, "fit", e.target.value)}
+                              >
+                                <option value="Regular">Regular</option>
+                                <option value="Relaxed">Relaxed</option>
+                                <option value="Slim">Slim</option>
+                                <option value="Oversized">Oversized</option>
+                              </select>
+                            </Field>
+                          </div>
+
+                          <div className="form-grid two" style={{ marginTop: "12px" }}>
+                            <Field label="Selling price (₹)" required>
+                              <div className={`money-input ${groupErrors.price ? "input-error" : ""}`}>
+                                <span>₹</span>
+                                <input
+                                  value={group.price}
+                                  placeholder="0.00"
+                                  onChange={(e) => {
+                                    updateGroupField(group.id, "price", e.target.value);
+                                    if (validationErrors[group.id]?.price) {
+                                      setValidationErrors((prev) => ({
+                                        ...prev,
+                                        [group.id]: { ...prev[group.id], price: undefined },
+                                      }));
+                                    }
+                                  }}
+                                />
+                              </div>
+                            </Field>
+
+                            <Field label="Discounted price (₹) (optional)">
+                              <div className="money-input">
+                                <span>₹</span>
+                                <input
+                                  value={group.salePrice || ""}
+                                  placeholder="Leave blank if not on sale"
+                                  onChange={(e) => updateGroupField(group.id, "salePrice", e.target.value)}
+                                />
+                              </div>
+                            </Field>
+                          </div>
+                          {groupErrors.price && (
+                            <span className="field-error">
+                              <Icon name="alert" size={13} /> {groupErrors.price}
+                            </span>
+                          )}
+
+                          {/* Variants Section */}
+                          <div className="garment-variants-section">
+                            <div className="variants-header-row">
+                              <strong>Sizes and Inventory</strong>
+                              <span className="variants-subtitle">Configure size, colour, SKU, quantity and sale availability</span>
+                            </div>
+                            <div className="variant-head" aria-hidden="true">
+                              <span>Size</span>
+                              <span>Colour</span>
+                              <span>SKU <span className="field-optional">(optional)</span></span>
+                              <span>Quantity</span>
+                              <span className="vcol-action" />
+                            </div>
+                            <div className="variant-list">
+                              {group.variants.map((v, vIdx) => (
+                                <div className="variant-editor-row" key={vIdx}>
+                                  <div className="variant-cell variant-cell-size">
+                                    <label className="variant-mobile-label">Size</label>
+                                    <select
+                                      value={v.size}
+                                      onChange={(e) => updateVariantInGroup(group.id, vIdx, "size", e.target.value)}
+                                      aria-label="Size"
+                                    >
+                                      {!PREDEFINED_SIZES.includes(v.size as any) && v.size && (
+                                        <option value={v.size}>{v.size}</option>
+                                      )}
+                                      {PREDEFINED_SIZES.map((s) => (
+                                        <option key={s} value={s}>{s}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div className="variant-cell variant-cell-color">
+                                    <label className="variant-mobile-label">Colour</label>
+                                    <select
+                                      value={v.color}
+                                      onChange={(e) => updateVariantInGroup(group.id, vIdx, "color", e.target.value)}
+                                      aria-label="Colour"
+                                    >
+                                      {!PREDEFINED_COLOURS.includes(v.color as any) && v.color && (
+                                        <option value={v.color}>{v.color}</option>
+                                      )}
+                                      {PREDEFINED_COLOURS.map((c) => (
+                                        <option key={c} value={c}>{c}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div className="variant-cell variant-cell-sku">
+                                    <label className="variant-mobile-label">
+                                      SKU <span className="field-optional">(optional)</span>
+                                    </label>
+                                    <input
+                                      value={v.sku || ""}
+                                      placeholder="e.g. BLK-M"
+                                      onChange={(e) => updateVariantInGroup(group.id, vIdx, "sku", e.target.value)}
+                                      aria-label="SKU"
+                                    />
+                                  </div>
+                                  <div className="variant-cell variant-cell-qty">
+                                    <label className="variant-mobile-label">Quantity</label>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={v.qty}
+                                      placeholder="0"
+                                      onChange={(e) => updateVariantInGroup(group.id, vIdx, "qty", e.target.value)}
+                                      aria-label="Quantity"
+                                    />
+                                  </div>
+                                  <div className="variant-cell variant-cell-remove">
+                                    <button
+                                      type="button"
+                                      className="variant-remove-btn"
+                                      disabled={group.variants.length <= 1}
+                                      onClick={() => removeVariantFromGroup(group.id, vIdx)}
+                                      title={group.variants.length <= 1 ? "At least one variant is required" : "Remove variant"}
+                                      aria-label="Remove variant"
+                                    >
+                                      <Icon name="trash" size={15} />
+                                      <span className="mobile-remove-text">Remove</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="variant-add-action">
+                              <Button
+                                variant="secondary"
+                                icon="plus"
+                                onClick={() => addVariantToGroup(group.id)}
+                              >
+                                Add size or colour
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </article>
                 );
               })}
+
+              {/* Clean Horizontal Action Row at Bottom */}
+              <div className="details-footer-actions">
+                <Button
+                  variant="secondary"
+                  disabled={isSavingDrafts}
+                  onClick={handleSaveAllDrafts}
+                >
+                  {isSavingDrafts ? "Saving..." : "Save Draft"}
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={handleNextToReview}
+                >
+                  Next →
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="empty-state" style={{ padding: "40px 20px" }}>
               <span><Icon name="upload" size={28} /></span>
               <h3>No garment groups created yet</h3>
-              <p>Select photos in the "Photos to Group" tab and click "Group Photos into a Garment".</p>
+              <p>Select photos in "Photos to Group" and click "Group Photos into a Garment".</p>
               <Button onClick={() => setTab("unassigned")}>Go to Photos to Group</Button>
             </div>
           )}
         </section>
       )}
 
+      {/* STEP 3: Review and Publish */}
       {tab === "review" && (
         <section className="workspace review-workspace">
           <div className="workspace-head">
             <div>
               <h2>Review and Publish</h2>
-              <p>Publish the garments that are ready. Unfinished garments will stay safely saved as drafts.</p>
+              <p>Publish ready garments to the catalogue. Incomplete garments will stay safely saved as drafts.</p>
             </div>
           </div>
+
           {session.groups.length > 0 ? (
-            <div className="review-list">
-              {session.groups.map((group) => {
+            <div className="review-cards-list">
+              {session.groups.map((group, idx) => {
                 const groupPhotos = session.photos.filter((p) => group.photoIds.includes(p.id));
                 const primary = groupPhotos.find((p) => p.id === group.primaryPhotoId) || groupPhotos[0];
                 const isReady =
@@ -1783,24 +2259,60 @@ export function Intake({
                   parseFloat(group.price) > 0 &&
                   groupPhotos.length > 0;
                 const hasError = Boolean(group.error);
+                const totalQty = group.variants.reduce((sum, v) => sum + (parseInt(v.qty, 10) || 0), 0);
 
                 return (
-                  <div className="review-row" key={group.id}>
-                    <ProductThumb src={primary?.previewUrl} label={group.name.slice(0, 4)} />
-                    <div>
-                      <strong>{group.name}</strong>
-                      <span>{groupPhotos.length} photo{groupPhotos.length === 1 ? "" : "s"} · ₹{group.price}</span>
+                  <div className="review-card" key={group.id}>
+                    <div className="review-card-thumb">
+                      <ProductThumb src={primary?.previewUrl} label={`#${idx + 1}`} large />
+                      <span className="review-photo-count">{groupPhotos.length} photo{groupPhotos.length === 1 ? "" : "s"}</span>
                     </div>
-                    <Status tone={hasError ? "error" : isReady ? "dark" : "outline"}>
-                      {hasError ? "Publish failed" : isReady ? "Ready to publish" : "Needs more details"}
-                    </Status>
-                    <span className="validation-detail">
-                      {hasError
-                        ? group.error
-                        : isReady
-                        ? "All details added"
-                        : "Check name, price, or photos"}
-                    </span>
+                    <div className="review-card-info">
+                      <div className="review-card-top">
+                        <div>
+                          <h3>{group.name}</h3>
+                          <div className="review-meta-tags">
+                            <span className="tag-dept">{group.department}</span>
+                            <span className="tag-cat">{group.category}</span>
+                            {group.fabric && <span className="tag-fabric">{group.fabric}</span>}
+                            {group.fit && <span className="tag-fit">{group.fit} Fit</span>}
+                          </div>
+                        </div>
+                        <div className="review-price-block">
+                          <span className="review-price">₹{group.price}</span>
+                          {group.salePrice && <span className="review-sale-price">₹{group.salePrice}</span>}
+                        </div>
+                      </div>
+
+                      {group.description && (
+                        <p className="review-desc">{group.description}</p>
+                      )}
+
+                      <div className="review-variants-summary">
+                        <strong>Variants & Inventory ({totalQty} total units):</strong>
+                        <div className="review-variant-chips">
+                          {group.variants.map((v, vIdx) => (
+                            <span className="review-variant-chip" key={vIdx}>
+                              <b>{v.size}</b> / {v.color} · Qty: {v.qty}{v.sku ? ` · SKU: ${v.sku}` : ""}{v.is_available === false ? " (Hidden)" : ""}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="review-card-footer">
+                        <Status tone={hasError ? "error" : isReady ? "dark" : "outline"}>
+                          {hasError ? "Publish failed" : isReady ? "Ready to publish" : "Needs more details"}
+                        </Status>
+                        {hasError && <span className="field-error" style={{ marginLeft: "8px" }}>{group.error}</span>}
+                        <Button
+                          variant="text"
+                          onClick={() => setTab("groups")}
+                          style={{ marginLeft: "auto" }}
+                        >
+                          Edit Details <Icon name="arrow" size={14} />
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 );
               })}
@@ -1808,33 +2320,37 @@ export function Intake({
           ) : (
             <div className="empty-state" style={{ padding: "40px 20px" }}>
               <h3>No garments to review</h3>
-              <p>Group photos and add details first.</p>
+              <p>Group photos and add garment details first.</p>
             </div>
           )}
 
           {session.groups.length > 0 && (
-            <div className="review-footer">
-              <div>
-                <strong>
-                  {
-                    session.groups.filter(
-                      (g) =>
-                        g.name.trim().length > 0 &&
-                        parseFloat(g.price) > 0 &&
-                        g.photoIds.length > 0
-                    ).length
-                  }{" "}
-                  of {session.groups.length} garments are ready
-                </strong>
-                <span>Publishing ready garments will not remove unfinished work.</span>
-              </div>
-              <Button
-                variant="primary"
-                disabled={isPublishing}
-                onClick={() => setConfirm("Publish ready garments?")}
-              >
-                {isPublishing ? "Publishing..." : "Publish Ready Garments"}
+            <div className="review-footer-simple">
+              <Button variant="secondary" onClick={() => setTab("groups")}>
+                ← Back to Garment Details
               </Button>
+              <div className="review-publish-action-group">
+                <span className="ready-count-badge">
+                  <strong>
+                    {
+                      session.groups.filter(
+                        (g) =>
+                          g.name.trim().length > 0 &&
+                          parseFloat(g.price) > 0 &&
+                          g.photoIds.length > 0
+                      ).length
+                    }
+                  </strong>{" "}
+                  of {session.groups.length} garments ready
+                </span>
+                <Button
+                  variant="primary"
+                  disabled={isPublishing}
+                  onClick={() => setConfirm("Publish ready garments?")}
+                >
+                  {isPublishing ? "Publishing..." : "Publish Ready Garments"}
+                </Button>
+              </div>
             </div>
           )}
         </section>
@@ -1862,6 +2378,7 @@ export function Intake({
     </div>
   );
 }
+
 
 export function ProductTable({
   rows,
@@ -1980,6 +2497,177 @@ export function ProductTable({
   );
 }
 
+function GalleryImage({
+  src,
+  alt,
+  fallbackLabel,
+}: {
+  src?: string | null;
+  alt: string;
+  fallbackLabel: string;
+}) {
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    setError(false);
+  }, [src]);
+
+  if (src && !error) {
+    return (
+      <img
+        src={src}
+        alt={alt}
+        className="gallery-img"
+        onError={() => setError(true)}
+        loading="lazy"
+      />
+    );
+  }
+
+  return (
+    <div className="gallery-img-fallback">
+      <Icon name="image" size={32} />
+      <span className="fallback-text">{fallbackLabel}</span>
+    </div>
+  );
+}
+
+export function ProductGallery({
+  rows,
+  selected = [],
+  onSelect,
+  onEdit,
+}: {
+  rows: LiveProduct[];
+  selected?: string[];
+  onSelect?: (id: string) => void;
+  onEdit?: (id: string) => void;
+}) {
+  const allPageSelected = rows.length > 0 && rows.every((r) => selected.includes(r.id));
+
+  return (
+    <div className="product-gallery-wrap">
+      <div className="gallery-toolbar-row">
+        <label className="gallery-select-all-label">
+          <input
+            type="checkbox"
+            aria-label="Select all clothes on this page"
+            checked={allPageSelected}
+            onChange={(e) => {
+              if (e.target.checked) {
+                rows.forEach((r) => !selected.includes(r.id) && onSelect?.(r.id));
+              } else {
+                rows.forEach((r) => selected.includes(r.id) && onSelect?.(r.id));
+              }
+            }}
+          />
+          <span>Select all on page ({rows.length})</span>
+        </label>
+        <span className="gallery-count-hint">
+          {selected.length > 0 ? `${selected.length} selected` : ""}
+        </span>
+      </div>
+
+      <div className="product-gallery-grid">
+        {rows.map((product) => {
+          const isSelected = selected.includes(product.id);
+          const stockSummary =
+            product.variantsSummary && product.variantsSummary.length > 0
+              ? `${product.variantsSummary.length} size${product.variantsSummary.length > 1 ? "s" : ""} · ${product.variantsSummary.reduce((acc, v) => acc + (v.stock_quantity || 0), 0)} in stock`
+              : "One size";
+
+          return (
+            <article
+              key={product.id}
+              className={`gallery-card ${isSelected ? "selected" : ""}`}
+            >
+              <div className="gallery-card-top">
+                <label className="gallery-card-checkbox" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => onSelect?.(product.id)}
+                    aria-label={`Select ${product.name}`}
+                  />
+                </label>
+                <Status
+                  tone={
+                    product.status?.toLowerCase() === "published"
+                      ? "dark"
+                      : product.status?.toLowerCase() === "archived"
+                      ? "neutral"
+                      : "outline"
+                  }
+                >
+                  {product.status?.toLowerCase() === "published"
+                    ? "Published"
+                    : product.status?.toLowerCase() === "archived"
+                    ? "In archive"
+                    : "Draft"}
+                </Status>
+              </div>
+
+              <div
+                className="gallery-card-image-wrap"
+                onClick={() => onEdit?.(product.id)}
+                title={`Edit ${product.name}`}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onEdit?.(product.id);
+                  }
+                }}
+              >
+                <GalleryImage
+                  src={product.primaryImage}
+                  alt={product.name}
+                  fallbackLabel={product.name.slice(0, 3)}
+                />
+              </div>
+
+              <div className="gallery-card-body">
+                <div className="gallery-card-category" style={{ textTransform: "capitalize" }}>
+                  <span>{product.department}</span>
+                  <span className="dot-sep">·</span>
+                  <span>{product.category}</span>
+                </div>
+
+                <h3
+                  className="gallery-card-title"
+                  onClick={() => onEdit?.(product.id)}
+                  title={product.name}
+                >
+                  {product.name}
+                </h3>
+
+                <div className="gallery-card-meta-row">
+                  <div className="gallery-card-price">
+                    ₹{Number(product.price || 0).toFixed(2)}
+                  </div>
+                  <div className="gallery-card-stock" title={stockSummary}>
+                    {stockSummary}
+                  </div>
+                </div>
+
+                <div className="gallery-card-footer">
+                  <span className="gallery-card-date">
+                    {formatUpdatedDate(product.updated_at || product.created_at)}
+                  </span>
+                  <Button variant="text" onClick={() => onEdit?.(product.id)}>
+                    Edit
+                  </Button>
+                </div>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function Catalogue({
   products,
   navigate,
@@ -1998,7 +2686,24 @@ export function Catalogue({
   const [sortBy, setSortBy] = useState("Updated date");
   const [page, setPage] = useState(1);
   const [confirm, setConfirm] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const rowsPerPage = 25;
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("style_edit_admin_catalogue_view");
+      if (saved === "grid" || saved === "list") {
+        setViewMode(saved);
+      }
+    } catch {}
+  }, []);
+
+  const handleSetViewMode = (mode: "list" | "grid") => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem("style_edit_admin_catalogue_view", mode);
+    } catch {}
+  };
 
   const filtered = useMemo(() => {
     return products.filter((product) => {
@@ -2125,6 +2830,31 @@ export function Catalogue({
             <option value="Women">Women</option>
             <option value="Kids">Kids</option>
           </select>
+
+          <div className="catalogue-view-switcher" role="group" aria-label="Catalogue view mode">
+            <button
+              type="button"
+              className={`view-switcher-btn ${viewMode === "list" ? "active" : ""}`}
+              onClick={() => handleSetViewMode("list")}
+              title="List view"
+              aria-label="List view"
+              aria-pressed={viewMode === "list"}
+            >
+              <Icon name="list" size={15} />
+              <span>List</span>
+            </button>
+            <button
+              type="button"
+              className={`view-switcher-btn ${viewMode === "grid" ? "active" : ""}`}
+              onClick={() => handleSetViewMode("grid")}
+              title="Grid view"
+              aria-label="Grid view"
+              aria-pressed={viewMode === "grid"}
+            >
+              <Icon name="grid" size={15} />
+              <span>Grid</span>
+            </button>
+          </div>
         </div>
 
         <div className="saved-views">
@@ -2184,12 +2914,21 @@ export function Catalogue({
         )}
 
         {paginated.length > 0 ? (
-          <ProductTable
-            rows={paginated}
-            selected={selected}
-            onSelect={toggleSelect}
-            onEdit={(id) => navigate("editor", id)}
-          />
+          viewMode === "grid" ? (
+            <ProductGallery
+              rows={paginated}
+              selected={selected}
+              onSelect={toggleSelect}
+              onEdit={(id) => navigate("editor", id)}
+            />
+          ) : (
+            <ProductTable
+              rows={paginated}
+              selected={selected}
+              onSelect={toggleSelect}
+              onEdit={(id) => navigate("editor", id)}
+            />
+          )
         ) : (
           <div className="empty-state">
             <span>
@@ -2262,7 +3001,7 @@ export function Editor({
   const [images, setImages] = useState<LiveProductImage[]>([]);
   const [primaryIndex, setPrimaryIndex] = useState(0);
   const [variants, setVariants] = useState<LiveProductVariant[]>([
-    { size: "M", color: "Standard", sku: "", stock_quantity: 1, is_available: true },
+    { size: "M", color: "Black", sku: "", stock_quantity: 1, is_available: true },
   ]);
   const [confirm, setConfirm] = useState<string | null>(null);
 
@@ -2604,84 +3343,137 @@ export function Editor({
               <h2>Sizes and stock</h2>
             </div>
             <div className="form-body">
-              <div className="variant-head">
+              <div className="variant-head" aria-hidden="true">
                 <span>Size</span>
                 <span>Colour</span>
-                <span>SKU</span>
+                <span>SKU <span className="field-optional">(optional)</span></span>
                 <span>Quantity</span>
-                <span>For sale</span>
-                <span />
+                <span className="vcol-sale">For sale</span>
+                <span className="vcol-action" />
               </div>
-              {variants.map((variant, i) => (
-                <div className="variant-editor-row" key={i}>
-                  <input
-                    value={variant.size}
-                    placeholder="Size"
-                    onChange={(e) => {
-                      const updated = [...variants];
-                      updated[i].size = e.target.value;
-                      setVariants(updated);
-                    }}
-                  />
-                  <input
-                    value={variant.color}
-                    placeholder="Colour"
-                    onChange={(e) => {
-                      const updated = [...variants];
-                      updated[i].color = e.target.value;
-                      setVariants(updated);
-                    }}
-                  />
-                  <input
-                    value={variant.sku || ""}
-                    placeholder="SKU"
-                    onChange={(e) => {
-                      const updated = [...variants];
-                      updated[i].sku = e.target.value;
-                      setVariants(updated);
-                    }}
-                  />
-                  <input
-                    value={variant.stock_quantity.toString()}
-                    placeholder="Qty"
-                    onChange={(e) => {
-                      const updated = [...variants];
-                      updated[i].stock_quantity = parseInt(e.target.value, 10) || 0;
-                      setVariants(updated);
-                    }}
-                  />
-                  <label className="toggle">
-                    <input
-                      type="checkbox"
-                      checked={variant.is_available}
-                      onChange={(e) => {
-                        const updated = [...variants];
-                        updated[i].is_available = e.target.checked;
-                        setVariants(updated);
-                      }}
-                    />
-                    <span />
-                  </label>
-                  <Button
-                    variant="text"
-                    icon="trash"
-                    onClick={() => setVariants((curr) => curr.filter((_, idx) => idx !== i))}
-                  >
-                    Remove
-                  </Button>
-                </div>
-              ))}
-              <Button
-                icon="plus"
-                onClick={() =>
-                  setVariants((curr) => [
-                    ...curr,
-                    { size: "M", color: "Standard", sku: "", stock_quantity: 1, is_available: true },
-                  ])
-                }
-              >
-                Add size or colour
-              </Button>
+              <div className="variant-list">
+                {variants.map((variant, i) => (
+                  <div className="variant-editor-row" key={i}>
+                    <div className="variant-cell variant-cell-size">
+                      <label className="variant-mobile-label">Size</label>
+                      <select
+                        value={variant.size}
+                        onChange={(e) => {
+                          const updated = [...variants];
+                          updated[i].size = e.target.value;
+                          setVariants(updated);
+                        }}
+                        aria-label="Size"
+                      >
+                        {!PREDEFINED_SIZES.includes(variant.size as any) && variant.size && (
+                          <option value={variant.size}>{variant.size}</option>
+                        )}
+                        {PREDEFINED_SIZES.map((s) => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="variant-cell variant-cell-color">
+                      <label className="variant-mobile-label">Colour</label>
+                      <select
+                        value={variant.color}
+                        onChange={(e) => {
+                          const updated = [...variants];
+                          updated[i].color = e.target.value;
+                          setVariants(updated);
+                        }}
+                        aria-label="Colour"
+                      >
+                        {!PREDEFINED_COLOURS.includes(variant.color as any) && variant.color && (
+                          <option value={variant.color}>{variant.color}</option>
+                        )}
+                        {PREDEFINED_COLOURS.map((c) => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="variant-cell variant-cell-sku">
+                      <label className="variant-mobile-label">
+                        SKU <span className="field-optional">(optional)</span>
+                      </label>
+                      <input
+                        value={variant.sku || ""}
+                        placeholder="e.g. BLK-M"
+                        onChange={(e) => {
+                          const updated = [...variants];
+                          updated[i].sku = e.target.value;
+                          setVariants(updated);
+                        }}
+                        aria-label="SKU"
+                      />
+                    </div>
+                    <div className="variant-cell variant-cell-qty">
+                      <label className="variant-mobile-label">Quantity</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={variant.stock_quantity.toString()}
+                        placeholder="0"
+                        onChange={(e) => {
+                          const updated = [...variants];
+                          updated[i].stock_quantity = parseInt(e.target.value, 10) || 0;
+                          setVariants(updated);
+                        }}
+                        aria-label="Quantity"
+                      />
+                    </div>
+                    <div className="variant-cell variant-cell-toggle">
+                      <div className="variant-toggle-control">
+                        <span className="variant-mobile-label">For sale</span>
+                        <label className="toggle" title="Available for purchase">
+                          <input
+                            type="checkbox"
+                            checked={variant.is_available}
+                            onChange={(e) => {
+                              const updated = [...variants];
+                              updated[i].is_available = e.target.checked;
+                              setVariants(updated);
+                            }}
+                            aria-label="For sale"
+                          />
+                          <span />
+                        </label>
+                      </div>
+                    </div>
+                    <div className="variant-cell variant-cell-remove">
+                      <button
+                        type="button"
+                        className="variant-remove-btn"
+                        disabled={variants.length <= 1}
+                        onClick={() => {
+                          if (variants.length > 1) {
+                            setVariants(variants.filter((_, idx) => idx !== i));
+                          }
+                        }}
+                        title={variants.length <= 1 ? "At least one variant required" : "Remove variant"}
+                        aria-label="Remove variant"
+                      >
+                        <Icon name="trash" size={15} />
+                        <span className="mobile-remove-text">Remove</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="variant-add-action">
+                <Button
+                  variant="secondary"
+                  icon="plus"
+                  onClick={() =>
+                    setVariants((curr) => [
+                      ...curr,
+                      { size: "L", color: "Black", sku: "", stock_quantity: 1, is_available: true },
+                    ])
+                  }
+                >
+                  Add size or colour
+                </Button>
+              </div>
             </div>
           </section>
         </main>
@@ -3220,7 +4012,7 @@ export default function App({
           STYLE · EDIT
         </button>
         <span className="mobile-page-badge">
-          {nav.find((n) => n.id === page)?.label || "Admin"}
+          {nav.find((n) => n.id === page)?.label || (page === "media" ? "Photo Library" : "Admin")}
         </span>
       </div>
       {mobileOpen && (
