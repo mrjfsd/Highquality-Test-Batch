@@ -533,6 +533,50 @@
   }
 }
 
+/* ── Homepage Promotional Banner (Diwali Sale) ── */
+.home-promo-banner {
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  line-height: 0;
+  background-color: #fca814;
+}
+
+.home-promo-banner-link {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  line-height: 0;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.home-promo-banner-image {
+  width: 100%;
+  height: clamp(180px, 14vw, 220px);
+  object-fit: cover;
+  object-position: center 46%;
+  display: block;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+@media (max-width: 1024px) {
+  .home-promo-banner-image {
+    height: clamp(130px, 15vw, 170px);
+  }
+}
+
+@media (max-width: 640px) {
+  .home-promo-banner-image {
+    height: clamp(85px, 22vw, 115px);
+  }
+}
+
 /* ── Hero Section ── */
 .hero {
   position: relative;
@@ -547,7 +591,7 @@
   inset: 0;
   height: 100%;
   object-fit: cover;
-  object-position: center 44%;
+  object-position: center 22%;
 }
 
 .hero-overlay {
@@ -596,6 +640,19 @@
   font-size: 15px;
   letter-spacing: 0.02em;
   max-width: 520px;
+}
+
+/* Hidden on desktop: active on mobile editorial view */
+.hero-floating-garment-wrapper {
+  display: none;
+}
+
+.hero-desc-desktop {
+  display: inline;
+}
+
+.hero-desc-mobile {
+  display: none;
 }
 
 /* ── Refined Editorial Hero Buttons ── */
@@ -866,9 +923,20 @@
 
 .product-image-wrap {
   aspect-ratio: 0.77;
+  position: relative;
+  overflow: hidden;
+}
+
+.product-image-link {
+  display: block;
+  width: 100%;
+  height: 100%;
+  position: relative;
+  text-decoration: none;
 }
 
 .product-image {
+  width: 100%;
   height: 100%;
   object-fit: cover;
   transition: transform 650ms cubic-bezier(0.2, 0.7, 0.2, 1);
@@ -876,6 +944,69 @@
 
 .product-card:hover .product-image {
   transform: scale(1.025);
+}
+
+/* Product Card Carousel Navigation Arrows */
+.product-card-arrows {
+  position: static;
+}
+
+.product-card-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  color: #1a1a1a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 4;
+  padding: 0;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  opacity: 0.85;
+}
+
+.product-card-arrow:hover {
+  background: #ffffff;
+  color: var(--burgundy, #702b38);
+  border-color: rgba(112, 43, 56, 0.3);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.14);
+  opacity: 1;
+  transform: translateY(-50%) scale(1.06);
+}
+
+.product-card-arrow:active {
+  transform: translateY(-50%) scale(0.94);
+}
+
+.product-card-arrow--prev {
+  left: 8px;
+}
+
+.product-card-arrow--next {
+  right: 8px;
+}
+
+@media (max-width: 640px) {
+  .product-card-arrow {
+    width: 28px;
+    height: 28px;
+    opacity: 0.9;
+  }
+  .product-card-arrow--prev {
+    left: 6px;
+  }
+  .product-card-arrow--next {
+    right: 6px;
+  }
 }
 
 .product-tag {
@@ -2086,9 +2217,10 @@
   flex-wrap: nowrap;
   justify-content: space-between;
   align-items: center;
+  gap: 20px;
   padding: 0 0 10px;
   border-bottom: 1px solid var(--line);
-  margin-bottom: 16px;
+  margin-bottom: 20px;
   width: 100%;
   box-sizing: border-box;
 }
@@ -2097,6 +2229,15 @@
   display: flex;
   align-items: center;
   flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.product-toolbar-center {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
 }
 
 .product-toolbar-right {
@@ -2104,6 +2245,7 @@
   align-items: center;
   justify-content: flex-end;
   flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .product-count {
@@ -2121,7 +2263,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  margin-top: -6px;
+  margin-top: -8px;
   margin-bottom: 16px;
   padding: 8px 12px;
   background: rgba(0, 0, 0, .02);
@@ -2184,6 +2326,128 @@
 }
 .filter-clear-all-pill:hover {
   color: var(--ink);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   COLLECTION PROMOTIONAL SCROLLING MARQUEE BANNER
+   ═══════════════════════════════════════════════════════════ */
+.collection-marquee {
+  width: 100%;
+  height: 44px;
+  background-color: #303030;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  position: relative;
+  user-select: none;
+  margin: 0;
+  box-sizing: border-box;
+  border-radius: 0;
+  border: none;
+  box-shadow: none;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.collection-marquee-track {
+  display: flex;
+  width: max-content;
+  align-items: center;
+  animation: collectionMarqueeScroll 26s linear infinite;
+  will-change: transform;
+}
+
+.collection-marquee:hover .collection-marquee-track {
+  animation-play-state: paused;
+}
+
+.collection-marquee-group {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.collection-marquee-item {
+  color: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  line-height: 1;
+  padding: 0 28px;
+}
+
+@keyframes collectionMarqueeScroll {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@media (max-width: 760px) {
+  .product-toolbar {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap !important;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding-bottom: 10px;
+  }
+  .product-toolbar-left {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  .product-toolbar-center {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .product-toolbar-right {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  .collection-marquee {
+    height: 36px;
+  }
+  .collection-marquee-item {
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    padding: 0 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .product-toolbar {
+    gap: 8px;
+    padding-bottom: 8px;
+  }
+  .collection-marquee {
+    height: 34px;
+  }
+  .collection-marquee-item {
+    font-size: 9.5px;
+    letter-spacing: 0.03em;
+    padding: 0 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .collection-marquee-track {
+    animation: none;
+    transform: none;
+  }
+  .collection-marquee {
+    overflow-x: auto;
+  }
+  .collection-marquee-group[aria-hidden="true"] {
+    display: none;
+  }
 }
 
 /* Product Grid (4 Columns Desktop) */
@@ -2675,6 +2939,7 @@
   gap: 8px;
 }
 .size-btn {
+  flex: none;
   min-width: 48px;
   height: 44px;
   padding: 0 14px;
@@ -3168,49 +3433,352 @@
     font-size: 8px;
   }
 
-  .hero,
+  /* ── Mobile Editorial Hero with Floating 3D Garment (Refined, Minimal, Image-First) ── */
+  .hero {
+    position: relative;
+    min-height: auto;
+    background: #14110f;
+  }
+
   .hero-content {
-    min-height: 660px;
+    min-height: auto;
+    justify-content: center;
+    padding: 22px 16px 26px;
+    text-align: center;
   }
 
   .hero-image {
-    object-position: 61% center;
+    object-position: center 22%;
+    opacity: 0.14;
+    filter: blur(2px) contrast(1.15);
   }
 
   .hero-overlay {
-    background: linear-gradient(0deg, rgba(20, 17, 15, 0.58), rgba(20, 17, 15, 0.06) 72%);
+    background:
+      radial-gradient(circle at 50% 36%, rgba(112, 43, 56, 0.36) 0%, rgba(20, 17, 15, 0.72) 58%, rgba(20, 17, 15, 0.98) 100%),
+      linear-gradient(180deg, rgba(20, 17, 15, 0.22) 0%, rgba(20, 17, 15, 0.85) 100%);
   }
 
-  .hero-content {
-    justify-content: flex-end;
-    padding: 70px 22px 84px;
+  /* 1. Remove eyebrow text on mobile */
+  .hero-content .eyebrow {
+    display: none !important;
   }
 
+  /* 2. Smaller, cleaner, more refined headline: single line where possible */
   .hero h1 {
-    max-width: 340px;
-    font-size: 58px;
-    line-height: 0.91;
+    width: auto;
+    max-width: min(92vw, 420px);
+    font-size: clamp(23px, 6.2vw, 29px);
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    margin: 0 auto;
+    white-space: normal;
+  }
+
+  /* 4. Shorter, quieter supporting description */
+  .hero-desc-desktop {
+    display: none;
+  }
+
+  .hero-desc-mobile {
+    display: inline;
   }
 
   .hero-content>p:not(.eyebrow) {
-    max-width: 310px;
-    margin-top: 20px;
-    font-size: 13px;
-    line-height: 1.6;
+    max-width: 290px;
+    margin: 4px auto 12px;
+    font-size: 12.5px;
+    font-weight: 400;
+    line-height: 1.4;
+    letter-spacing: 0.015em;
+    color: rgba(248, 245, 240, 0.72);
   }
 
-  .hero-actions {
+  /* 3. Floating 3D Garment Trio Stage - Cohesive Capsule Composition */
+  .hero-floating-garment-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    margin: 10px 0 6px;
+    perspective: 1200px;
+    overflow: visible;
+  }
+
+  .hero-floating-garment-stage {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     width: 100%;
     max-width: 360px;
-    margin-top: 26px;
-    gap: 12px;
+    height: clamp(210px, 56vw, 255px);
+    transform-style: preserve-3d;
+    --garment-side-offset: clamp(82px, 22.5vw, 102px);
+  }
+
+  .hero-floating-garment-card {
+    border-radius: 18px;
+    overflow: hidden;
+    will-change: transform;
+    display: block;
+    user-select: none;
+    -webkit-user-drag: none;
+  }
+
+  /* Center Card: Beige Fleece Jacket (forward, prominent focal point) */
+  .hero-floating-garment-card--center {
+    position: relative;
+    z-index: 3;
+    width: clamp(156px, 42vw, 194px);
+    height: clamp(178px, 48vw, 222px);
+    background: #141211;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    box-shadow:
+      0 24px 48px -10px rgba(0, 0, 0, 0.85),
+      0 8px 22px rgba(0, 0, 0, 0.5),
+      inset 0 1px 1.5px rgba(255, 255, 255, 0.35);
+    animation: floatingGarmentCenter 5.4s ease-in-out infinite;
+  }
+
+  /* Left Card: Blue Denim Jeans (subtle CCW tilt, behind center) */
+  .hero-floating-garment-card--left {
+    position: absolute;
+    left: 50%;
+    z-index: 1;
+    width: clamp(118px, 32vw, 146px);
+    height: clamp(156px, 43vw, 194px);
+    transform: translateX(calc(-50% - var(--garment-side-offset))) translateY(8px) rotate(-8.5deg);
+    background: #101318;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow:
+      -8px 18px 36px -8px rgba(0, 0, 0, 0.7),
+      inset 0 1px 1px rgba(255, 255, 255, 0.22);
+    animation: floatingGarmentLeft 5.4s ease-in-out infinite;
+  }
+
+  /* Right Card: Charcoal Graphic T-Shirt (subtle CW tilt, behind center) */
+  .hero-floating-garment-card--right {
+    position: absolute;
+    left: 50%;
+    z-index: 2;
+    width: clamp(118px, 32vw, 146px);
+    height: clamp(156px, 43vw, 194px);
+    transform: translateX(calc(-50% + var(--garment-side-offset))) translateY(8px) rotate(8.5deg);
+    background: #0f0f11;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow:
+      8px 18px 36px -8px rgba(0, 0, 0, 0.7),
+      inset 0 1px 1px rgba(255, 255, 255, 0.22);
+    animation: floatingGarmentRight 5.4s ease-in-out infinite;
+  }
+
+  .hero-floating-garment-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    display: block;
+    user-select: none;
+    -webkit-user-drag: none;
+  }
+
+  .hero-floating-garment-card--left .hero-floating-garment-img {
+    object-position: 15% center;
+  }
+
+  .hero-floating-garment-card--right .hero-floating-garment-img {
+    object-position: 80% center;
+  }
+
+  .hero-garment-sheen {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    border-radius: inherit;
+    background: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.22) 0%,
+      rgba(255, 255, 255, 0.05) 30%,
+      rgba(255, 255, 255, 0) 55%,
+      rgba(112, 43, 56, 0.12) 100%
+    );
+  }
+
+  .hero-garment-light {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    border-radius: inherit;
+    background: radial-gradient(
+      circle at 50% 16%,
+      rgba(255, 255, 255, 0.2) 0%,
+      rgba(255, 255, 255, 0) 65%
+    );
+    mix-blend-mode: overlay;
+  }
+
+  .hero-garment-shadow {
+    position: absolute;
+    bottom: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: clamp(225px, 66vw, 310px);
+    height: 14px;
+    border-radius: 50%;
+    background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0) 72%);
+    filter: blur(6px);
+    animation: floatingGarmentTrioShadow 5.4s ease-in-out infinite;
+    will-change: transform, opacity;
+  }
+
+  @keyframes floatingGarmentCenter {
+    0%, 100% {
+      transform: translateY(0px) rotate(0deg);
+    }
+    50% {
+      transform: translateY(-8px) rotate(0.8deg);
+    }
+  }
+
+  @keyframes floatingGarmentLeft {
+    0%, 100% {
+      transform: translateX(calc(-50% - var(--garment-side-offset))) translateY(8px) rotate(-8.5deg);
+    }
+    50% {
+      transform: translateX(calc(-50% - var(--garment-side-offset))) translateY(0px) rotate(-7deg);
+    }
+  }
+
+  @keyframes floatingGarmentRight {
+    0%, 100% {
+      transform: translateX(calc(-50% + var(--garment-side-offset))) translateY(8px) rotate(8.5deg);
+    }
+    50% {
+      transform: translateX(calc(-50% + var(--garment-side-offset))) translateY(0px) rotate(7deg);
+    }
+  }
+
+  @keyframes floatingGarmentTrioShadow {
+    0%, 100% {
+      transform: translateX(-50%) scale(1);
+      opacity: 0.7;
+    }
+    50% {
+      transform: translateX(-50%) scale(0.88);
+      opacity: 0.42;
+    }
+  }
+
+  /* 5. Compact, balanced button pair with less visual weight than the garment */
+  .hero-actions {
+    width: 100%;
+    max-width: 290px;
+    margin-top: 0;
+    gap: 8px;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
   }
 
   .hero-btn {
     flex: 1;
-    padding: 0 16px;
+    min-height: 38px;
+    padding: 0 12px;
     font-size: 10px;
-    min-height: 44px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    gap: 6px;
+    border-radius: 2px;
+    transition: all 200ms ease;
+  }
+
+  .hero-btn svg {
+    width: 11px;
+    height: 11px;
+    opacity: 0.8;
+  }
+
+  .hero-btn-primary {
+    background: rgba(248, 245, 240, 0.94);
+    color: #1a1816;
+    border: 1px solid rgba(255, 255, 255, 0.9);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  }
+
+  .hero-btn-primary:hover {
+    background: #ffffff;
+    color: #111;
+  }
+
+  .hero-btn-secondary {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(248, 245, 240, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    backdrop-filter: blur(6px);
+  }
+
+  .hero-btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.16);
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.4);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hero-floating-garment-card--center,
+    .hero-floating-garment-card--left,
+    .hero-floating-garment-card--right,
+    .hero-garment-shadow {
+      animation: none !important;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .hero-content {
+      padding: 18px 12px 22px;
+    }
+    .hero h1 {
+      font-size: clamp(21px, 6.4vw, 25px);
+    }
+    .hero-floating-garment-stage {
+      height: clamp(185px, 52vw, 225px);
+      --garment-side-offset: clamp(74px, 21.5vw, 92px);
+    }
+    .hero-floating-garment-card--center {
+      width: clamp(142px, 41vw, 172px);
+      height: clamp(162px, 46vw, 198px);
+      border-radius: 16px;
+    }
+    .hero-floating-garment-card--left,
+    .hero-floating-garment-card--right {
+      width: clamp(105px, 30vw, 128px);
+      height: clamp(138px, 39vw, 168px);
+      border-radius: 14px;
+    }
+    .hero-garment-shadow {
+      width: clamp(215px, 64vw, 275px);
+    }
+    .hero-floating-garment-wrapper {
+      margin: 6px 0 4px;
+    }
+    .hero-content>p:not(.eyebrow) {
+      margin: 4px auto 10px;
+      font-size: 11.5px;
+      max-width: 250px;
+    }
+    .hero-actions {
+      max-width: 270px;
+      gap: 7px;
+    }
+    .hero-btn {
+      min-height: 36px;
+      padding: 0 10px;
+      font-size: 9.5px;
+    }
   }
 
   .departments,
@@ -3424,8 +3992,18 @@
   }
   .detail-top-nav { flex-direction: column; align-items: flex-start; gap: 12px; }
   .color-swatches-row { gap: 10px; }
-  .size-row { gap: 6px; }
-  .size-btn { flex: 1; min-width: 42px; height: 42px; padding: 0 8px; }
+  .size-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .size-btn {
+    flex: none;
+    min-width: 48px;
+    height: 48px;
+    padding: 0 14px;
+    font-size: 13px;
+  }
   .purchase-row { gap: 8px; }
   .quantity-selector { width: 105px; height: 48px; padding: 0 4px; }
   .btn-add-to-cart { height: 48px; font-size: 13px; }
@@ -3458,12 +4036,15 @@
 
 @media (max-width: 410px) {
   .hero-actions {
-    flex-direction: column;
+    flex-direction: row;
     width: 100%;
+    max-width: 270px;
+    gap: 7px;
   }
 
   .hero-btn {
-    width: 100%;
+    width: auto;
+    flex: 1;
   }
 
   .department-card {
@@ -3496,20 +4077,24 @@
     padding: 8px 14px 40px;
   }
   .product-toolbar {
+    display: flex;
     flex-direction: row;
-    flex-wrap: nowrap;
+    flex-wrap: nowrap !important;
     justify-content: space-between;
     align-items: center;
+    gap: 8px;
     padding: 0 0 8px;
     margin-bottom: 12px;
   }
   .product-count {
-    font-size: 11.5px;
+    font-size: 11px;
+    white-space: nowrap;
   }
   .snitch-filter-btn {
     padding: 3px 0;
     font-size: 10.5px;
-    gap: 6px;
+    gap: 5px;
+    white-space: nowrap;
   }
   .snitch-filter-drawer {
     width: 88vw;
@@ -3543,6 +4128,12 @@
     padding: 6px 12px 36px;
   }
   .product-toolbar {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap !important;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
     padding: 0 0 6px;
     margin-bottom: 10px;
   }

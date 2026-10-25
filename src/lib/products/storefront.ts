@@ -43,16 +43,48 @@ export async function fetchPublishedProductsByDepartment(
     }
 
     const mappedDbProducts: Product[] = (dbProducts || []).map((p) => {
-      // Find primary image or the image with the lowest display_order
+      // Extract all valid images in ascending display_order while respecting primary selection
+      const rawImages = Array.isArray(p.product_images)
+        ? [...p.product_images]
+            .filter((img: { storage_path?: string }) => Boolean(img.storage_path))
+            .sort(
+              (
+                a: { display_order?: number; is_primary?: boolean },
+                b: { display_order?: number; is_primary?: boolean }
+              ) => {
+                const orderDiff = (a.display_order ?? 0) - (b.display_order ?? 0);
+                if (orderDiff !== 0) return orderDiff;
+                if (a.is_primary && !b.is_primary) return -1;
+                if (!a.is_primary && b.is_primary) return 1;
+                return 0;
+              }
+            )
+        : [];
+
+      const galleryImages = rawImages.map(
+        (img: {
+          id?: string;
+          storage_path: string;
+          alt_text?: string | null;
+          is_primary?: boolean | null;
+          display_order?: number | null;
+        }) => ({
+          id: img.id,
+          url: `/api/images/${img.storage_path}`,
+          alt: img.alt_text || p.name,
+          is_primary: Boolean(img.is_primary),
+          display_order: img.display_order ?? 0,
+        })
+      );
+
       const primaryImage =
-        p.product_images?.find((img: { is_primary: boolean }) => img.is_primary) ||
-        p.product_images?.[0];
+        galleryImages.find((img) => img.is_primary) || galleryImages[0];
 
-      const image = primaryImage?.storage_path
-        ? `/api/images/${primaryImage.storage_path}`
-        : "https://images.unsplash.com/photo-1613915617430-8ab0fd7c6baf?auto=format&fit=crop&w=1200&q=80";
+      const image =
+        primaryImage?.url ||
+        "https://images.unsplash.com/photo-1613915617430-8ab0fd7c6baf?auto=format&fit=crop&w=1200&q=80";
 
-      const alt = primaryImage?.alt_text || p.name;
+      const alt = primaryImage?.alt || p.name;
 
       // Collect available colors strictly from configured product variants
       const colorsSet = new Set<string>();
@@ -87,6 +119,10 @@ export async function fetchPublishedProductsByDepartment(
             ? Number(p.sale_price)
             : undefined,
         image,
+        images:
+          galleryImages.length > 0
+            ? galleryImages
+            : [{ url: image, alt, is_primary: true }],
         alt,
         colors,
         fabric: p.fabric || "Premium quality",
@@ -150,11 +186,18 @@ export async function fetchProductBySlug(
       const rawImages = Array.isArray(p.product_images)
         ? [...p.product_images]
             .filter((img: { storage_path?: string }) => Boolean(img.storage_path))
-            .sort((a: { display_order?: number; is_primary?: boolean }, b: { display_order?: number; is_primary?: boolean }) => {
-              if (a.is_primary && !b.is_primary) return -1;
-              if (!a.is_primary && b.is_primary) return 1;
-              return (a.display_order ?? 0) - (b.display_order ?? 0);
-            })
+            .sort(
+              (
+                a: { display_order?: number; is_primary?: boolean },
+                b: { display_order?: number; is_primary?: boolean }
+              ) => {
+                const orderDiff = (a.display_order ?? 0) - (b.display_order ?? 0);
+                if (orderDiff !== 0) return orderDiff;
+                if (a.is_primary && !b.is_primary) return -1;
+                if (!a.is_primary && b.is_primary) return 1;
+                return 0;
+              }
+            )
         : [];
 
       const galleryImages = rawImages.map(

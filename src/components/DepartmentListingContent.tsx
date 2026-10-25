@@ -6,6 +6,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import type { Product } from "@/data/products";
 import ProductCard from "@/components/ProductCard";
+import CollectionMarquee from "@/components/CollectionMarquee";
 
 interface DepartmentListingContentProps {
   department: string;
@@ -572,15 +573,57 @@ export default function DepartmentListingContent({
           CATALOGUE TOP TOOLBAR (Above Product Grid)
           Left: Item Count | Right: EXACTLY ONE Snitch-Style FILTERS Button
           ═══════════════════════════════════════════════════════════ */}
-      <div className="product-toolbar">
-        <div className="product-toolbar-left">
+      <div
+        className="product-toolbar"
+        style={{
+          display: "flex",
+          flexDirection: "row",
+          flexWrap: "nowrap",
+          alignItems: "center",
+          justifyContent: "space-between",
+          width: "100%",
+          boxSizing: "border-box",
+        }}
+      >
+        <div
+          className="product-toolbar-left"
+          style={{
+            flexShrink: 0,
+            whiteSpace: "nowrap",
+            display: "flex",
+            alignItems: "center",
+          }}
+        >
           <span className="product-count">
             {filteredProducts.length}{" "}
             {filteredProducts.length === 1 ? "item" : "items"}
           </span>
         </div>
 
-        <div className="product-toolbar-right">
+        {/* PROMOTIONAL SCROLLING MARQUEE BANNER (Middle horizontal space) */}
+        <div
+          className="product-toolbar-center"
+          style={{
+            flex: "1 1 auto",
+            minWidth: 0,
+            overflow: "hidden",
+            display: "flex",
+            alignItems: "center",
+          }}
+        >
+          <CollectionMarquee />
+        </div>
+
+        <div
+          className="product-toolbar-right"
+          style={{
+            flexShrink: 0,
+            whiteSpace: "nowrap",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "flex-end",
+          }}
+        >
           <button
             ref={filterTriggerRef}
             type="button"

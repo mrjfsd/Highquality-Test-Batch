@@ -16,7 +16,7 @@ type ImageProps = {
 };
 
 const images = {
-  hero: "https://images.unsplash.com/photo-1507297448044-a99b358cd06e?auto=format&fit=crop&w=2000&q=88",
+  hero: "/assets/hero-campaign.webp",
   men: "https://images.unsplash.com/photo-1592409039573-5a135408dcc4?auto=format&fit=crop&w=900&q=86",
   women: "https://images.unsplash.com/photo-1590399830217-8db7489f911e?auto=format&fit=crop&w=900&q=86",
   kids: "https://images.unsplash.com/photo-1758851552775-7353c60e4906?auto=format&fit=crop&w=900&q=86",
@@ -138,13 +138,34 @@ function SectionHeading({
   );
 }
 
+/* ── Section 2: Promotional Banner (Diwali Sale) ── */
+function HomePromotionalBanner() {
+  return (
+    <section className="home-promo-banner" aria-label="Festive Promotion">
+      <Link
+        href="/shop/women"
+        className="home-promo-banner-link"
+        aria-label="Diwali Sale — Shop the festive collection"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/assets/image.png"
+          alt="Diwali Sale Promotional Banner"
+          className="home-promo-banner-image"
+          loading="eager"
+        />
+      </Link>
+    </section>
+  );
+}
+
 /* ── Section 3: Editorial Hero ── */
 function HeroBanner() {
   return (
     <section className="hero" aria-labelledby="hero-title">
       <SmartImage
         src={images.hero}
-        alt="Two models in contemporary everyday fashion"
+        alt="Style Edit editorial fashion campaign featuring tailored bordeaux coat and relaxed tailoring"
         className="hero-image"
         loading="eager"
       />
@@ -152,7 +173,56 @@ function HeroBanner() {
       <div className="hero-content">
         <p className="eyebrow light hero-fade-1">THE NEW EVERYDAY</p>
         <h1 id="hero-title" className="hero-fade-2">Your Style. Your Edit.</h1>
-        <p className="hero-fade-3">Discover everyday fashion, handpicked for every mood.</p>
+
+        {/* Mobile-Only Floating 3D Garment Trio Showcase */}
+        <div className="hero-floating-garment-wrapper" aria-hidden="false">
+          <div className="hero-floating-garment-stage">
+            {/* Left Card: Blue Denim Jeans (subtle CCW tilt, behind center) */}
+            <div className="hero-floating-garment-card hero-floating-garment-card--left">
+              <div className="hero-garment-sheen" aria-hidden="true" />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/assets/floating-jeans-mobile.webp"
+                alt="Floating blue denim jeans"
+                className="hero-floating-garment-img"
+                loading="eager"
+              />
+            </div>
+
+            {/* Center Card: Fleece Jacket (main focal point, forward, larger) */}
+            <div className="hero-floating-garment-card hero-floating-garment-card--center">
+              <div className="hero-garment-sheen" aria-hidden="true" />
+              <div className="hero-garment-light" aria-hidden="true" />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/assets/floating-garment-mobile.webp"
+                alt="Style Edit floating fleece zip jacket showcase"
+                className="hero-floating-garment-img"
+                loading="eager"
+              />
+            </div>
+
+            {/* Right Card: Charcoal Graphic T-Shirt (subtle CW tilt, behind center) */}
+            <div className="hero-floating-garment-card hero-floating-garment-card--right">
+              <div className="hero-garment-sheen" aria-hidden="true" />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/assets/floating-tshirt-mobile.webp"
+                alt="Floating charcoal graphic camera t-shirt"
+                className="hero-floating-garment-img"
+                loading="eager"
+              />
+            </div>
+
+            {/* Unified diffused 3D floor shadow */}
+            <div className="hero-garment-shadow" aria-hidden="true" />
+          </div>
+        </div>
+
+        <p className="hero-fade-3 hero-description">
+          <span className="hero-desc-desktop">Discover everyday fashion, handpicked for every mood.</span>
+          <span className="hero-desc-mobile">Everyday style, thoughtfully chosen.</span>
+        </p>
         
         {/* Refined editorial hero buttons with sophisticated solid/outline pairing */}
         <div className="hero-actions hero-fade-4">
@@ -327,6 +397,7 @@ export default function HomePage() {
   return (
     <main className="site-shell">
       <HomeScrollAnimator />
+      <HomePromotionalBanner />
       <HeroBanner />
       <ShopByDepartment />
       <FeaturedProducts />
