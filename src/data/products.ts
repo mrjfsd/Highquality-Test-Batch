@@ -10,6 +10,14 @@ export type StorefrontVariantOption = {
   is_available: boolean;
 };
 
+export type ProductGalleryImage = {
+  id?: string;
+  url: string;
+  alt?: string;
+  is_primary?: boolean;
+  display_order?: number;
+};
+
 export type Product = {
   id: number | string;
   slug: string;
@@ -19,6 +27,7 @@ export type Product = {
   price: number;
   sale?: number;
   image: string;
+  images?: ProductGalleryImage[];
   alt: string;
   colors: string[];
   fabric: string;
@@ -207,6 +216,156 @@ export const products: Product[] = [
     fabric: "Cotton twill",
     fit: "Roomy fit",
   },
+  {
+    id: "dummy-prod-women-1",
+    slug: "dummy-women-tailored-blazer",
+    department: "Women",
+    category: "Jackets",
+    name: "Oatmeal Tailored Wool Blazer",
+    price: 5490,
+    image: "/assets/dummy-products/women/women-blazer-front.jpg",
+    images: [
+      {
+        id: "img-w-0",
+        url: "/assets/dummy-products/women/women-blazer-front.jpg",
+        alt: "Oatmeal tailored wool blazer front view",
+        is_primary: true,
+        display_order: 0,
+      },
+      {
+        id: "img-w-1",
+        url: "/assets/dummy-products/women/women-blazer-back.jpg",
+        alt: "Oatmeal tailored wool blazer back view",
+        is_primary: false,
+        display_order: 1,
+      },
+      {
+        id: "img-w-2",
+        url: "/assets/dummy-products/women/women-blazer-side.jpg",
+        alt: "Oatmeal tailored wool blazer side profile",
+        is_primary: false,
+        display_order: 2,
+      },
+      {
+        id: "img-w-3",
+        url: "/assets/dummy-products/women/women-blazer-detail.jpg",
+        alt: "Oatmeal tailored wool blazer fabric and lapel detail",
+        is_primary: false,
+        display_order: 3,
+      },
+    ],
+    alt: "Oatmeal tailored wool blazer front view",
+    colors: ["#d6d0c4", "#2c2b29"],
+    fabric: "100% Virgin Wool",
+    fit: "Oversized tailored fit",
+    description: "Architecturally tailored blazer crafted from premium virgin wool with structured shoulders and horn buttons.",
+    variants: [
+      { id: "var-w-1", size: "XS", color: "#d6d0c4", is_available: true },
+      { id: "var-w-2", size: "S", color: "#d6d0c4", is_available: true },
+      { id: "var-w-3", size: "M", color: "#d6d0c4", is_available: true },
+      { id: "var-w-4", size: "L", color: "#d6d0c4", is_available: true },
+    ],
+  },
+  {
+    id: "dummy-prod-men-1",
+    slug: "dummy-men-merino-crewneck",
+    department: "Men",
+    category: "Knitwear",
+    name: "Charcoal Ribbed Merino Crewneck",
+    price: 4890,
+    image: "/assets/dummy-products/men/men-knit-front.jpg",
+    images: [
+      {
+        id: "img-m-0",
+        url: "/assets/dummy-products/men/men-knit-front.jpg",
+        alt: "Charcoal ribbed merino crewneck front view",
+        is_primary: true,
+        display_order: 0,
+      },
+      {
+        id: "img-m-1",
+        url: "/assets/dummy-products/men/men-knit-back.jpg",
+        alt: "Charcoal ribbed merino crewneck back view",
+        is_primary: false,
+        display_order: 1,
+      },
+      {
+        id: "img-m-2",
+        url: "/assets/dummy-products/men/men-knit-side.jpg",
+        alt: "Charcoal ribbed merino crewneck side profile",
+        is_primary: false,
+        display_order: 2,
+      },
+      {
+        id: "img-m-3",
+        url: "/assets/dummy-products/men/men-knit-detail.jpg",
+        alt: "Charcoal ribbed merino crewneck knit texture detail",
+        is_primary: false,
+        display_order: 3,
+      },
+    ],
+    alt: "Charcoal ribbed merino crewneck front view",
+    colors: ["#37393b", "#1a1a1c"],
+    fabric: "100% Extra-Fine Merino Wool",
+    fit: "Regular relaxed fit",
+    description: "Luxurious 7-gauge ribbed knit sweater spun from pure Australian merino wool with seamless shoulder construction.",
+    variants: [
+      { id: "var-m-1", size: "S", color: "#37393b", is_available: true },
+      { id: "var-m-2", size: "M", color: "#37393b", is_available: true },
+      { id: "var-m-3", size: "L", color: "#37393b", is_available: true },
+      { id: "var-m-4", size: "XL", color: "#37393b", is_available: true },
+    ],
+  },
+  {
+    id: "dummy-prod-kids-1",
+    slug: "dummy-kids-quilted-jacket",
+    department: "Kids",
+    category: "Jackets",
+    name: "Ochre Quilted Cotton Jacket",
+    price: 3290,
+    image: "/assets/dummy-products/kids/kids-jacket-front.jpg",
+    images: [
+      {
+        id: "img-k-0",
+        url: "/assets/dummy-products/kids/kids-jacket-front.jpg",
+        alt: "Ochre quilted cotton jacket front view",
+        is_primary: true,
+        display_order: 0,
+      },
+      {
+        id: "img-k-1",
+        url: "/assets/dummy-products/kids/kids-jacket-back.jpg",
+        alt: "Ochre quilted cotton jacket back view",
+        is_primary: false,
+        display_order: 1,
+      },
+      {
+        id: "img-k-2",
+        url: "/assets/dummy-products/kids/kids-jacket-side.jpg",
+        alt: "Ochre quilted cotton jacket side profile",
+        is_primary: false,
+        display_order: 2,
+      },
+      {
+        id: "img-k-3",
+        url: "/assets/dummy-products/kids/kids-jacket-detail.jpg",
+        alt: "Ochre quilted cotton jacket stitching detail",
+        is_primary: false,
+        display_order: 3,
+      },
+    ],
+    alt: "Ochre quilted cotton jacket front view",
+    colors: ["#c98939", "#3b4737"],
+    fabric: "100% Organic Quilted Cotton",
+    fit: "Comfortable boxy fit",
+    description: "Lightweight diamond-quilted seasonal jacket with soft contrast binding and durable snap closures.",
+    variants: [
+      { id: "var-k-1", size: "3-4Y", color: "#c98939", is_available: true },
+      { id: "var-k-2", size: "5-6Y", color: "#c98939", is_available: true },
+      { id: "var-k-3", size: "7-8Y", color: "#c98939", is_available: true },
+      { id: "var-k-4", size: "9-10Y", color: "#c98939", is_available: true },
+    ],
+  },
 ];
 
 export const VALID_DEPARTMENTS: Department[] = ["Women", "Men", "Kids"];
@@ -216,7 +375,12 @@ export function getProductsByDepartment(department: Department): Product[] {
 }
 
 export function getProductBySlug(slug: string): Product | undefined {
-  return products.find((p) => p.slug === slug);
+  const prod = products.find((p) => p.slug === slug);
+  if (!prod) return undefined;
+  return {
+    ...prod,
+    images: prod.images || [{ url: prod.image, alt: prod.alt, is_primary: true }],
+  };
 }
 
 export function getRelatedProducts(product: Product, limit = 3): Product[] {

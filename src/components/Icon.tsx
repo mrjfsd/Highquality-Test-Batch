@@ -8,7 +8,9 @@ type IconName =
   | "close"
   | "minus"
   | "plus"
-  | "chevron";
+  | "chevron"
+  | "chevronLeft"
+  | "chevronRight";
 
 interface IconProps {
   name: IconName;
@@ -47,6 +49,8 @@ export default function Icon({ name, size = 20, className }: IconProps) {
       </>
     ),
     chevron: <path d="m9 6 6 6-6 6" />,
+    chevronRight: <path d="m9 6 6 6-6 6" />,
+    chevronLeft: <path d="m15 6-6 6 6 6" />,
   };
 
   return (

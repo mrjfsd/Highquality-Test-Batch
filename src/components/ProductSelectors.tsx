@@ -345,52 +345,23 @@ export default function ProductSelectors({ product }: ProductSelectorsProps) {
         </button>
       </div>
 
-      {/* Product details collapsible specifications with clean plus (+) icons */}
-      <div className="detail-accordions">
-        <details open>
-          <summary>
-            <span>PRODUCT DETAILS</span>
-            <span className="accordion-icon" aria-hidden="true">
-              <Icon name="plus" size={14} />
-            </span>
-          </summary>
-          <dl>
-            {product.fabric && (
-              <div>
-                <dt>Fabric</dt>
-                <dd>{product.fabric}</dd>
-              </div>
-            )}
-            {product.fit && (
-              <div>
-                <dt>Fit</dt>
-                <dd>{product.fit}</dd>
-              </div>
-            )}
+      {/* Product details specifications (permanently visible) */}
+      <div className="product-details-section detail-accordions">
+        <h2 className="product-details-heading">PRODUCT DETAILS</h2>
+        <dl>
+          {product.fabric && (
             <div>
-              <dt>Care</dt>
-              <dd>Cold gentle wash, line dry</dd>
+              <dt>Fabric</dt>
+              <dd>{product.fabric}</dd>
             </div>
-          </dl>
-        </details>
-        <details>
-          <summary>
-            <span>SHIPPING &amp; RETURNS</span>
-            <span className="accordion-icon" aria-hidden="true">
-              <Icon name="plus" size={14} />
-            </span>
-          </summary>
-          <p>Standard delivery in 3–5 working days. Complimentary returns within 14 days.</p>
-        </details>
-        <details>
-          <summary>
-            <span>AFTERCARE</span>
-            <span className="accordion-icon" aria-hidden="true">
-              <Icon name="plus" size={14} />
-            </span>
-          </summary>
-          <p>Cold delicate wash or dry clean. Hang dry away from direct heat to preserve fabric silhouette.</p>
-        </details>
+          )}
+          {product.fit && (
+            <div>
+              <dt>Fit</dt>
+              <dd>{product.fit}</dd>
+            </div>
+          )}
+        </dl>
       </div>
     </div>
   );

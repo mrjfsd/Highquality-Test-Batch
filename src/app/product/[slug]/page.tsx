@@ -8,6 +8,7 @@ import { Dosis } from "next/font/google";
 import { products, formatPrice } from "@/data/products";
 import { fetchProductBySlug, fetchRelatedProducts } from "@/lib/products/storefront";
 import ProductCard from "@/components/ProductCard";
+import ProductGallery from "@/components/ProductGallery";
 import ProductSelectors from "@/components/ProductSelectors";
 import SectionHeading from "@/components/SectionHeading";
 import Icon from "@/components/Icon";
@@ -87,16 +88,13 @@ export default async function ProductDetailPage({ params }: Props) {
 
       {/* Main detail layout: Left Imagery + Right Product Info */}
       <div className="detail-layout">
-        {/* Left Column — Primary Product Imagery */}
-        <section className="product-imagery" aria-label="Product image">
-          <div className="imagery-frame">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={product.image}
-              alt={product.alt || product.name}
-              className="imagery-main-img"
-            />
-          </div>
+        {/* Left Column — Product Imagery with Swipe Gallery */}
+        <section className="product-imagery" aria-label="Product imagery">
+          <ProductGallery
+            images={product.images}
+            fallbackImage={product.image}
+            productName={product.name}
+          />
         </section>
 
         {/* Right Column — Information, Selectors & Purchase Actions */}
