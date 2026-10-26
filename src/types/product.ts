@@ -10,6 +10,7 @@ export interface Product {
   category: string;
   price: number;
   sale_price: number | null;
+  discount_percent?: number | null;
   fabric: string | null;
   fit: string | null;
   status: "draft" | "published" | "archived";

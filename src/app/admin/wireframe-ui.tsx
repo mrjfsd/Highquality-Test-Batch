@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode, useCallback } fro
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { verifyAdminAuthorization } from "@/lib/supabase/auth";
 import { compressImageForUpload, uploadToR2WithProgress } from "@/lib/images/client-compression";
+import { getProductDescriptionTemplate, isKnownDescriptionTemplate } from "@/lib/products/description-templates";
 
 export type Page = "overview" | "intake" | "catalogue" | "editor" | "media";
 export type ProductStatus = "Published" | "Draft" | "Review" | "Archived";
@@ -29,6 +30,8 @@ export interface LiveProductVariant {
   is_available: boolean;
 }
 
+export const ALLOWED_DISCOUNT_PERCENTS = [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65] as const;
+
 export interface LiveProduct {
   id: string;
   name: string;
@@ -37,6 +40,7 @@ export interface LiveProduct {
   category: string;
   price: number;
   sale_price?: number | null;
+  discount_percent?: number | null;
   fabric?: string | null;
   fit?: string | null;
   description?: string | null;
@@ -71,9 +75,12 @@ export interface GarmentGroup {
   category: string;
   price: string;
   salePrice?: string;
+  discountPercent?: number | null;
+  forSale?: boolean;
   fabric?: string;
   fit?: string;
   description?: string;
+  isDescriptionCustom?: boolean;
   status: "Draft" | "Published";
   photoIds: string[];
   primaryPhotoId?: string;
@@ -410,16 +417,18 @@ export function PageHeader({
   title,
   description,
   actions,
+  className,
 }: {
   title: string;
-  description: string;
+  description?: string;
   actions?: ReactNode;
+  className?: string;
 }) {
   return (
-    <header className="page-header">
+    <header className={`page-header ${description ? "has-desc" : "no-desc"} ${className || ""}`.trim()}>
       <div>
         <h1>{title}</h1>
-        <p>{description}</p>
+        {description && <p>{description}</p>}
       </div>
       {actions && <div className="header-actions">{actions}</div>}
     </header>
@@ -667,15 +676,7 @@ export function Overview({
 
   return (
     <div className="page">
-      <PageHeader
-        title="Dashboard"
-        description="See what needs doing and continue adding clothes."
-        actions={
-          <Button variant="primary" icon="plus" onClick={() => navigate("intake")}>
-            Add Clothes
-          </Button>
-        }
-      />
+      <PageHeader title="Dashboard" />
       <section className="summary-grid">
         {summaries.map(([label, value, sub]) => (
           <article className="summary-card" key={label}>
@@ -689,7 +690,6 @@ export function Overview({
         <div className="section-header">
           <div>
             <h2>Recently updated clothes</h2>
-            <p>Garments added or changed recently</p>
           </div>
           <Button variant="text" onClick={() => navigate("catalogue")}>
             View all clothes <Icon name="arrow" size={15} />
@@ -788,9 +788,6 @@ export function Overview({
                   <span>Upload garment photos to start a new batch</span>
                 </div>
                 <Status tone="outline">No batch in progress</Status>
-              </div>
-              <div className="progress">
-                <span style={{ width: "0%" }} />
               </div>
               <Button
                 variant="secondary"
@@ -918,7 +915,7 @@ export function Intake({
   const [restoredBannerVisible, setRestoredBannerVisible] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isSavingDrafts, setIsSavingDrafts] = useState(false);
-  const [validationErrors, setValidationErrors] = useState<Record<string, { name?: string; price?: string }>>({});
+  const [validationErrors, setValidationErrors] = useState<Record<string, { name?: string; price?: string; discountPercent?: string }>>({});
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -1116,12 +1113,20 @@ export function Intake({
     if (!selectedPhotos.length) return;
 
     const groupNum = session.groups.length + 1;
+    const initialDept = "Women";
+    const initialCat = "T-Shirts";
+    const initialTpl = getProductDescriptionTemplate(initialDept, initialCat) || "";
     const newGroup: GarmentGroup = {
       id: `grp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      name: `New Garment ${groupNum}`,
-      department: "Women",
-      category: "T-Shirts",
+      name: "",
+      department: initialDept,
+      category: initialCat,
+      description: initialTpl,
+      isDescriptionCustom: false,
       price: "1200.00",
+      salePrice: "",
+      discountPercent: null,
+      forSale: false,
       status: "Draft",
       photoIds: [...selectedPhotos],
       primaryPhotoId: selectedPhotos[0],
@@ -1175,18 +1180,110 @@ export function Intake({
     showToast("Selected photos removed.");
   };
 
-  const updateGroupField = (groupId: string, field: keyof GarmentGroup, value: any) => {
+  const updateGroupField = (groupId: string, field: keyof GarmentGroup | "applyDescriptionTemplate", value: any) => {
     setSession((curr) => {
       const updatedGroups = curr.groups.map((g) => {
         if (g.id !== groupId) return g;
+
+        if (field === "applyDescriptionTemplate") {
+          const tpl = getProductDescriptionTemplate(g.department, g.category);
+          if (tpl) {
+            return {
+              ...g,
+              description: tpl,
+              isDescriptionCustom: false,
+            };
+          }
+          return g;
+        }
+
         if (field === "department") {
           const validCategories = DEPARTMENT_CATEGORIES[value] || DEPARTMENT_CATEGORIES.Women;
           const currentCategoryValid = validCategories.includes(g.category);
+          const nextCat = currentCategoryValid ? g.category : validCategories[0];
+
+          const currentTpl = getProductDescriptionTemplate(g.department, g.category);
+          const nextTpl = getProductDescriptionTemplate(value, nextCat);
+
+          const isAuto =
+            !g.isDescriptionCustom &&
+            (!g.description ||
+              g.description.trim() === "" ||
+              isKnownDescriptionTemplate(g.description) ||
+              g.description.trim() === (currentTpl || "").trim());
+
+          let nextDesc = g.description;
+          let nextCustom = g.isDescriptionCustom;
+
+          if (isAuto && nextTpl) {
+            nextDesc = nextTpl;
+            nextCustom = false;
+          }
+
           return {
             ...g,
             department: value,
-            category: currentCategoryValid ? g.category : validCategories[0],
+            category: nextCat,
+            description: nextDesc,
+            isDescriptionCustom: nextCustom,
           };
+        }
+
+        if (field === "category") {
+          const currentTpl = getProductDescriptionTemplate(g.department, g.category);
+          const nextTpl = getProductDescriptionTemplate(g.department, value);
+
+          const isAuto =
+            !g.isDescriptionCustom &&
+            (!g.description ||
+              g.description.trim() === "" ||
+              isKnownDescriptionTemplate(g.description) ||
+              g.description.trim() === (currentTpl || "").trim());
+
+          let nextDesc = g.description;
+          let nextCustom = g.isDescriptionCustom;
+
+          if (isAuto && nextTpl) {
+            nextDesc = nextTpl;
+            nextCustom = false;
+          }
+
+          return {
+            ...g,
+            category: value,
+            description: nextDesc,
+            isDescriptionCustom: nextCustom,
+          };
+        }
+
+        if (field === "description") {
+          const currentTpl = getProductDescriptionTemplate(g.department, g.category);
+          const trimmedVal = typeof value === "string" ? value.trim() : "";
+          const isMatchingCurrent = currentTpl ? trimmedVal === currentTpl.trim() : false;
+          const isKnownTpl = isKnownDescriptionTemplate(trimmedVal);
+          const isCustom = !isMatchingCurrent && !isKnownTpl && trimmedVal !== "";
+
+          return {
+            ...g,
+            description: value,
+            isDescriptionCustom: isCustom,
+          };
+        }
+        if (field === "price") {
+          const pNum = parseFloat(value);
+          let sp = g.salePrice;
+          if (g.discountPercent && !isNaN(pNum) && pNum > 0) {
+            sp = (Math.round(pNum * ((100 - Number(g.discountPercent)) / 100) * 100) / 100).toFixed(2);
+          }
+          return { ...g, price: value, salePrice: sp };
+        }
+        if (field === "discountPercent") {
+          const pNum = parseFloat(g.price);
+          let sp: string | undefined = undefined;
+          if (value && !isNaN(pNum) && pNum > 0) {
+            sp = (Math.round(pNum * ((100 - Number(value)) / 100) * 100) / 100).toFixed(2);
+          }
+          return { ...g, discountPercent: value, salePrice: sp };
         }
         return { ...g, [field]: value };
       });
@@ -1218,9 +1315,15 @@ export function Intake({
     setSession((curr) => {
       const updatedGroups = curr.groups.map((g) => {
         if (g.id !== groupId) return g;
+        const pNum = parseFloat(g.price);
+        let sp = g.salePrice;
+        if (forSale && g.discountPercent && !isNaN(pNum) && pNum > 0) {
+          sp = (Math.round(pNum * ((100 - Number(g.discountPercent)) / 100) * 100) / 100).toFixed(2);
+        }
         return {
           ...g,
-          variants: g.variants.map((v) => ({ ...v, is_available: forSale })),
+          forSale,
+          salePrice: sp,
         };
       });
       const updated = { ...curr, groups: updatedGroups, updatedAt: new Date().toISOString() };
@@ -1235,12 +1338,11 @@ export function Intake({
     setSession((curr) => {
       const updatedGroups = curr.groups.map((g) => {
         if (g.id !== groupId) return g;
-        const groupForSale = g.variants.some((v) => v.is_available !== false);
         return {
           ...g,
           variants: [
             ...g.variants,
-            { size: "L", color: "Black", sku: "", qty: "1", is_available: groupForSale },
+            { size: "L", color: "Black", sku: "", qty: "1", is_available: true },
           ],
         };
       });
@@ -1319,13 +1421,23 @@ export function Intake({
 
     try {
       let res: Response;
+      const priceNum = parseFloat(group.price) || 0;
+      const isForSale = Boolean(group.forSale);
+      let finalDiscountPercent: number | null = null;
+      let finalSalePrice: number | null = null;
+      if (isForSale && group.discountPercent) {
+        finalDiscountPercent = Number(group.discountPercent);
+        finalSalePrice = Math.round(priceNum * ((100 - finalDiscountPercent) / 100) * 100) / 100;
+      }
+
       const payload = {
         name: group.name.trim(),
         description: group.description?.trim() || null,
         department: group.department.toLowerCase(),
         category: group.category.trim(),
-        price: parseFloat(group.price) || 0,
-        sale_price: group.salePrice ? parseFloat(group.salePrice) : null,
+        price: priceNum,
+        sale_price: finalSalePrice,
+        discount_percent: finalDiscountPercent,
         fabric: group.fabric?.trim() || null,
         fit: group.fit?.trim() || null,
         status: targetStatus,
@@ -1400,7 +1512,7 @@ export function Intake({
     let hasError = false;
 
     for (const group of session.groups) {
-      const groupErrors: { name?: string; price?: string } = {};
+      const groupErrors: { name?: string; price?: string; discountPercent?: string } = {};
       if (!group.name || !group.name.trim()) {
         groupErrors.name = "Garment name is required";
         hasError = true;
@@ -1409,6 +1521,12 @@ export function Intake({
       if (isNaN(priceNum) || priceNum <= 0) {
         groupErrors.price = "Valid selling price is required (greater than 0)";
         hasError = true;
+      }
+      if (group.forSale) {
+        if (!group.discountPercent || !ALLOWED_DISCOUNT_PERCENTS.includes(Number(group.discountPercent) as any)) {
+          groupErrors.discountPercent = "Discount percentage is required when For sale is enabled";
+          hasError = true;
+        }
       }
       if (Object.keys(groupErrors).length > 0) {
         errors[group.id] = groupErrors;
@@ -1484,13 +1602,23 @@ export function Intake({
 
       try {
         let res: Response;
+        const priceNum = parseFloat(group.price) || 0;
+        const isForSale = Boolean(group.forSale);
+        let finalDiscountPercent: number | null = null;
+        let finalSalePrice: number | null = null;
+        if (isForSale && group.discountPercent) {
+          finalDiscountPercent = Number(group.discountPercent);
+          finalSalePrice = Math.round(priceNum * ((100 - finalDiscountPercent) / 100) * 100) / 100;
+        }
+
         const payload = {
           name: group.name.trim(),
           description: group.description?.trim() || null,
           department: group.department.toLowerCase(),
           category: group.category.trim(),
-          price: parseFloat(group.price) || 0,
-          sale_price: group.salePrice ? parseFloat(group.salePrice) : null,
+          price: priceNum,
+          sale_price: finalSalePrice,
+          discount_percent: finalDiscountPercent,
           fabric: group.fabric?.trim() || null,
           fit: group.fit?.trim() || null,
           status: "published",
@@ -1592,7 +1720,6 @@ export function Intake({
     <div className="page intake-page">
       <div className="batch-head">
         <div className="batch-head-info">
-          <div className="batch-eyebrow">ADD CLOTHES / BATCH #{session.batchId}</div>
           <div className="batch-title-row">
             <h1>Add Clothes</h1>
             <div className="mobile-header-actions">
@@ -1607,24 +1734,9 @@ export function Intake({
               </Button>
             </div>
           </div>
-          <div className="batch-meta-row">
-            <span className="batch-meta-counts">
-              {session.groups.length} garment{session.groups.length === 1 ? "" : "s"} · {session.photos.length} photo{session.photos.length === 1 ? "" : "s"}
-            </span>
-            <span className="batch-meta-dot">·</span>
-            <span className={`save-state ${savedBadge ? "saved" : ""}`}>
-              <span className="save-dot" />
-              {savedBadge ? "All changes saved" : "Unsaved changes"}
-            </span>
-            <span className="desktop-save-time">· Last saved {formatTimeAgo(session.updatedAt)}</span>
-          </div>
         </div>
 
         <div className="batch-actions desktop-header-actions">
-          <span className={`save-state ${savedBadge ? "saved" : ""}`}>
-            <span className="save-dot" />
-            {savedBadge ? "All changes saved" : "Unsaved changes"}
-          </span>
           <Button
             onClick={() => {
               persistSession({ ...session, updatedAt: new Date().toISOString() });
@@ -1725,13 +1837,7 @@ export function Intake({
         <button
           type="button"
           className={`workflow-tab ${tab === "review" ? "active" : ""}`}
-          onClick={() => {
-            if (session.groups.length > 0) {
-              handleNextToReview();
-            } else {
-              setTab("review");
-            }
-          }}
+          onClick={() => setTab("review")}
           aria-current={tab === "review" ? "step" : undefined}
           aria-label="Step 3: Review and Publish"
         >
@@ -1759,7 +1865,7 @@ export function Intake({
               </span>
               <div>
                 <strong>Upload Photos</strong>
-                <p>Drop photos here, or choose several photos from your computer.</p>
+                <p>Drop Photos</p>
               </div>
               <Button>Choose Photos</Button>
             </div>
@@ -1847,8 +1953,7 @@ export function Intake({
                   icon="plus"
                   onClick={createGroupFromSelected}
                 >
-                  <span className="desktop-btn-text">Group Photos into a Garment</span>
-                  <span className="mobile-btn-text">Group photos</span>
+                  Group Photos
                 </Button>
                 <Button
                   variant="danger"
@@ -1919,7 +2024,6 @@ export function Intake({
           <div className="workspace-head">
             <div>
               <h2>Add Garment Details</h2>
-              <p>Complete details, pricing, fabric, and inventory for each grouped garment right here.</p>
             </div>
           </div>
 
@@ -1964,11 +2068,19 @@ export function Intake({
                         {/* Compact Garment-level For Sale Toggle Card */}
                         <div className="garment-forsale-card">
                           <span className="garment-forsale-label">For sale</span>
-                          <label className="toggle" title="Available for purchase">
+                          <label className="toggle" title="Enable sale discount">
                             <input
                               type="checkbox"
-                              checked={group.variants.some((v) => v.is_available !== false)}
-                              onChange={(e) => toggleGarmentForSale(group.id, e.target.checked)}
+                              checked={Boolean(group.forSale)}
+                              onChange={(e) => {
+                                toggleGarmentForSale(group.id, e.target.checked);
+                                if (!e.target.checked && validationErrors[group.id]?.discountPercent) {
+                                  setValidationErrors((prev) => ({
+                                    ...prev,
+                                    [group.id]: { ...prev[group.id], discountPercent: undefined },
+                                  }));
+                                }
+                              }}
                               aria-label="For sale"
                             />
                             <span />
@@ -2003,7 +2115,6 @@ export function Intake({
                             <input
                               className={groupErrors.name ? "input-error" : ""}
                               value={group.name}
-                              placeholder="e.g. Silk Blend Midi Dress"
                               onChange={(e) => {
                                 updateGroupField(group.id, "name", e.target.value);
                                 if (validationErrors[group.id]?.name) {
@@ -2021,14 +2132,36 @@ export function Intake({
                             </span>
                           )}
 
-                          <Field label="Product description (optional)">
-                            <textarea
-                              rows={3}
-                              value={group.description || ""}
-                              placeholder="Describe fabric texture, fit, styling notes, or details..."
-                              onChange={(e) => updateGroupField(group.id, "description", e.target.value)}
-                            />
-                          </Field>
+                          {(() => {
+                            const activeTemplate = getProductDescriptionTemplate(group.department, group.category);
+                            const isTemplateActive = activeTemplate ? (group.description || "").trim() === activeTemplate.trim() : false;
+                            const canApplyTemplate = activeTemplate ? !isTemplateActive : false;
+
+                            return (
+                              <Field
+                                label="Product description (optional)"
+                                hint={isTemplateActive ? "Suggested description — editable" : undefined}
+                              >
+                                <textarea
+                                  rows={3}
+                                  value={group.description || ""}
+                                  placeholder="Describe fabric texture, fit, styling notes, or details..."
+                                  onChange={(e) => updateGroupField(group.id, "description", e.target.value)}
+                                />
+                                {canApplyTemplate && (
+                                  <div className="description-template-bar">
+                                    <button
+                                      type="button"
+                                      className="btn-use-template"
+                                      onClick={() => updateGroupField(group.id, "applyDescriptionTemplate", null)}
+                                    >
+                                      <Icon name="refresh" size={11} /> Use suggested description
+                                    </button>
+                                  </div>
+                                )}
+                              </Field>
+                            );
+                          })()}
 
                           <div className="form-grid two">
                             <Field label="Department" required>
@@ -2094,15 +2227,27 @@ export function Intake({
                               </div>
                             </Field>
 
-                            <Field label="Discounted price (₹) (optional)">
-                              <div className="money-input">
-                                <span>₹</span>
-                                <input
-                                  value={group.salePrice || ""}
-                                  placeholder="Leave blank if not on sale"
-                                  onChange={(e) => updateGroupField(group.id, "salePrice", e.target.value)}
-                                />
-                              </div>
+                            <Field label="Discounted Percent" required={Boolean(group.forSale)}>
+                              <select
+                                className={groupErrors.discountPercent ? "input-error" : ""}
+                                value={group.discountPercent ?? ""}
+                                onChange={(e) => {
+                                  const val = e.target.value ? parseInt(e.target.value, 10) : null;
+                                  updateGroupField(group.id, "discountPercent", val);
+                                  if (validationErrors[group.id]?.discountPercent) {
+                                    setValidationErrors((prev) => ({
+                                      ...prev,
+                                      [group.id]: { ...prev[group.id], discountPercent: undefined },
+                                    }));
+                                  }
+                                }}
+                                aria-label="Discounted Percent"
+                              >
+                                <option value="">Select discount</option>
+                                {ALLOWED_DISCOUNT_PERCENTS.map((pct) => (
+                                  <option key={pct} value={pct}>{pct}%</option>
+                                ))}
+                              </select>
                             </Field>
                           </div>
                           {groupErrors.price && (
@@ -2110,17 +2255,31 @@ export function Intake({
                               <Icon name="alert" size={13} /> {groupErrors.price}
                             </span>
                           )}
+                          {groupErrors.discountPercent && (
+                            <span className="field-error">
+                              <Icon name="alert" size={13} /> {groupErrors.discountPercent}
+                            </span>
+                          )}
+                          {group.forSale && Boolean(group.discountPercent) && parseFloat(group.price) > 0 && (
+                            <div className="sale-price-preview" aria-live="polite">
+                              <span className="preview-sale-price">
+                                ₹{(Math.round(parseFloat(group.price) * ((100 - Number(group.discountPercent)) / 100) * 100) / 100).toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                              </span>
+                              <span className="preview-original-price">
+                                ₹{parseFloat(group.price).toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                              </span>
+                              <span className="preview-discount-badge">{group.discountPercent}% OFF</span>
+                            </div>
+                          )}
 
                           {/* Variants Section */}
                           <div className="garment-variants-section">
                             <div className="variants-header-row">
                               <strong>Sizes and Inventory</strong>
-                              <span className="variants-subtitle">Configure size, colour, SKU, quantity and sale availability</span>
                             </div>
                             <div className="variant-head" aria-hidden="true">
                               <span>Size</span>
                               <span>Colour</span>
-                              <span>SKU <span className="field-optional">(optional)</span></span>
                               <span>Quantity</span>
                               <span className="vcol-action" />
                             </div>
@@ -2156,17 +2315,6 @@ export function Intake({
                                         <option key={c} value={c}>{c}</option>
                                       ))}
                                     </select>
-                                  </div>
-                                  <div className="variant-cell variant-cell-sku">
-                                    <label className="variant-mobile-label">
-                                      SKU <span className="field-optional">(optional)</span>
-                                    </label>
-                                    <input
-                                      value={v.sku || ""}
-                                      placeholder="e.g. BLK-M"
-                                      onChange={(e) => updateVariantInGroup(group.id, vIdx, "sku", e.target.value)}
-                                      aria-label="SKU"
-                                    />
                                   </div>
                                   <div className="variant-cell variant-cell-qty">
                                     <label className="variant-mobile-label">Quantity</label>
@@ -2282,8 +2430,17 @@ export function Intake({
                           </div>
                         </div>
                         <div className="review-price-block">
-                          <span className="review-price">₹{group.price}</span>
-                          {group.salePrice && <span className="review-sale-price">₹{group.salePrice}</span>}
+                          {group.forSale && group.salePrice ? (
+                            <>
+                              <span className="review-price">₹{group.salePrice}</span>
+                              <span className="review-old-price">₹{group.price}</span>
+                              {group.discountPercent && (
+                                <span className="review-discount-tag">{group.discountPercent}% OFF</span>
+                              )}
+                            </>
+                          ) : (
+                            <span className="review-price">₹{group.price}</span>
+                          )}
                         </div>
                       </div>
 
@@ -2414,7 +2571,7 @@ export function ProductTable({
             <th>Status</th>
             {!compact && <th>Selling price</th>}
             {!compact && <th>Sizes / stock</th>}
-            <th>Updated</th>
+            {!compact && <th>Updated</th>}
             <th />
           </tr>
         </thead>
@@ -2464,9 +2621,27 @@ export function ProductTable({
                       : "Draft"}
                   </Status>
                 </td>
-                {!compact && <td>₹{Number(product.price || 0).toFixed(2)}</td>}
+                {!compact && (
+                  <td>
+                    {product.sale_price !== null && product.sale_price !== undefined && Number(product.sale_price) < Number(product.price) ? (
+                      <div style={{ display: "inline-flex", alignItems: "baseline", gap: "6px" }}>
+                        <span>₹{Number(product.sale_price).toFixed(2)}</span>
+                        <span style={{ textDecoration: "line-through", color: "var(--admin-muted)", fontSize: "11px" }}>
+                          ₹{Number(product.price || 0).toFixed(2)}
+                        </span>
+                        {product.discount_percent && (
+                          <span style={{ fontSize: "10px", color: "var(--admin-burgundy)", fontWeight: 700 }}>
+                            {product.discount_percent}% OFF
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <>₹{Number(product.price || 0).toFixed(2)}</>
+                    )}
+                  </td>
+                )}
                 {!compact && <td>{stockSummary}</td>}
-                <td>{formatUpdatedDate(product.updated_at || product.created_at)}</td>
+                {!compact && <td>{formatUpdatedDate(product.updated_at || product.created_at)}</td>}
                 <td>
                   {compact ? (
                     <button
@@ -2537,31 +2712,8 @@ export function ProductGallery({
   onSelect?: (id: string) => void;
   onEdit?: (id: string) => void;
 }) {
-  const allPageSelected = rows.length > 0 && rows.every((r) => selected.includes(r.id));
-
   return (
     <div className="product-gallery-wrap">
-      <div className="gallery-toolbar-row">
-        <label className="gallery-select-all-label">
-          <input
-            type="checkbox"
-            aria-label="Select all clothes on this page"
-            checked={allPageSelected}
-            onChange={(e) => {
-              if (e.target.checked) {
-                rows.forEach((r) => !selected.includes(r.id) && onSelect?.(r.id));
-              } else {
-                rows.forEach((r) => selected.includes(r.id) && onSelect?.(r.id));
-              }
-            }}
-          />
-          <span>Select all on page ({rows.length})</span>
-        </label>
-        <span className="gallery-count-hint">
-          {selected.length > 0 ? `${selected.length} selected` : ""}
-        </span>
-      </div>
-
       <div className="product-gallery-grid">
         {rows.map((product) => {
           const isSelected = selected.includes(product.id);
@@ -2638,7 +2790,21 @@ export function ProductGallery({
 
                 <div className="gallery-card-meta-row">
                   <div className="gallery-card-price">
-                    ₹{Number(product.price || 0).toFixed(2)}
+                    {product.sale_price !== null && product.sale_price !== undefined && Number(product.sale_price) < Number(product.price) ? (
+                      <div style={{ display: "inline-flex", alignItems: "baseline", gap: "6px" }}>
+                        <span>₹{Number(product.sale_price).toFixed(2)}</span>
+                        <span style={{ textDecoration: "line-through", color: "var(--admin-muted)", fontSize: "11px" }}>
+                          ₹{Number(product.price || 0).toFixed(2)}
+                        </span>
+                        {product.discount_percent && (
+                          <span style={{ fontSize: "10px", color: "var(--admin-burgundy)", fontWeight: 700 }}>
+                            {product.discount_percent}% OFF
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <>₹{Number(product.price || 0).toFixed(2)}</>
+                    )}
                   </div>
                   <div className="gallery-card-stock" title={stockSummary}>
                     {stockSummary}
@@ -2780,7 +2946,6 @@ export function Catalogue({
     <div className="page">
       <PageHeader
         title="All Clothes"
-        description="Find and manage every garment in your shop."
         actions={
           <Button variant="primary" icon="plus" onClick={() => navigate("editor")}>
             Add Garment
@@ -2852,34 +3017,52 @@ export function Catalogue({
         </div>
 
         <div className="saved-views">
-          <span>Saved views</span>
-          <button
-            className={status === "All statuses" ? "active" : ""}
-            onClick={() => {
-              setStatus("All statuses");
-              setPage(1);
-            }}
-          >
-            All clothes <b>{products.length}</b>
-          </button>
-          <button
-            className={status === "Draft" ? "active" : ""}
-            onClick={() => {
-              setStatus("Draft");
-              setPage(1);
-            }}
-          >
-            Drafts <b>{products.filter((p) => p.status?.toLowerCase() === "draft").length}</b>
-          </button>
-          <button
-            className={status === "In archive" ? "active" : ""}
-            onClick={() => {
-              setStatus("In archive");
-              setPage(1);
-            }}
-          >
-            Archived <b>{products.filter((p) => p.status?.toLowerCase() === "archived").length}</b>
-          </button>
+          <div className="saved-views-desktop">
+            <span>Saved views</span>
+            <button
+              className={status === "All statuses" ? "active" : ""}
+              onClick={() => {
+                setStatus("All statuses");
+                setPage(1);
+              }}
+            >
+              All clothes <b>{products.length}</b>
+            </button>
+            <button
+              className={status === "Draft" ? "active" : ""}
+              onClick={() => {
+                setStatus("Draft");
+                setPage(1);
+              }}
+            >
+              Drafts <b>{products.filter((p) => p.status?.toLowerCase() === "draft").length}</b>
+            </button>
+            <button
+              className={status === "In archive" ? "active" : ""}
+              onClick={() => {
+                setStatus("In archive");
+                setPage(1);
+              }}
+            >
+              Archived <b>{products.filter((p) => p.status?.toLowerCase() === "archived").length}</b>
+            </button>
+          </div>
+
+          <label className="saved-views-mobile">
+            Saved views{" "}
+            <select
+              value={["All statuses", "Draft", "In archive"].includes(status) ? status : "All statuses"}
+              onChange={(e) => {
+                setStatus(e.target.value);
+                setPage(1);
+              }}
+              aria-label="Saved views"
+            >
+              <option value="All statuses">All clothes ({products.length})</option>
+              <option value="Draft">Drafts ({products.filter((p) => p.status?.toLowerCase() === "draft").length})</option>
+              <option value="In archive">Archived ({products.filter((p) => p.status?.toLowerCase() === "archived").length})</option>
+            </select>
+          </label>
           <div />
           <label>
             Sort by{" "}

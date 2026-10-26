@@ -45,6 +45,7 @@ interface UpdateProductRequestBody {
   category?: string;
   price?: number;
   sale_price?: number | null;
+  discount_percent?: number | null;
   fabric?: string | null;
   fit?: string | null;
   status?: "draft" | "published" | "archived";
@@ -56,6 +57,7 @@ interface UpdateProductRequestBody {
 
 const VALID_DEPARTMENTS = new Set(["men", "women", "kids"]);
 const VALID_STATUSES = new Set(["draft", "published", "archived"]);
+const ALLOWED_DISCOUNT_PERCENTS = new Set([10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65]);
 
 /**
  * Resolves a product identifier (UUID or slug) into the canonical database product record.
@@ -232,6 +234,7 @@ export async function PUT(
     category,
     price,
     sale_price,
+    discount_percent,
     fabric,
     fit,
     status,
@@ -283,10 +286,30 @@ export async function PUT(
     productUpdates.price = effectivePrice;
   }
 
-  // Validate Sale Price
-  if (sale_price !== undefined) {
-    if (sale_price === null || sale_price === 0) {
+  // Validate Discount Percent and Sale Price
+  if (discount_percent !== undefined) {
+    if (discount_percent === null || discount_percent === 0 || String(discount_percent).trim() === "") {
+      productUpdates.discount_percent = null;
+      if (sale_price === undefined) {
+        productUpdates.sale_price = null;
+      }
+    } else {
+      const numDiscountPercent = Number(discount_percent);
+      if (!ALLOWED_DISCOUNT_PERCENTS.has(numDiscountPercent)) {
+        return Response.json(
+          { error: "Discount percentage must be one of: 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65." },
+          { status: 400 }
+        );
+      }
+      productUpdates.discount_percent = numDiscountPercent;
+      productUpdates.sale_price = Math.round(effectivePrice * ((100 - numDiscountPercent) / 100) * 100) / 100;
+    }
+  }
+
+  if (sale_price !== undefined && discount_percent === undefined) {
+    if (sale_price === null || sale_price === 0 || String(sale_price).trim() === "") {
       productUpdates.sale_price = null;
+      productUpdates.discount_percent = null;
     } else {
       const numSalePrice = Number(sale_price);
       if (isNaN(numSalePrice) || numSalePrice < 0) {

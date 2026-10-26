@@ -42,6 +42,7 @@ interface CreateProductRequestBody {
   category: string;
   price: number;
   sale_price?: number | null;
+  discount_percent?: number | null;
   fabric?: string | null;
   fit?: string | null;
   status?: "draft" | "published" | "archived";
@@ -53,6 +54,7 @@ interface CreateProductRequestBody {
 
 const VALID_DEPARTMENTS = new Set(["men", "women", "kids"]);
 const VALID_STATUSES = new Set(["draft", "published", "archived"]);
+const ALLOWED_DISCOUNT_PERCENTS = new Set([10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65]);
 
 /**
  * POST /api/admin/products
@@ -96,6 +98,7 @@ export async function POST(request: NextRequest) {
     category,
     price,
     sale_price,
+    discount_percent,
     fabric,
     fit,
     status = "draft",
@@ -153,9 +156,21 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Sale Price
+  // Sale Price & Discount Percent
   let numSalePrice: number | null = null;
-  if (sale_price !== undefined && sale_price !== null && String(sale_price).trim() !== "") {
+  let numDiscountPercent: number | null = null;
+
+  if (discount_percent !== undefined && discount_percent !== null && String(discount_percent).trim() !== "") {
+    numDiscountPercent = Number(discount_percent);
+    if (!ALLOWED_DISCOUNT_PERCENTS.has(numDiscountPercent)) {
+      return Response.json(
+        { error: "Discount percentage must be one of: 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65." },
+        { status: 400 }
+      );
+    }
+    // Calculate and enforce consistent sale price based on discount_percent: sale_price = ROUND(price * (100 - discount_percent) / 100, 2)
+    numSalePrice = Math.round(numPrice * ((100 - numDiscountPercent) / 100) * 100) / 100;
+  } else if (sale_price !== undefined && sale_price !== null && String(sale_price).trim() !== "") {
     numSalePrice = Number(sale_price);
     if (isNaN(numSalePrice) || numSalePrice < 0 || !isFinite(numSalePrice)) {
       return Response.json(
@@ -391,6 +406,7 @@ export async function POST(request: NextRequest) {
         category: cleanCategory,
         price: numPrice,
         sale_price: numSalePrice,
+        discount_percent: numDiscountPercent,
         fabric: cleanFabric,
         fit: cleanFit,
         status,

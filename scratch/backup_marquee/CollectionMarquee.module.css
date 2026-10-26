@@ -1,0 +1,102 @@
+/* ═══════════════════════════════════════════════════════════
+   COLLECTION PROMOTIONAL SCROLLING MARQUEE BANNER
+   Toolbar Integration - Scoped Component Styles
+   ═══════════════════════════════════════════════════════════ */
+
+.marqueeContainer {
+  width: 100%;
+  height: 44px;
+  background-color: #303030 !important;
+  color: #ffffff !important;
+  display: flex !important;
+  align-items: center;
+  overflow: hidden !important;
+  position: relative;
+  user-select: none;
+  margin: 0;
+  box-sizing: border-box;
+  border-radius: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.marqueeTrack {
+  display: flex !important;
+  width: max-content !important;
+  align-items: center;
+  flex-shrink: 0;
+  will-change: transform;
+  animation: marqueeScroll 26s linear infinite;
+}
+
+.marqueeContainer:hover .marqueeTrack {
+  animation-play-state: paused;
+}
+
+.marqueeGroup {
+  display: flex !important;
+  align-items: center;
+  flex-shrink: 0;
+  white-space: nowrap !important;
+}
+
+.marqueeItem {
+  display: inline-flex !important;
+  align-items: center;
+  white-space: nowrap !important;
+  flex-shrink: 0;
+  padding: 0 28px;
+  color: #ffffff !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+@keyframes marqueeScroll {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@media (max-width: 760px) {
+  .marqueeContainer {
+    height: 36px;
+  }
+  .marqueeItem {
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    padding: 0 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .marqueeContainer {
+    height: 34px;
+  }
+  .marqueeItem {
+    font-size: 9.5px;
+    letter-spacing: 0.03em;
+    padding: 0 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marqueeTrack {
+    animation: none !important;
+    transform: none !important;
+  }
+  .marqueeContainer {
+    overflow-x: auto !important;
+  }
+  .marqueeGroup[aria-hidden="true"] {
+    display: none !important;
+  }
+}

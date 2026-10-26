@@ -22,7 +22,7 @@ export default function CollectionMarquee() {
       role="region"
       aria-label="Promotional offers marquee"
       style={{
-        backgroundColor: "#303030",
+        backgroundColor: "var(--burgundy, #702b38)",
         color: "#ffffff",
         width: "100%",
         overflow: "hidden",
@@ -68,7 +68,8 @@ export default function CollectionMarquee() {
                 color: "#ffffff",
               }}
             >
-              {msg}
+              <span>{msg}</span>
+              <span className={`${styles.marqueeSeparator} collection-marquee-separator`} aria-hidden="true">•</span>
             </span>
           ))}
         </div>
@@ -96,7 +97,8 @@ export default function CollectionMarquee() {
                 color: "#ffffff",
               }}
             >
-              {msg}
+              <span>{msg}</span>
+              <span className={`${styles.marqueeSeparator} collection-marquee-separator`} aria-hidden="true">•</span>
             </span>
           ))}
         </div>
