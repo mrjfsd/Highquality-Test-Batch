@@ -7,6 +7,8 @@ import {
 import type { Metadata } from "next";
 import Link from "next/link";
 import HomeScrollAnimator from "@/components/HomeScrollAnimator";
+import { getPromoBannerConfig, PromoBannerConfig } from "@/lib/settings/site-settings";
+export const instant = false;
 
 export const metadata: Metadata = {
   title: "Style-Edit | Considered Everyday Fashion",
@@ -172,34 +174,77 @@ function SectionHeading({
   );
 }
 
-/* ── Section 2: Promotional Banner (Diwali Sale) ── */
-function HomePromotionalBanner() {
+/* ── Section 2: Promotional Banner ── */
+function HomePromotionalBanner({ banner }: { banner?: PromoBannerConfig | null }) {
+  // If explicitly disabled, remove the entire section from layout with zero margin/height
+  if (banner && banner.enabled === false) {
+    return null;
+  }
+
+  const imageUrl = banner?.imageUrl || "/assets/image.png";
+  const altText = banner?.altText || "Promotional Banner — Click to explore sale pieces";
+  const posX = typeof banner?.positionX === "number" ? banner.positionX : 50;
+  const posY = typeof banner?.positionY === "number" ? banner.positionY : 46;
+  const zoom = typeof banner?.zoom === "number" ? banner.zoom : 1.0;
+
   return (
     <section className="home-promo-banner" aria-label="Festive Promotion">
       <Link
-        href="/shop/women"
+        href="/sale"
         className="home-promo-banner-link"
-        aria-label="Diwali Sale — Shop the festive collection"
+        aria-label="Promotional Sale — Shop The Sale Edit"
       >
-        <picture>
-          <source
-            media="(max-width: 640px)"
-            srcSet="/assets/image-mobile.webp"
-            type="image/webp"
-          />
-          <source srcSet="/assets/image.webp" type="image/webp" />
-          {/* eslint-disable-next-line @next/next/no-img-element */}
+        {imageUrl === "/assets/image.png" ? (
+          <picture>
+            <source
+              media="(max-width: 640px)"
+              srcSet="/assets/image-mobile.webp"
+              type="image/webp"
+            />
+            <source srcSet="/assets/image.webp" type="image/webp" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/assets/image.png"
+              alt={altText}
+              className="home-promo-banner-image"
+              style={{
+                objectPosition: `${posX}% ${posY}%`,
+                ...(zoom > 1
+                  ? {
+                      transform: `scale(${zoom})`,
+                      transformOrigin: `${posX}% ${posY}%`,
+                    }
+                  : {}),
+              }}
+              loading="eager"
+              fetchPriority="high"
+              decoding="async"
+              width={2172}
+              height={724}
+            />
+          </picture>
+        ) : (
+          /* eslint-disable-next-line @next/next/no-img-element */
           <img
-            src="/assets/image.png"
-            alt="Diwali Sale Promotional Banner"
+            src={imageUrl}
+            alt={altText}
             className="home-promo-banner-image"
+            style={{
+              objectPosition: `${posX}% ${posY}%`,
+              ...(zoom > 1
+                ? {
+                    transform: `scale(${zoom})`,
+                    transformOrigin: `${posX}% ${posY}%`,
+                  }
+                : {}),
+            }}
             loading="eager"
             fetchPriority="high"
             decoding="async"
             width={2172}
             height={724}
           />
-        </picture>
+        )}
       </Link>
     </section>
   );
@@ -458,11 +503,13 @@ function BrandStatement() {
   );
 }
 
-export default function HomePage() {
+export default async function HomePage() {
+  const banner = await getPromoBannerConfig();
+
   return (
     <main className="site-shell">
       <HomeScrollAnimator />
-      <HomePromotionalBanner />
+      <HomePromotionalBanner banner={banner} />
       <HeroBanner />
       <ShopByDepartment />
       <FeaturedProducts />

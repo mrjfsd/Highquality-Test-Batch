@@ -13,9 +13,14 @@ import {
 interface ProductCardProps {
   product: Product;
   priority?: boolean;
+  isSalePage?: boolean;
 }
 
-export default function ProductCard({ product, priority = false }: ProductCardProps) {
+export default function ProductCard({
+  product,
+  priority = false,
+  isSalePage = false,
+}: ProductCardProps) {
   const hasDiscount =
     typeof product.sale === "number" && product.sale < product.price;
 
@@ -103,7 +108,12 @@ export default function ProductCard({ product, priority = false }: ProductCardPr
           aria-label={`View ${product.name}`}
           tabIndex={0}
         >
-          {hasDiscount && <span className="sale-tag">EDIT PRICE</span>}
+          {hasDiscount && (
+            <span className="sale-tag sale-tag--on-sale" aria-label="On Sale">
+              <span className="sale-tag-text">ON SALE</span>
+              <span className="sale-tag-hole" aria-hidden="true" />
+            </span>
+          )}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             className="product-image"

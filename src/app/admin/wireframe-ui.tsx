@@ -5,8 +5,9 @@ import { getSupabaseClient } from "@/lib/supabase/client";
 import { verifyAdminAuthorization } from "@/lib/supabase/auth";
 import { compressImageForUpload, uploadToR2WithProgress } from "@/lib/images/client-compression";
 import { getProductDescriptionTemplate, isKnownDescriptionTemplate } from "@/lib/products/description-templates";
+import { BannerManagementScreen } from "./banner-management";
 
-export type Page = "overview" | "intake" | "catalogue" | "editor" | "media";
+export type Page = "overview" | "intake" | "catalogue" | "editor" | "media" | "banner";
 export type ProductStatus = "Published" | "Draft" | "Review" | "Archived";
 
 export interface LiveProductImage {
@@ -212,6 +213,7 @@ export const nav: { id: Page; label: string; icon: string }[] = [
   { id: "intake", label: "Add Clothes", icon: "upload" },
   { id: "catalogue", label: "All Clothes", icon: "list" },
   { id: "editor", label: "Edit Garment", icon: "edit" },
+  { id: "banner", label: "Banner", icon: "image" },
 ];
 
 export function Icon({ name, size = 18 }: { name: string; size?: number }) {
@@ -349,6 +351,7 @@ export function Button({
   type = "button",
   style,
   className,
+  title,
   "aria-label": ariaLabel,
 }: {
   children: ReactNode;
@@ -359,6 +362,7 @@ export function Button({
   type?: "button" | "submit";
   style?: React.CSSProperties;
   className?: string;
+  title?: string;
   "aria-label"?: string;
 }) {
   return (
@@ -368,7 +372,8 @@ export function Button({
       onClick={onClick}
       disabled={disabled}
       style={style}
-      aria-label={ariaLabel}
+      title={title}
+      aria-label={ariaLabel || title}
     >
       {icon && <Icon name={icon} size={16} />}
       {children}
@@ -381,7 +386,7 @@ export function Status({
   tone = "neutral",
 }: {
   children: ReactNode;
-  tone?: "neutral" | "dark" | "outline" | "error";
+  tone?: "neutral" | "dark" | "outline" | "error" | "gold";
 }) {
   return <span className={`status status-${tone}`}>{children}</span>;
 }
@@ -595,7 +600,6 @@ export function Sidebar({
           >
             <Icon name={item.icon} size={18} />
             {!collapsed && <span>{item.label}</span>}
-            {!collapsed && item.id === "editor" && <span className="context-dot" />}
           </button>
         ))}
       </nav>
@@ -4119,6 +4123,7 @@ export default function App({
         ? `/admin/products/${editingProductId}`
         : "/admin/editor",
       media: "/admin/media",
+      banner: "/admin/banner",
     };
     if (typeof window !== "undefined" && window.location.pathname !== routeMap[p]) {
       window.history.pushState(null, "", routeMap[p]);
@@ -4168,6 +4173,13 @@ export default function App({
           showToast={showToast}
           navigate={setPage}
           onProductSaved={refreshProducts}
+        />
+      );
+    if (page === "banner")
+      return (
+        <BannerManagementScreen
+          showToast={showToast}
+          navigate={setPage}
         />
       );
     return <MediaLibrary showToast={showToast} navigate={setPage} />;

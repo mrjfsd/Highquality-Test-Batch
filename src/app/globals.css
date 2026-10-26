@@ -311,6 +311,32 @@
   outline-offset: 3px;
 }
 
+/* ── Dedicated Sale Link Accent in Desktop Navbar ── */
+.desktop-nav a.nav-sale-link {
+  color: var(--burgundy, #702b38);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.desktop-nav a.nav-sale-link::after {
+  background: var(--burgundy, #702b38);
+}
+
+.desktop-nav a.nav-sale-link:hover {
+  color: #a31d36;
+}
+
+.home-navbar .desktop-nav a.nav-sale-link {
+  color: var(--burgundy, #702b38);
+  font-weight: 600;
+  opacity: 1;
+}
+
+.home-navbar .desktop-nav a.nav-sale-link:hover {
+  color: #a31d36;
+  opacity: 1;
+}
+
 .nav-actions {
   display: flex;
   justify-content: flex-end;
@@ -454,6 +480,18 @@
   color: var(--burgundy);
 }
 
+.mobile-nav-links a.mobile-nav-sale-link {
+  color: var(--burgundy, #702b38);
+  font-weight: 600;
+  background: rgba(112, 43, 56, 0.05);
+}
+
+.mobile-nav-links a.mobile-nav-sale-link:hover,
+.mobile-nav-links a.mobile-nav-sale-link:focus {
+  background: rgba(112, 43, 56, 0.12);
+  color: #a31d36;
+}
+
 .mobile-nav-search {
   margin-top: 8px;
   position: relative;
@@ -552,6 +590,17 @@
   line-height: 0;
   text-decoration: none;
   cursor: pointer;
+  transition: opacity 200ms ease, filter 200ms ease;
+}
+
+.home-promo-banner-link:hover {
+  opacity: 0.96;
+  filter: brightness(1.02);
+}
+
+.home-promo-banner-link:focus-visible {
+  outline: 2px solid var(--burgundy);
+  outline-offset: -2px;
 }
 
 .home-promo-banner-image {
@@ -3232,15 +3281,95 @@
 
 /* Product Card Styling within detail / related */
 .product-card { cursor: pointer; min-width: 0; }
-.product-card .sale-tag {
+/* ── Horizontal Red Sale Tag for storefront product cards ── */
+.product-card .sale-tag,
+.product-card .sale-tag--on-sale,
+.sale-page .product-card .sale-tag {
   position: absolute;
-  z-index: 2;
+  z-index: 3;
   top: 12px;
   left: 12px;
-  background: var(--paper);
-  padding: 7px 9px;
-  font-size: 8px;
-  letter-spacing: .12em;
+  display: inline-flex;
+  align-items: center;
+  gap: 6.5px;
+  background: #dc2626 !important;
+  color: #ffffff !important;
+  height: 20px;
+  padding: 0 8px 0 9px;
+  box-sizing: border-box;
+  clip-path: polygon(
+    2px 0%,
+    calc(100% - 5px) 0%,
+    100% 5px,
+    100% calc(100% - 5px),
+    calc(100% - 5px) 100%,
+    2px 100%,
+    0% calc(100% - 2px),
+    0% 2px
+  );
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.25));
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+  transition: transform 0.2s ease, filter 0.2s ease;
+}
+
+.product-card:hover .sale-tag,
+.product-card:hover .sale-tag--on-sale,
+.sale-page .product-card:hover .sale-tag {
+  transform: translateY(-1px);
+  filter: drop-shadow(0 3px 6px rgba(220, 38, 38, 0.38));
+}
+
+.product-card .sale-tag .sale-tag-text,
+.product-card .sale-tag--on-sale .sale-tag-text,
+.sale-page .product-card .sale-tag .sale-tag-text {
+  font-family: inherit;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #ffffff;
+  line-height: 1;
+}
+
+.product-card .sale-tag .sale-tag-hole,
+.product-card .sale-tag--on-sale .sale-tag-hole,
+.sale-page .product-card .sale-tag .sale-tag-hole {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background-color: #ffffff;
+  box-shadow: inset 0 1px 1.5px rgba(0, 0, 0, 0.4);
+  flex-shrink: 0;
+  opacity: 0.95;
+}
+
+@media (max-width: 640px) {
+  .product-card .sale-tag,
+  .product-card .sale-tag--on-sale,
+  .sale-page .product-card .sale-tag {
+    top: 10px;
+    left: 10px;
+    height: 18px;
+    padding: 0 7px 0 8px;
+    gap: 5px;
+  }
+
+  .product-card .sale-tag .sale-tag-text,
+  .product-card .sale-tag--on-sale .sale-tag-text,
+  .sale-page .product-card .sale-tag .sale-tag-text {
+    font-size: 7.5px;
+    letter-spacing: 0.1em;
+  }
+
+  .product-card .sale-tag .sale-tag-hole,
+  .product-card .sale-tag--on-sale .sale-tag-hole,
+  .sale-page .product-card .sale-tag .sale-tag-hole {
+    width: 4px;
+    height: 4px;
+  }
 }
 .product-card .old-price {
   text-decoration: line-through;
@@ -4243,7 +4372,6 @@ html.animations-ready .reveal-heading.is-visible {
   }
 }
 
-
 /* Lightweight Skeleton Loading Shimmer */
 @keyframes styleEditPulse {
   0%, 100% {
@@ -4263,3 +4391,177 @@ html.animations-ready .reveal-heading.is-visible {
     animation: none !important;
   }
 }
+
+/* ============================================================
+   THE SALE EDIT — Customer-Facing Sale Listing Page (/sale)
+   ============================================================ */
+.sale-page {
+  background: var(--paper, #f8f5f0);
+  min-height: 85vh;
+}
+
+.sale-breadcrumb-wrap {
+  width: 100%;
+  max-width: 1680px;
+  margin: 0 auto;
+  padding: 16px 4vw 0;
+  box-sizing: border-box;
+}
+
+.sale-breadcrumb-inner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted, #746e68);
+}
+
+.sale-breadcrumb-link {
+  color: var(--muted, #746e68);
+  transition: color 150ms ease;
+}
+
+.sale-breadcrumb-link:hover {
+  color: var(--burgundy, #702b38);
+}
+
+.sale-breadcrumb-separator {
+  opacity: 0.5;
+}
+
+.sale-breadcrumb-current {
+  color: var(--ink, #151515);
+  font-weight: 600;
+}
+
+.sale-header {
+  text-align: center;
+  padding: 38px 20px 36px;
+  border-bottom: 1px solid var(--line, #d7d7d1);
+  background: var(--paper, #f8f5f0);
+}
+
+.sale-header-inner {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.sale-eyebrow {
+  display: inline-block;
+  color: var(--burgundy, #702b38);
+  font-family: var(--sans, "DM Sans", sans-serif);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.sale-title {
+  margin: 0 0 12px;
+  font-family: var(--serif, "Cormorant Garamond", Georgia, serif);
+  font-size: clamp(38px, 4.8vw, 62px);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  color: var(--ink, #151515);
+}
+
+.sale-subtitle {
+  margin: 0 auto;
+  color: var(--muted, #746e68);
+  font-size: 14.5px;
+  line-height: 1.55;
+  max-width: 520px;
+}
+
+.sale-count-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 18px;
+  padding: 4px 14px;
+  background: rgba(112, 43, 56, 0.08);
+  border: 1px solid rgba(112, 43, 56, 0.18);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--burgundy, #702b38);
+}
+
+.sale-collection-layout {
+  padding-top: 32px;
+  padding-bottom: 80px;
+}
+
+/* Sale Empty State */
+.sale-empty-state {
+  border: 1px solid var(--line, #d7d7d1);
+  border-radius: 2px;
+  padding: 72px 24px;
+  background: var(--white, #ffffff);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+  max-width: 680px;
+  margin: 32px auto 60px;
+  text-align: center;
+}
+
+.sale-empty-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(112, 43, 56, 0.06);
+  color: var(--burgundy, #702b38);
+}
+
+.sale-empty-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 24px;
+}
+
+.sale-empty-actions .button {
+  margin-top: 0;
+  min-height: 44px;
+  padding: 0 22px;
+  font-size: 11px;
+}
+
+.sale-btn-outline {
+  background: transparent;
+  color: var(--charcoal, #252321);
+  border: 1px solid var(--charcoal, #252321);
+}
+
+.sale-btn-outline:hover {
+  background: var(--charcoal, #252321);
+  color: var(--white, #ffffff);
+}
+
+@media (max-width: 768px) {
+  .sale-header {
+    padding: 28px 16px 24px;
+  }
+  .sale-subtitle {
+    font-size: 13.5px;
+  }
+  .sale-collection-layout {
+    padding-top: 20px;
+    padding-bottom: 50px;
+  }
+  .sale-empty-state {
+    padding: 48px 16px;
+    margin: 20px 0;
+  }
+}
+

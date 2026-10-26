@@ -35,6 +35,7 @@ function BrandLockup() {
 
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [showSaleLink, setShowSaleLink] = useState<boolean>(true);
   const pathname = usePathname();
   const isHome = pathname === "/";
 
@@ -50,6 +51,28 @@ export default function Navbar() {
     };
   }, [mobileOpen]);
 
+  // Fetch navbar settings on mount
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchNavbarSettings() {
+      try {
+        const res = await fetch("/api/settings");
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted && data?.navbar && typeof data.navbar.showSaleLink === "boolean") {
+            setShowSaleLink(data.navbar.showSaleLink);
+          }
+        }
+      } catch (err) {
+        console.warn("[Navbar] Could not load navbar settings:", err);
+      }
+    }
+    fetchNavbarSettings();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const closeMenu = () => setMobileOpen(false);
 
   return (
@@ -62,6 +85,11 @@ export default function Navbar() {
           <Link href="/shop/men" prefetch={true}>Men</Link>
           <Link href="/shop/women" prefetch={true}>Women</Link>
           <Link href="/shop/kids" prefetch={true}>Kids</Link>
+          {showSaleLink && (
+            <Link href="/sale" prefetch={true} className="nav-sale-link">
+              Sale
+            </Link>
+          )}
         </nav>
 
         {/* Nav Actions: Exact order Instagram → WhatsApp → Google Maps → Cart → Mobile menu toggle */}
@@ -164,6 +192,12 @@ export default function Navbar() {
                 <span>Kids</span>
                 <ArrowRightIcon size={16} />
               </Link>
+              {showSaleLink && (
+                <Link href="/sale" className="mobile-nav-sale-link" onClick={closeMenu}>
+                  <span>Sale</span>
+                  <ArrowRightIcon size={16} />
+                </Link>
+              )}
             </nav>
 
             <div className="mobile-nav-footer">

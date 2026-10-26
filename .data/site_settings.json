@@ -1,0 +1,24 @@
+{
+  "catalogue_marquee": {
+    "ads": [
+      "",
+      "",
+      ""
+    ],
+    "updatedAt": "2026-10-26T19:07:52.961Z"
+  },
+  "promo_banner": {
+    "imageUrl": "/api/images/products/banner/1793043442312-cd5ce279-d49a-4c04-92b8-5b518a39ef0a.png",
+    "storagePath": "products/banner/1793043442312-cd5ce279-d49a-4c04-92b8-5b518a39ef0a.png",
+    "altText": "Homepage Promotional Banner — Click to explore sale pieces",
+    "enabled": true,
+    "positionX": 51,
+    "positionY": 0,
+    "zoom": 1,
+    "updatedAt": "2026-10-26T20:30:00.211Z"
+  },
+  "navbar": {
+    "showSaleLink": true,
+    "updatedAt": "2026-10-26T21:18:47.192Z"
+  }
+}

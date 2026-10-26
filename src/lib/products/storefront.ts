@@ -15,6 +15,117 @@ function normalizeDepartment(raw: string): { lower: string; title: Department } 
 }
 
 /**
+ * Maps a raw Supabase product row (with product_images and product_variants)
+ * to the storefront Product interface.
+ */
+export function mapDbProductToStorefront(p: {
+  id: string;
+  slug: string;
+  department: string;
+  category: string;
+  name: string;
+  price: number | string;
+  sale_price?: number | string | null;
+  fabric?: string | null;
+  fit?: string | null;
+  description?: string | null;
+  created_at?: string;
+  product_images?: Array<{
+    id?: string;
+    storage_path?: string;
+    alt_text?: string | null;
+    is_primary?: boolean | null;
+    display_order?: number | null;
+  }>;
+  product_variants?: Array<{
+    id?: string;
+    size?: string | null;
+    color?: string | null;
+    is_available?: boolean | null;
+    stock_quantity?: number | null;
+  }>;
+}): Product {
+  const { title: deptTitle } = normalizeDepartment(p.department || "");
+
+  // Extract all valid images in ascending display_order while respecting primary selection
+  const rawImages = Array.isArray(p.product_images)
+    ? [...p.product_images]
+        .filter((img): img is { id?: string; storage_path: string; alt_text?: string | null; is_primary?: boolean | null; display_order?: number | null } => Boolean(img.storage_path))
+        .sort((a, b) => {
+          const orderDiff = (a.display_order ?? 0) - (b.display_order ?? 0);
+          if (orderDiff !== 0) return orderDiff;
+          if (a.is_primary && !b.is_primary) return -1;
+          if (!a.is_primary && b.is_primary) return 1;
+          return 0;
+        })
+    : [];
+
+  const galleryImages = rawImages.map((img) => ({
+    id: img.id,
+    url: `/api/images/${img.storage_path}`,
+    alt: img.alt_text || p.name,
+    is_primary: Boolean(img.is_primary),
+    display_order: img.display_order ?? 0,
+  }));
+
+  const primaryImage =
+    galleryImages.find((img) => img.is_primary) || galleryImages[0];
+
+  const image =
+    primaryImage?.url ||
+    "https://images.unsplash.com/photo-1613915617430-8ab0fd7c6baf?auto=format&fit=crop&w=1200&q=80";
+
+  const alt = primaryImage?.alt || p.name;
+
+  // Collect available colors strictly from configured product variants
+  const colorsSet = new Set<string>();
+  if (Array.isArray(p.product_variants)) {
+    p.product_variants.forEach((v) => {
+      if (v.color && v.color.trim()) colorsSet.add(v.color.trim());
+    });
+  }
+  const colors = Array.from(colorsSet);
+
+  // Map client-safe variant options (omitting sensitive sku and stock_quantity)
+  const variants = Array.isArray(p.product_variants)
+    ? p.product_variants.map((v) => ({
+        id: v.id,
+        size: (v.size || "").trim(),
+        color: (v.color || "").trim(),
+        is_available:
+          Boolean(v.is_available) &&
+          (typeof v.stock_quantity === "number" ? v.stock_quantity > 0 : true),
+      }))
+    : [];
+
+  return {
+    id: p.id,
+    slug: p.slug,
+    department: deptTitle,
+    category: p.category,
+    name: p.name,
+    price: Number(p.price),
+    sale:
+      p.sale_price !== null && p.sale_price !== undefined && String(p.sale_price).trim() !== ""
+        ? Number(p.sale_price)
+        : undefined,
+    image,
+    images:
+      galleryImages.length > 0
+        ? galleryImages
+        : [{ url: image, alt, is_primary: true }],
+    alt,
+    colors,
+    fabric: p.fabric || "Premium quality",
+    fit: p.fit || "Regular fit",
+    description: p.description || undefined,
+    created_at: p.created_at,
+    variants,
+    is_database: true,
+  };
+}
+
+/**
  * Low-level query: Fetches published products for a specific department from Supabase,
  * resolves their primary images from Cloudflare R2 (via /api/images/[...key]),
  * and merges them with catalogue products.
@@ -26,8 +137,6 @@ function normalizeDepartment(raw: string): { lower: string; title: Department } 
 async function queryPublishedProductsByDepartment(
   deptLower: string
 ): Promise<Product[]> {
-  const { title: deptTitle } = normalizeDepartment(deptLower);
-
   try {
     const supabase = createSupabaseAdminClient();
     const { data: dbProducts, error } = await supabase
@@ -44,107 +153,7 @@ async function queryPublishedProductsByDepartment(
       );
     }
 
-    const mappedDbProducts: Product[] = (dbProducts || []).map((p) => {
-      // Extract all valid images in ascending display_order while respecting primary selection
-      const rawImages = Array.isArray(p.product_images)
-        ? [...p.product_images]
-            .filter((img: { storage_path?: string }) => Boolean(img.storage_path))
-            .sort(
-              (
-                a: { display_order?: number; is_primary?: boolean },
-                b: { display_order?: number; is_primary?: boolean }
-              ) => {
-                const orderDiff = (a.display_order ?? 0) - (b.display_order ?? 0);
-                if (orderDiff !== 0) return orderDiff;
-                if (a.is_primary && !b.is_primary) return -1;
-                if (!a.is_primary && b.is_primary) return 1;
-                return 0;
-              }
-            )
-        : [];
-
-      const galleryImages = rawImages.map(
-        (img: {
-          id?: string;
-          storage_path: string;
-          alt_text?: string | null;
-          is_primary?: boolean | null;
-          display_order?: number | null;
-        }) => ({
-          id: img.id,
-          url: `/api/images/${img.storage_path}`,
-          alt: img.alt_text || p.name,
-          is_primary: Boolean(img.is_primary),
-          display_order: img.display_order ?? 0,
-        })
-      );
-
-      const primaryImage =
-        galleryImages.find((img) => img.is_primary) || galleryImages[0];
-
-      const image =
-        primaryImage?.url ||
-        "https://images.unsplash.com/photo-1613915617430-8ab0fd7c6baf?auto=format&fit=crop&w=1200&q=80";
-
-      const alt = primaryImage?.alt || p.name;
-
-      // Collect available colors strictly from configured product variants
-      const colorsSet = new Set<string>();
-      if (Array.isArray(p.product_variants)) {
-        p.product_variants.forEach((v: { color?: string | null }) => {
-          if (v.color && v.color.trim()) colorsSet.add(v.color.trim());
-        });
-      }
-      const colors = Array.from(colorsSet);
-
-      // Map client-safe variant options (omitting sensitive sku and stock_quantity)
-      const variants = Array.isArray(p.product_variants)
-        ? p.product_variants.map(
-            (v: {
-              id?: string;
-              size?: string | null;
-              color?: string | null;
-              is_available?: boolean | null;
-              stock_quantity?: number | null;
-            }) => ({
-              id: v.id,
-              size: (v.size || "").trim(),
-              color: (v.color || "").trim(),
-              is_available:
-                Boolean(v.is_available) &&
-                (typeof v.stock_quantity === "number"
-                  ? v.stock_quantity > 0
-                  : true),
-            })
-          )
-        : [];
-
-      return {
-        id: p.id,
-        slug: p.slug,
-        department: deptTitle,
-        category: p.category,
-        name: p.name,
-        price: Number(p.price),
-        sale:
-          p.sale_price !== null && p.sale_price !== undefined
-            ? Number(p.sale_price)
-            : undefined,
-        image,
-        images:
-          galleryImages.length > 0
-            ? galleryImages
-            : [{ url: image, alt, is_primary: true }],
-        alt,
-        colors,
-        fabric: p.fabric || "Premium quality",
-        fit: p.fit || "Regular fit",
-        description: p.description || undefined,
-        created_at: p.created_at,
-        variants,
-        is_database: true,
-      };
-    });
+    const mappedDbProducts: Product[] = (dbProducts || []).map(mapDbProductToStorefront);
 
     // Department catalogues display actual published products from Supabase plus dummy test products
     const dummyProducts = products.filter(
@@ -188,109 +197,7 @@ async function queryProductBySlug(cleanSlug: string): Promise<Product | undefine
     }
 
     if (p) {
-      const { title: deptTitle } = normalizeDepartment(p.department);
-
-      // Extract all valid images in ascending display_order while respecting primary selection
-      const rawImages = Array.isArray(p.product_images)
-        ? [...p.product_images]
-            .filter((img: { storage_path?: string }) => Boolean(img.storage_path))
-            .sort(
-              (
-                a: { display_order?: number; is_primary?: boolean },
-                b: { display_order?: number; is_primary?: boolean }
-              ) => {
-                const orderDiff = (a.display_order ?? 0) - (b.display_order ?? 0);
-                if (orderDiff !== 0) return orderDiff;
-                if (a.is_primary && !b.is_primary) return -1;
-                if (!a.is_primary && b.is_primary) return 1;
-                return 0;
-              }
-            )
-        : [];
-
-      const galleryImages = rawImages.map(
-        (img: {
-          id?: string;
-          storage_path: string;
-          alt_text?: string | null;
-          is_primary?: boolean | null;
-          display_order?: number | null;
-        }) => ({
-          id: img.id,
-          url: `/api/images/${img.storage_path}`,
-          alt: img.alt_text || p.name,
-          is_primary: Boolean(img.is_primary),
-          display_order: img.display_order ?? 0,
-        })
-      );
-
-      const primaryImage =
-        galleryImages.find((img) => img.is_primary) || galleryImages[0];
-
-      const image =
-        primaryImage?.url ||
-        "https://images.unsplash.com/photo-1613915617430-8ab0fd7c6baf?auto=format&fit=crop&w=1200&q=80";
-
-      const alt = primaryImage?.alt || p.name;
-
-      const images =
-        galleryImages.length > 0
-          ? galleryImages
-          : [{ url: image, alt, is_primary: true }];
-
-      // Collect available colors strictly from configured product variants
-      const colorsSet = new Set<string>();
-      if (Array.isArray(p.product_variants)) {
-        p.product_variants.forEach((v: { color?: string | null }) => {
-          if (v.color && v.color.trim()) colorsSet.add(v.color.trim());
-        });
-      }
-      const colors = Array.from(colorsSet);
-
-      // Map client-safe variant options (omitting sensitive sku and stock_quantity)
-      const variants = Array.isArray(p.product_variants)
-        ? p.product_variants.map(
-            (v: {
-              id?: string;
-              size?: string | null;
-              color?: string | null;
-              is_available?: boolean | null;
-              stock_quantity?: number | null;
-            }) => ({
-              id: v.id,
-              size: (v.size || "").trim(),
-              color: (v.color || "").trim(),
-              is_available:
-                Boolean(v.is_available) &&
-                (typeof v.stock_quantity === "number"
-                  ? v.stock_quantity > 0
-                  : true),
-            })
-          )
-        : [];
-
-      return {
-        id: p.id,
-        slug: p.slug,
-        department: deptTitle,
-        category: p.category,
-        name: p.name,
-        price: Number(p.price),
-        sale:
-          p.sale_price !== null && p.sale_price !== undefined
-            ? Number(p.sale_price)
-            : undefined,
-        image,
-        images,
-        alt,
-        colors,
-        fabric: p.fabric || "Premium quality",
-        fit: p.fit || "Regular fit",
-        description: p.description || undefined,
-        created_at: p.created_at,
-        variants,
-        is_database: true,
-      };
+      return mapDbProductToStorefront(p);
     }
   } catch (err: unknown) {
     console.error("[storefront] Unexpected error querying product by slug:", err);
@@ -298,6 +205,42 @@ async function queryProductBySlug(cleanSlug: string): Promise<Product | undefine
 
   // Fallback to mock product catalog
   return getMockProductBySlug(cleanSlug);
+}
+
+/**
+ * Low-level query: Fetches all published products from Supabase that have a valid sale price.
+ *
+ * Rules:
+ * - status = 'published'
+ * - sale_price is not null and less than price
+ * - Real data source only (no hardcoded or mock sale products)
+ */
+async function queryPublishedSaleProducts(): Promise<Product[]> {
+  try {
+    const supabase = createSupabaseAdminClient();
+    const { data: dbProducts, error } = await supabase
+      .from("products")
+      .select("*, product_images(*), product_variants(*)")
+      .eq("status", "published")
+      .not("sale_price", "is", null)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error(
+        "[storefront] Error querying published sale products:",
+        error.message
+      );
+    }
+
+    const mappedDbProducts: Product[] = (dbProducts || [])
+      .map(mapDbProductToStorefront)
+      .filter((p) => typeof p.sale === "number" && p.sale < p.price);
+
+    return mappedDbProducts;
+  } catch (err: unknown) {
+    console.error("[storefront] Unexpected error fetching sale products:", err);
+    return [];
+  }
 }
 
 // ============================================================================
@@ -321,6 +264,15 @@ const getCachedProductBySlug = unstable_cache(
   {
     revalidate: 3600,
     tags: ["products", "product-details"],
+  }
+);
+
+const getCachedPublishedSaleProducts = unstable_cache(
+  async () => queryPublishedSaleProducts(),
+  ["storefront-sale-products"],
+  {
+    revalidate: 3600,
+    tags: ["products", "sale-products"],
   }
 );
 
@@ -370,5 +322,21 @@ export const fetchRelatedProducts = cache(
     } catch {
       return [];
     }
+  }
+);
+
+/**
+ * Fetches all published products from Supabase that have the existing sale toggle enabled.
+ * - Request-memoized via React.cache
+ * - Persistently cached across requests via unstable_cache (1 hour TTL, tagged "products")
+ *
+ * Rules:
+ * - status = 'published'
+ * - sale_price is not null and less than price
+ * - Real data source only (no hardcoded or mock sale products)
+ */
+export const fetchPublishedSaleProducts = cache(
+  async (): Promise<Product[]> => {
+    return getCachedPublishedSaleProducts();
   }
 );
