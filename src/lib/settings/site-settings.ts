@@ -109,7 +109,9 @@ export async function getPromoBannerConfig(): Promise<PromoBannerConfig> {
         .eq("key", "promo_banner")
         .maybeSingle();
 
-      if (!error && data?.value) {
+      if (error) {
+        console.warn("[site-settings] Supabase getPromoBanner error:", error.code, error.message);
+      } else if (data?.value) {
         return normalizePromoBanner(data.value as Partial<PromoBannerConfig>);
       }
     }
@@ -207,11 +209,14 @@ export async function savePromoBannerConfig(
       if (!error) {
         savedInDb = true;
       } else {
-        console.warn("[site-settings] Upsert promo_banner DB error:", error.message);
+        console.error(
+          `[site-settings] Supabase upsert promo_banner failed (${error.code}): ${error.message}. ` +
+          (error.hint ? `Hint: ${error.hint}` : "Check public.site_settings permissions.")
+        );
       }
     }
   } catch (err) {
-    console.warn("[site-settings] DB savePromoBanner failed:", err);
+    console.error("[site-settings] DB savePromoBanner failed:", err);
   }
 
   // Always update local fallback for server restarts/redundancy

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { verifyAdminServer } from "@/lib/supabase/server-auth";
 import {
   getPromoBannerConfig,
@@ -139,6 +140,14 @@ export async function POST(request: NextRequest) {
         navbarUpdates.showSaleLink = body.navbar.showSaleLink;
       }
       updatedNavbar = await saveNavbarConfig(navbarUpdates);
+    }
+
+    // Revalidate customer-facing homepage and settings endpoint so Vercel edge/ISR reflects updates immediately
+    try {
+      revalidatePath("/", "page");
+      revalidatePath("/api/settings");
+    } catch (revalidateErr) {
+      console.warn("[api/admin/settings] Revalidation notice:", revalidateErr);
     }
 
     return NextResponse.json({

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import {
   getPromoBannerConfig,
   getCatalogueMarqueeConfig,
@@ -6,12 +6,11 @@ import {
   DEFAULT_CATALOGUE_ADS,
 } from "@/lib/settings/site-settings";
 
-
 /**
  * GET /api/settings
  * Public endpoint delivering published storefront configuration (promotional banner, catalogue marquee ads, and navbar).
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const [promoBanner, catalogueConfig, navbar] = await Promise.all([
       getPromoBannerConfig(),
