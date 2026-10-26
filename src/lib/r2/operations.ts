@@ -69,11 +69,15 @@ export async function generatePresignedReadUrl(
  *
  * @param objectKey The full key (path) of the object to retrieve.
  */
-export async function getR2Object(objectKey: string): Promise<{
-  body: Uint8Array;
+export async function getR2Object(
+  objectKey: string,
+  ifNoneMatch?: string
+): Promise<{
+  body?: Uint8Array;
   contentType?: string;
   etag?: string;
   contentLength?: number;
+  isNotModified?: boolean;
 }> {
   const client = createR2Client();
   const bucket = getR2BucketName();
@@ -81,20 +85,34 @@ export async function getR2Object(objectKey: string): Promise<{
   const command = new GetObjectCommand({
     Bucket: bucket,
     Key: objectKey,
+    IfNoneMatch: ifNoneMatch
+      ? `"${ifNoneMatch.replace(/^W\//, "").replace(/"/g, "")}"`
+      : undefined,
   });
 
-  const response = await client.send(command);
-  if (!response.Body) {
-    throw new Error(`Empty body returned for object ${objectKey}`);
-  }
+  try {
+    const response = await client.send(command);
+    if (!response.Body) {
+      throw new Error(`Empty body returned for object ${objectKey}`);
+    }
 
-  const body = await response.Body.transformToByteArray();
-  return {
-    body,
-    contentType: response.ContentType,
-    etag: response.ETag?.replace(/"/g, ""),
-    contentLength: response.ContentLength,
-  };
+    const body = await response.Body.transformToByteArray();
+    return {
+      body,
+      contentType: response.ContentType,
+      etag: response.ETag?.replace(/"/g, ""),
+      contentLength: response.ContentLength,
+    };
+  } catch (err: unknown) {
+    const errorObj = err as { name?: string; $metadata?: { httpStatusCode?: number } };
+    if (errorObj?.name === "304" || errorObj?.$metadata?.httpStatusCode === 304) {
+      return {
+        isNotModified: true,
+        etag: ifNoneMatch?.replace(/^W\//, "").replace(/"/g, ""),
+      };
+    }
+    throw err;
+  }
 }
 
 /**

@@ -17,13 +17,17 @@ function BrandLockup() {
   return (
     <Link className="nav-brand-lockup" href="/" aria-label="Style-Edit home">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src="/Brandlogo.svg"
-        alt="Style-Edit Logo"
-        className="nav-brand-logo"
-        width={40}
-        height={40}
-      />
+      <picture>
+        <source srcSet="/Brandlogo.webp" type="image/webp" />
+        <img
+          src="/Brandlogo.svg"
+          alt="Style-Edit Logo"
+          className="nav-brand-logo"
+          width={40}
+          height={40}
+          decoding="async"
+        />
+      </picture>
       <span className="nav-brand-text">STYLE EDIT</span>
     </Link>
   );
@@ -55,9 +59,9 @@ export default function Navbar() {
 
         {/* Desktop Navigation */}
         <nav className="desktop-nav" aria-label="Main navigation">
-          <Link href="/shop/men">Men</Link>
-          <Link href="/shop/women">Women</Link>
-          <Link href="/shop/kids">Kids</Link>
+          <Link href="/shop/men" prefetch={true}>Men</Link>
+          <Link href="/shop/women" prefetch={true}>Women</Link>
+          <Link href="/shop/kids" prefetch={true}>Kids</Link>
         </nav>
 
         {/* Nav Actions: Exact order Instagram → WhatsApp → Google Maps → Cart → Mobile menu toggle */}
@@ -148,15 +152,15 @@ export default function Navbar() {
                 <span>Home</span>
                 <ArrowRightIcon size={16} />
               </Link>
-              <Link href="/shop/men" onClick={closeMenu}>
+              <Link href="/shop/men" prefetch={true} onClick={closeMenu}>
                 <span>Men</span>
                 <ArrowRightIcon size={16} />
               </Link>
-              <Link href="/shop/women" onClick={closeMenu}>
+              <Link href="/shop/women" prefetch={true} onClick={closeMenu}>
                 <span>Women</span>
                 <ArrowRightIcon size={16} />
               </Link>
-              <Link href="/shop/kids" onClick={closeMenu}>
+              <Link href="/shop/kids" prefetch={true} onClick={closeMenu}>
                 <span>Kids</span>
                 <ArrowRightIcon size={16} />
               </Link>

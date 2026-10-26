@@ -3,6 +3,11 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { ProductGalleryImage } from "@/data/products";
 import Icon from "@/components/Icon";
+import {
+  getOptimizedImageUrl,
+  getResponsiveImageSrcSet,
+  RESPONSIVE_SIZES,
+} from "@/lib/images/responsive";
 
 interface ProductGalleryProps {
   images?: ProductGalleryImage[];
@@ -124,6 +129,9 @@ export default function ProductGallery({
     setFailedImages((prev) => new Set(prev).add(index));
   };
 
+  const mainSrcSet = getResponsiveImageSrcSet(currentImage.url, [360, 480, 640, 800, 1000]);
+  const optimizedMainSrc = getOptimizedImageUrl(currentImage.url, 800, 82);
+
   return (
     <div
       className="product-gallery"
@@ -160,9 +168,16 @@ export default function ProductGallery({
           /* eslint-disable-next-line @next/next/no-img-element */
           <img
             key={currentImage.url}
-            src={currentImage.url}
+            src={optimizedMainSrc}
+            srcSet={mainSrcSet}
+            sizes={mainSrcSet ? RESPONSIVE_SIZES.galleryMain : undefined}
             alt={currentImage.alt || `${productName} - Image ${activeIndex + 1}`}
             className={`imagery-main-img gallery-slide-img ${isLandscape ? "is-landscape" : ""}`}
+            loading="eager"
+            fetchPriority="high"
+            decoding="async"
+            width={460}
+            height={613}
             onLoad={(e) => {
               const img = e.currentTarget;
               if (img.naturalWidth && img.naturalHeight) {
@@ -217,6 +232,7 @@ export default function ProductGallery({
           {validImages.map((img, idx) => {
             const isFailed = failedImages.has(idx);
             const isSelected = idx === activeIndex;
+            const thumbSrc = getOptimizedImageUrl(img.url, 128, 75);
 
             return (
               <button
@@ -237,9 +253,13 @@ export default function ProductGallery({
                 ) : (
                   /* eslint-disable-next-line @next/next/no-img-element */
                   <img
-                    src={img.url}
+                    src={thumbSrc}
                     alt={img.alt || `${productName} thumbnail ${idx + 1}`}
                     className="gallery-thumb-img"
+                    loading="lazy"
+                    decoding="async"
+                    width={64}
+                    height={85}
                     onError={() => handleImageError(idx)}
                   />
                 )}

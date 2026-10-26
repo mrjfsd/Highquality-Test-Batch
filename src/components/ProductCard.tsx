@@ -4,12 +4,18 @@ import React, { useState, useMemo, useRef } from "react";
 import Link from "next/link";
 import type { Product, ProductGalleryImage } from "@/data/products";
 import { formatPrice } from "@/data/products";
+import {
+  getOptimizedImageUrl,
+  getResponsiveImageSrcSet,
+  RESPONSIVE_SIZES,
+} from "@/lib/images/responsive";
 
 interface ProductCardProps {
   product: Product;
+  priority?: boolean;
 }
 
-export default function ProductCard({ product }: ProductCardProps) {
+export default function ProductCard({ product, priority = false }: ProductCardProps) {
   const hasDiscount =
     typeof product.sale === "number" && product.sale < product.price;
 
@@ -81,6 +87,9 @@ export default function ProductCard({ product }: ProductCardProps) {
     }
   };
 
+  const srcSet = getResponsiveImageSrcSet(currentImage.url);
+  const optimizedSrc = getOptimizedImageUrl(currentImage.url, 640, 80);
+
   return (
     <article className="product-card">
       <div
@@ -98,9 +107,15 @@ export default function ProductCard({ product }: ProductCardProps) {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             className="product-image"
-            src={currentImage.url}
+            src={optimizedSrc}
+            srcSet={srcSet}
+            sizes={srcSet ? RESPONSIVE_SIZES.productCard : undefined}
             alt={currentImage.alt || product.name}
-            loading="lazy"
+            loading={priority ? "eager" : "lazy"}
+            fetchPriority={priority ? "high" : "auto"}
+            decoding="async"
+            width={320}
+            height={416}
           />
         </Link>
 

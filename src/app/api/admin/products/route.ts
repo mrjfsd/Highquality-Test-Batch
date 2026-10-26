@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { verifyAdminServer } from "@/lib/supabase/server-auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { deleteR2Objects } from "@/lib/r2/operations";
@@ -539,11 +539,14 @@ export async function POST(request: NextRequest) {
 
   // 7. Invalidate catalogue caches
   try {
+    revalidateTag("products", "max");
     revalidatePath(`/shop/${normalizedDept}`);
+    revalidatePath("/shop/[department]", "page");
     revalidatePath("/shop");
     revalidatePath(`/product/${savedProduct.slug}`);
+    revalidatePath("/");
   } catch (revalErr) {
-    console.warn("[create-product] revalidatePath warning:", revalErr);
+    console.warn("[create-product] revalidate warning:", revalErr);
   }
 
   // 8. Success Response

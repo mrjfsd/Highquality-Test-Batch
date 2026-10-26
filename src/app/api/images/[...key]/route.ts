@@ -10,6 +10,8 @@ interface CachedR2Object {
 }
 
 const MAX_CACHE_ENTRIES = 100;
+const MAX_CACHE_BYTES = 50 * 1024 * 1024; // 50 MB total in-memory cap
+let currentCacheBytes = 0;
 const imageCache = new Map<string, CachedR2Object>();
 
 function getFromCache(key: string): CachedR2Object | undefined {
@@ -23,13 +25,27 @@ function getFromCache(key: string): CachedR2Object | undefined {
 }
 
 function addToCache(key: string, item: CachedR2Object): void {
-  if (imageCache.size >= MAX_CACHE_ENTRIES) {
+  const itemBytes = item.contentLength || item.buffer.byteLength;
+  // If single item exceeds 10MB, bypass in-memory caching to avoid heap pressure
+  if (itemBytes > 10 * 1024 * 1024) return;
+
+  // Evict oldest items if limit reached by count or memory consumption
+  while (
+    (imageCache.size >= MAX_CACHE_ENTRIES || currentCacheBytes + itemBytes > MAX_CACHE_BYTES) &&
+    imageCache.size > 0
+  ) {
     const oldestKey = imageCache.keys().next().value;
     if (oldestKey) {
+      const oldItem = imageCache.get(oldestKey);
+      if (oldItem) {
+        currentCacheBytes -= oldItem.contentLength || oldItem.buffer.byteLength;
+      }
       imageCache.delete(oldestKey);
     }
   }
+
   imageCache.set(key, item);
+  currentCacheBytes += itemBytes;
 }
 
 // Fallback MIME type detector based on file extension
@@ -56,14 +72,27 @@ const matchClientEtag = (clientHeader: string | null, serverEtag: string) => {
 };
 
 /**
+ * Returns appropriate Cache-Control header:
+ * - Product images have timestamp-uuid in the key (e.g., products/123/1730000000-uuid.webp)
+ *   and are genuinely immutable.
+ * - Non-unique assets use standard public caching with stale-while-revalidate.
+ */
+function getCacheControlHeader(objectKey: string): string {
+  if (objectKey.startsWith("products/")) {
+    return "public, max-age=31536000, immutable";
+  }
+  return "public, max-age=86400, stale-while-revalidate=604800";
+}
+
+/**
  * GET /api/images/[...key]
  *
  * Secure proxy serving original product images from the private Cloudflare R2 bucket.
- * 
- * Note: Sharp-dependent image transformations (resizing, format conversion) have been
- * removed. Images are now compressed browser-side prior to upload.
- * Any legacy transformation query parameters (?w=, ?q=, ?f=) are safely ignored,
- * and the stored image is served directly with immutable HTTP caching.
+ * Features:
+ * - In-memory LRU cache with entry and byte bounding
+ * - Conditional request (304 Not Modified) with ETag matching
+ * - Zero-copy buffer delivery
+ * - Path-aware Cache-Control
  */
 export async function GET(
   request: NextRequest,
@@ -89,6 +118,8 @@ export async function GET(
     });
   }
 
+  const cacheControl = getCacheControlHeader(objectKey);
+
   // Parse query parameters
   const { searchParams } = new URL(request.url);
   const isRaw = searchParams.get("raw") === "true" || searchParams.get("raw") === "1";
@@ -107,27 +138,28 @@ export async function GET(
     }
   }
 
+  const clientEtag = request.headers.get("if-none-match");
+
   // 1. Check in-memory cache for fast repeat delivery
   const cached = getFromCache(objectKey);
   if (cached) {
-    const clientEtag = request.headers.get("if-none-match");
     if (matchClientEtag(clientEtag, cached.etag)) {
       return new Response(null, {
         status: 304,
         headers: {
           "ETag": `"${cached.etag}"`,
-          "Cache-Control": "public, max-age=31536000, immutable",
+          "Cache-Control": cacheControl,
           "Vary": "Accept-Encoding",
         },
       });
     }
 
-    return new Response(new Uint8Array(cached.buffer), {
+    return new Response(cached.buffer as unknown as BodyInit, {
       status: 200,
       headers: {
         "Content-Type": cached.contentType,
         "Content-Length": cached.contentLength.toString(),
-        "Cache-Control": "public, max-age=31536000, immutable",
+        "Cache-Control": cacheControl,
         "ETag": `"${cached.etag}"`,
         "Vary": "Accept-Encoding",
         "X-Image-Proxy": "r2-direct",
@@ -136,21 +168,36 @@ export async function GET(
     });
   }
 
-  // 2. Fetch original directly from private R2 bucket
+  // 2. Fetch original directly from private R2 bucket (supporting conditional requests)
   try {
-    const r2Object = await getR2Object(objectKey);
-    const contentType = r2Object.contentType || inferContentTypeFromKey(objectKey);
-    const etag = r2Object.etag || `${objectKey}-${r2Object.body.length}`;
-    const contentLength = r2Object.contentLength || r2Object.body.length;
+    const r2Result = await getR2Object(objectKey, clientEtag || undefined);
+
+    if (r2Result.isNotModified) {
+      return new Response(null, {
+        status: 304,
+        headers: {
+          "ETag": `"${r2Result.etag || cleanServerEtag(clientEtag || "")}"`,
+          "Cache-Control": cacheControl,
+          "Vary": "Accept-Encoding",
+        },
+      });
+    }
+
+    if (!r2Result.body) {
+      throw new Error(`Empty body returned for object ${objectKey}`);
+    }
+
+    const contentType = r2Result.contentType || inferContentTypeFromKey(objectKey);
+    const etag = r2Result.etag || `${objectKey}-${r2Result.body.length}`;
+    const contentLength = r2Result.contentLength || r2Result.body.length;
 
     // Check conditional ETag request (HTTP 304)
-    const clientEtag = request.headers.get("if-none-match");
     if (matchClientEtag(clientEtag, etag)) {
       return new Response(null, {
         status: 304,
         headers: {
           "ETag": `"${etag}"`,
-          "Cache-Control": "public, max-age=31536000, immutable",
+          "Cache-Control": cacheControl,
           "Vary": "Accept-Encoding",
         },
       });
@@ -158,18 +205,18 @@ export async function GET(
 
     // Cache the object in memory for hot path
     addToCache(objectKey, {
-      buffer: r2Object.body,
+      buffer: r2Result.body,
       contentType,
       etag,
       contentLength,
     });
 
-    return new Response(new Uint8Array(r2Object.body), {
+    return new Response(r2Result.body as unknown as BodyInit, {
       status: 200,
       headers: {
         "Content-Type": contentType,
         "Content-Length": contentLength.toString(),
-        "Cache-Control": "public, max-age=31536000, immutable",
+        "Cache-Control": cacheControl,
         "ETag": `"${etag}"`,
         "Vary": "Accept-Encoding",
         "X-Image-Proxy": "r2-direct",
@@ -206,4 +253,20 @@ export async function GET(
       }
     );
   }
+}
+
+/**
+ * HEAD /api/images/[...key]
+ *
+ * Lightweight header probe endpoint for CDNs and client caching checks.
+ */
+export async function HEAD(
+  request: NextRequest,
+  context: { params: Promise<{ key: string[] }> }
+) {
+  const res = await GET(request, context);
+  return new Response(null, {
+    status: res.status,
+    headers: res.headers,
+  });
 }

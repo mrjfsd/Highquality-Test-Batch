@@ -1,3 +1,9 @@
+import {
+  getOptimizedImageUrl,
+  getResponsiveImageSrcSet,
+  isUnsplashUrl,
+  RESPONSIVE_SIZES,
+} from "@/lib/images/responsive";
 import type { Metadata } from "next";
 import Link from "next/link";
 import HomeScrollAnimator from "@/components/HomeScrollAnimator";
@@ -13,6 +19,10 @@ type ImageProps = {
   alt: string;
   className?: string;
   loading?: "lazy" | "eager";
+  sizes?: string;
+  priority?: boolean;
+  width?: number;
+  height?: number;
 };
 
 const images = {
@@ -83,10 +93,34 @@ const sampleProducts = [
   },
 ];
 
-function SmartImage({ src, alt, className = "", loading = "lazy" }: ImageProps) {
+function SmartImage({
+  src,
+  alt,
+  className = "",
+  loading = "lazy",
+  sizes,
+  priority = false,
+  width,
+  height,
+}: ImageProps) {
+  const isPriority = priority || loading === "eager";
+  const srcSet = getResponsiveImageSrcSet(src);
+  const optimizedSrc = isUnsplashUrl(src) ? getOptimizedImageUrl(src, 800, 82) : src;
+
   return (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={src} alt={alt} className={className} loading={loading} />
+    <img
+      src={optimizedSrc}
+      srcSet={srcSet}
+      sizes={sizes || (srcSet ? RESPONSIVE_SIZES.departmentCard : undefined)}
+      alt={alt}
+      className={className}
+      loading={isPriority ? "eager" : "lazy"}
+      fetchPriority={isPriority ? "high" : "auto"}
+      decoding="async"
+      width={width}
+      height={height}
+    />
   );
 }
 
@@ -147,13 +181,25 @@ function HomePromotionalBanner() {
         className="home-promo-banner-link"
         aria-label="Diwali Sale — Shop the festive collection"
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/assets/image.png"
-          alt="Diwali Sale Promotional Banner"
-          className="home-promo-banner-image"
-          loading="eager"
-        />
+        <picture>
+          <source
+            media="(max-width: 640px)"
+            srcSet="/assets/image-mobile.webp"
+            type="image/webp"
+          />
+          <source srcSet="/assets/image.webp" type="image/webp" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/assets/image.png"
+            alt="Diwali Sale Promotional Banner"
+            className="home-promo-banner-image"
+            loading="eager"
+            fetchPriority="high"
+            decoding="async"
+            width={2172}
+            height={724}
+          />
+        </picture>
       </Link>
     </section>
   );
@@ -168,6 +214,9 @@ function HeroBanner() {
         alt="Style Edit editorial fashion campaign featuring tailored bordeaux coat and relaxed tailoring"
         className="hero-image"
         loading="eager"
+        priority={true}
+        width={2064}
+        height={1152}
       />
       <div className="hero-overlay" />
       <div className="hero-content">
@@ -186,6 +235,9 @@ function HeroBanner() {
                 alt="Floating blue denim jeans"
                 className="hero-floating-garment-img"
                 loading="eager"
+                decoding="async"
+                width={440}
+                height={580}
               />
             </div>
 
@@ -199,6 +251,10 @@ function HeroBanner() {
                 alt="Style Edit floating fleece zip jacket showcase"
                 className="hero-floating-garment-img"
                 loading="eager"
+                fetchPriority="high"
+                decoding="async"
+                width={480}
+                height={620}
               />
             </div>
 
@@ -211,6 +267,9 @@ function HeroBanner() {
                 alt="Floating charcoal graphic camera t-shirt"
                 className="hero-floating-garment-img"
                 loading="eager"
+                decoding="async"
+                width={440}
+                height={580}
               />
             </div>
 
@@ -252,7 +311,7 @@ function DepartmentCard({
   return (
     <article className={`department-card reveal-item stagger-${index + 1}`}>
       <Link className="department-image-wrap" href={href} aria-label={`Explore ${title}`}>
-        <SmartImage src={image} alt={alt} className="department-image" />
+        <SmartImage src={image} alt={alt} className="department-image" sizes={RESPONSIVE_SIZES.departmentCard} width={400} height={500} />
         <span className="department-number">0{index + 1}</span>
       </Link>
       <div className="department-meta">
@@ -294,7 +353,7 @@ function HomeProductCard({
   return (
     <article className={`product-card reveal-item stagger-${(index % 4) + 1}`}>
       <Link className="product-image-wrap" href={product.href} aria-label={product.name}>
-        <SmartImage src={product.image} alt={product.alt} className="product-image" />
+        <SmartImage src={product.image} alt={product.alt} className="product-image" sizes={RESPONSIVE_SIZES.favouriteCard} width={320} height={416} />
         <span className="product-tag">THE EDIT</span>
       </Link>
       <div className="product-meta">
@@ -337,6 +396,9 @@ function EditorialFeature() {
           src={images.editorial}
           alt="Woman in a relaxed contemporary look outside a modern building"
           className="editorial-image"
+          sizes={RESPONSIVE_SIZES.editorial}
+          width={700}
+          height={875}
         />
         <span className="vertical-note">STYLE NOTES / {currentYear}</span>
       </div>
@@ -363,6 +425,9 @@ function CuratedCollection() {
           src={images.essentials}
           alt="A carefully curated rail of timeless everyday clothing"
           className="essentials-image"
+          sizes={RESPONSIVE_SIZES.fullBanner}
+          width={1200}
+          height={600}
         />
         <div className="essentials-overlay" />
         <div className="essentials-copy reveal-item stagger-1">

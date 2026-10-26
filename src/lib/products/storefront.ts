@@ -1,3 +1,5 @@
+import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import {
   getProductBySlug as getMockProductBySlug,
@@ -13,7 +15,7 @@ function normalizeDepartment(raw: string): { lower: string; title: Department } 
 }
 
 /**
- * Fetches published products for a specific department from Supabase,
+ * Low-level query: Fetches published products for a specific department from Supabase,
  * resolves their primary images from Cloudflare R2 (via /api/images/[...key]),
  * and merges them with catalogue products.
  *
@@ -21,10 +23,10 @@ function normalizeDepartment(raw: string): { lower: string; title: Department } 
  * - Only queries status = 'published'.
  * - Sensitive fields (sku, stock_quantity) are NOT included in the returned Product object.
  */
-export async function fetchPublishedProductsByDepartment(
-  department: string
+async function queryPublishedProductsByDepartment(
+  deptLower: string
 ): Promise<Product[]> {
-  const { lower: deptLower, title: deptTitle } = normalizeDepartment(department);
+  const { title: deptTitle } = normalizeDepartment(deptLower);
 
   try {
     const supabase = createSupabaseAdminClient();
@@ -97,14 +99,24 @@ export async function fetchPublishedProductsByDepartment(
 
       // Map client-safe variant options (omitting sensitive sku and stock_quantity)
       const variants = Array.isArray(p.product_variants)
-        ? p.product_variants.map((v: { id?: string; size?: string | null; color?: string | null; is_available?: boolean | null; stock_quantity?: number | null }) => ({
-          id: v.id,
-          size: (v.size || "").trim(),
-          color: (v.color || "").trim(),
-          is_available:
-            Boolean(v.is_available) &&
-            (typeof v.stock_quantity === "number" ? v.stock_quantity > 0 : true),
-        }))
+        ? p.product_variants.map(
+            (v: {
+              id?: string;
+              size?: string | null;
+              color?: string | null;
+              is_available?: boolean | null;
+              stock_quantity?: number | null;
+            }) => ({
+              id: v.id,
+              size: (v.size || "").trim(),
+              color: (v.color || "").trim(),
+              is_available:
+                Boolean(v.is_available) &&
+                (typeof v.stock_quantity === "number"
+                  ? v.stock_quantity > 0
+                  : true),
+            })
+          )
         : [];
 
       return {
@@ -156,13 +168,9 @@ export async function fetchPublishedProductsByDepartment(
 }
 
 /**
- * Resolves a published product by slug from Supabase, or falls back to catalogue data.
+ * Low-level query: Resolves a published product by slug from Supabase, or falls back to catalogue data.
  */
-export async function fetchProductBySlug(
-  slug: string
-): Promise<Product | undefined> {
-  const cleanSlug = slug.trim();
-
+async function queryProductBySlug(cleanSlug: string): Promise<Product | undefined> {
   try {
     const supabase = createSupabaseAdminClient();
     const { data: p, error } = await supabase
@@ -241,14 +249,24 @@ export async function fetchProductBySlug(
 
       // Map client-safe variant options (omitting sensitive sku and stock_quantity)
       const variants = Array.isArray(p.product_variants)
-        ? p.product_variants.map((v: { id?: string; size?: string | null; color?: string | null; is_available?: boolean | null; stock_quantity?: number | null }) => ({
-          id: v.id,
-          size: (v.size || "").trim(),
-          color: (v.color || "").trim(),
-          is_available:
-            Boolean(v.is_available) &&
-            (typeof v.stock_quantity === "number" ? v.stock_quantity > 0 : true),
-        }))
+        ? p.product_variants.map(
+            (v: {
+              id?: string;
+              size?: string | null;
+              color?: string | null;
+              is_available?: boolean | null;
+              stock_quantity?: number | null;
+            }) => ({
+              id: v.id,
+              size: (v.size || "").trim(),
+              color: (v.color || "").trim(),
+              is_available:
+                Boolean(v.is_available) &&
+                (typeof v.stock_quantity === "number"
+                  ? v.stock_quantity > 0
+                  : true),
+            })
+          )
         : [];
 
       return {
@@ -282,20 +300,75 @@ export async function fetchProductBySlug(
   return getMockProductBySlug(cleanSlug);
 }
 
+// ============================================================================
+// 1. Persistent Data Cache (unstable_cache)
+// Defined with stable static references and key parts at module level.
+// Uses a 1-hour background revalidation interval (3600s) and 'products' tag.
+// ============================================================================
+
+const getCachedPublishedProductsByDepartment = unstable_cache(
+  async (deptLower: string) => queryPublishedProductsByDepartment(deptLower),
+  ["storefront-department-products"],
+  {
+    revalidate: 3600,
+    tags: ["products", "department-products"],
+  }
+);
+
+const getCachedProductBySlug = unstable_cache(
+  async (cleanSlug: string) => queryProductBySlug(cleanSlug),
+  ["storefront-product-by-slug"],
+  {
+    revalidate: 3600,
+    tags: ["products", "product-details"],
+  }
+);
+
+// ============================================================================
+// 2. Request-Scoped Memoization (React.cache)
+// Deduplicates identical requests within a single server render (e.g.
+// generateMetadata and ProductDetailPage executing in the same request).
+// ============================================================================
+
+/**
+ * Fetches published products for a specific department.
+ * - Request-memoized via React.cache
+ * - Persistently cached across requests via unstable_cache (1 hour TTL, tagged "products")
+ */
+export const fetchPublishedProductsByDepartment = cache(
+  async (department: string): Promise<Product[]> => {
+    const { lower: deptLower } = normalizeDepartment(department);
+    return getCachedPublishedProductsByDepartment(deptLower);
+  }
+);
+
+/**
+ * Resolves a published product by slug.
+ * - Request-memoized via React.cache (eliminates duplicate fetches between metadata & page render)
+ * - Persistently cached across requests via unstable_cache (1 hour TTL, tagged "products")
+ */
+export const fetchProductBySlug = cache(
+  async (slug: string): Promise<Product | undefined> => {
+    const cleanSlug = slug.trim();
+    if (!cleanSlug) return undefined;
+    return getCachedProductBySlug(cleanSlug);
+  }
+);
+
 /**
  * Retrieves related products in the same department for the "You may also like" section.
+ * - Request-memoized via React.cache
  */
-export async function fetchRelatedProducts(
-  product: Product,
-  limit = 4
-): Promise<Product[]> {
-  try {
-    const allInDept = await fetchPublishedProductsByDepartment(product.department);
-    const related = allInDept.filter(
-      (p) => String(p.id) !== String(product.id) && p.slug !== product.slug
-    );
-    return related.slice(0, limit);
-  } catch {
-    return [];
+export const fetchRelatedProducts = cache(
+  async (product: Product, limit = 4): Promise<Product[]> => {
+    try {
+      const allInDept = await fetchPublishedProductsByDepartment(product.department);
+      const related = allInDept.filter(
+        (p) => String(p.id) !== String(product.id) && p.slug !== product.slug
+      );
+      return related.slice(0, limit);
+    } catch {
+      return [];
+    }
   }
-}
+);

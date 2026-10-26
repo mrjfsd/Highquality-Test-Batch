@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { verifyAdminServer } from "@/lib/supabase/server-auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { deleteR2Objects } from "@/lib/r2/operations";
@@ -156,8 +156,11 @@ export async function POST(request: NextRequest) {
 
   // 6. Invalidate caches
   try {
+    revalidateTag("products", "max");
     revalidatePath("/admin/products");
+    revalidatePath("/shop/[department]", "page");
     revalidatePath("/shop");
+    revalidatePath("/");
     departmentsToRevalidate.forEach((dept) => {
       revalidatePath(`/shop/${dept}`);
     });
@@ -165,7 +168,7 @@ export async function POST(request: NextRequest) {
       revalidatePath(`/product/${slug}`);
     });
   } catch (revalErr) {
-    console.warn("[bulk-delete] revalidatePath warning:", revalErr);
+    console.warn("[bulk-delete] revalidate warning:", revalErr);
   }
 
   return Response.json({

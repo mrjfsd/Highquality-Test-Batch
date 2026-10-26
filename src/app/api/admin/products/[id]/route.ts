@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { verifyAdminServer } from "@/lib/supabase/server-auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { deleteR2Objects } from "@/lib/r2/operations";
@@ -885,8 +885,11 @@ export async function PUT(
 
   // 6. Invalidate storefront and catalogue caches
   try {
+    revalidateTag("products", "max");
     revalidatePath("/admin/products");
+    revalidatePath("/shop/[department]", "page");
     revalidatePath("/shop");
+    revalidatePath("/");
     if (updatedProductRecord.department) {
       revalidatePath(`/shop/${updatedProductRecord.department.toLowerCase()}`);
     }
@@ -897,7 +900,7 @@ export async function PUT(
       revalidatePath(`/product/${currentProduct.slug}`);
     }
   } catch (revalErr) {
-    console.warn("[update-product] revalidatePath warning:", revalErr);
+    console.warn("[update-product] revalidate warning:", revalErr);
   }
 
   const finalProductPayload = {
@@ -1025,8 +1028,11 @@ export async function DELETE(
 
   // 7. Invalidate storefront and admin catalogue caches
   try {
+    revalidateTag("products", "max");
     revalidatePath("/admin/products");
+    revalidatePath("/shop/[department]", "page");
     revalidatePath("/shop");
+    revalidatePath("/");
     if (product.department) {
       revalidatePath(`/shop/${String(product.department).toLowerCase()}`);
     }
@@ -1034,7 +1040,7 @@ export async function DELETE(
       revalidatePath(`/product/${product.slug}`);
     }
   } catch (revalErr) {
-    console.warn("[delete-product] revalidatePath warning:", revalErr);
+    console.warn("[delete-product] revalidate warning:", revalErr);
   }
 
   return Response.json({
