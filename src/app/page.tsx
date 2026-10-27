@@ -8,7 +8,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import HomeScrollAnimator from "@/components/HomeScrollAnimator";
 import { getPromoBannerConfig, PromoBannerConfig } from "@/lib/settings/site-settings";
-export const instant = false;
 
 export const metadata: Metadata = {
   title: "Style-Edit | Considered Everyday Fashion",
@@ -144,7 +143,7 @@ function TextLink({
   className?: string;
 }) {
   return (
-    <Link className={`text-link ${className}`} href={href}>
+    <Link className={`text-link ${className}`} href={href} prefetch={true}>
       <span>{children}</span>
       <ArrowIcon />
     </Link>
@@ -193,6 +192,7 @@ function HomePromotionalBanner({ banner }: { banner?: PromoBannerConfig | null }
         href="/sale"
         className="home-promo-banner-link"
         aria-label="Promotional Sale — Shop The Sale Edit"
+        prefetch={true}
       >
         {imageUrl === "/assets/image.png" ? (
           <picture>
@@ -328,11 +328,11 @@ function HeroBanner() {
         
         {/* Refined editorial hero buttons with sophisticated solid/outline pairing */}
         <div className="hero-actions hero-fade-4">
-          <Link className="hero-btn hero-btn-primary" href="/shop/women">
+          <Link className="hero-btn hero-btn-primary" href="/shop/women" prefetch={true}>
             <span>Shop Women</span>
             <ArrowIcon />
           </Link>
-          <Link className="hero-btn hero-btn-secondary" href="/shop/men">
+          <Link className="hero-btn hero-btn-secondary" href="/shop/men" prefetch={true}>
             <span>Shop Men</span>
             <ArrowIcon />
           </Link>
@@ -353,7 +353,7 @@ function DepartmentCard({
 }: (typeof departments)[number] & { index: number }) {
   return (
     <article className={`department-card reveal-item stagger-${index + 1}`}>
-      <Link className="department-image-wrap" href={href} aria-label={`Explore ${title}`}>
+      <Link className="department-image-wrap" href={href} aria-label={`Explore ${title}`} prefetch={true}>
         <SmartImage src={image} alt={alt} className="department-image" sizes={RESPONSIVE_SIZES.departmentCard} width={400} height={500} />
         <span className="department-number">0{index + 1}</span>
       </Link>
@@ -395,7 +395,7 @@ function HomeProductCard({
 }) {
   return (
     <article className={`product-card reveal-item stagger-${(index % 4) + 1}`}>
-      <Link className="product-image-wrap" href={product.href} aria-label={product.name}>
+      <Link className="product-image-wrap" href={product.href} aria-label={product.name} prefetch={true}>
         <SmartImage src={product.image} alt={product.alt} className="product-image" sizes={RESPONSIVE_SIZES.favouriteCard} width={320} height={416} />
         <span className="product-tag">THE EDIT</span>
       </Link>

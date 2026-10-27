@@ -1,5 +1,7 @@
 import fs from "fs";
 import path from "path";
+import { cache } from "react";
+import { unstable_cache, revalidateTag } from "next/cache";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 
 export interface PromoBannerConfig {
@@ -96,10 +98,18 @@ function writeFallbackSettings(settings: PersistedSettings): void {
   }
 }
 
+function invalidateSettingsCache(): void {
+  try {
+    revalidateTag("site-settings", "max");
+  } catch {
+    // Ignored outside of request context
+  }
+}
+
 /**
- * Retrieves the currently published homepage promotional banner config.
+ * Low-level query: homepage promotional banner config.
  */
-export async function getPromoBannerConfig(): Promise<PromoBannerConfig> {
+async function queryPromoBannerConfig(): Promise<PromoBannerConfig> {
   try {
     if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
       const supabase = createSupabaseAdminClient();
@@ -116,7 +126,6 @@ export async function getPromoBannerConfig(): Promise<PromoBannerConfig> {
       }
     }
   } catch (err) {
-    // Table may not exist yet in Supabase; fallback gracefully
     console.warn("[site-settings] Supabase getPromoBanner fallback:", err);
   }
 
@@ -129,9 +138,9 @@ export async function getPromoBannerConfig(): Promise<PromoBannerConfig> {
 }
 
 /**
- * Retrieves the raw 3 catalogue marquee advertisement fields.
+ * Low-level query: catalogue marquee advertisement config.
  */
-export async function getCatalogueMarqueeConfig(): Promise<CatalogueMarqueeConfig> {
+async function queryCatalogueMarqueeConfig(): Promise<CatalogueMarqueeConfig> {
   try {
     if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
       const supabase = createSupabaseAdminClient();
@@ -155,7 +164,6 @@ export async function getCatalogueMarqueeConfig(): Promise<CatalogueMarqueeConfi
       }
     }
   } catch (err) {
-    // Table may not exist yet in Supabase; fallback gracefully
     console.warn("[site-settings] Supabase getCatalogueMarquee fallback:", err);
   }
 
@@ -178,6 +186,84 @@ export async function getCatalogueMarqueeConfig(): Promise<CatalogueMarqueeConfi
 }
 
 /**
+ * Low-level query: customer navbar configuration.
+ */
+async function queryNavbarConfig(): Promise<NavbarConfig> {
+  try {
+    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const supabase = createSupabaseAdminClient();
+      const { data, error } = await supabase
+        .from("site_settings")
+        .select("value")
+        .eq("key", "navbar")
+        .maybeSingle();
+
+      if (!error && data?.value) {
+        return normalizeNavbarConfig(data.value as Partial<NavbarConfig>);
+      }
+    }
+  } catch (err) {
+    console.warn("[site-settings] Supabase getNavbarConfig fallback:", err);
+  }
+
+  const fallback = readFallbackSettings();
+  if (fallback.navbar) {
+    return normalizeNavbarConfig(fallback.navbar);
+  }
+
+  return { ...DEFAULT_NAVBAR_CONFIG };
+}
+
+// ============================================================================
+// 1. Persistent Data Cache (unstable_cache)
+// 1 hour background revalidation (3600s), tagged with 'site-settings'
+// ============================================================================
+
+const getCachedPromoBannerConfig = unstable_cache(
+  async () => queryPromoBannerConfig(),
+  ["site-settings-promo-banner"],
+  {
+    revalidate: 3600,
+    tags: ["site-settings", "promo-banner"],
+  }
+);
+
+const getCachedCatalogueMarqueeConfig = unstable_cache(
+  async () => queryCatalogueMarqueeConfig(),
+  ["site-settings-catalogue-marquee"],
+  {
+    revalidate: 3600,
+    tags: ["site-settings", "catalogue-marquee"],
+  }
+);
+
+const getCachedNavbarConfig = unstable_cache(
+  async () => queryNavbarConfig(),
+  ["site-settings-navbar"],
+  {
+    revalidate: 3600,
+    tags: ["site-settings", "navbar"],
+  }
+);
+
+// ============================================================================
+// 2. Request-Scoped Memoization (React.cache)
+// Deduplicates fetches within a single server rendering pass
+// ============================================================================
+
+export const getPromoBannerConfig = cache(async (): Promise<PromoBannerConfig> => {
+  return getCachedPromoBannerConfig();
+});
+
+export const getCatalogueMarqueeConfig = cache(async (): Promise<CatalogueMarqueeConfig> => {
+  return getCachedCatalogueMarqueeConfig();
+});
+
+export const getNavbarConfig = cache(async (): Promise<NavbarConfig> => {
+  return getCachedNavbarConfig();
+});
+
+/**
  * Updates the homepage promotional banner config.
  */
 export async function savePromoBannerConfig(
@@ -194,7 +280,6 @@ export async function savePromoBannerConfig(
     updatedAt: new Date().toISOString(),
   };
 
-  let savedInDb = false;
   try {
     if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
       const supabase = createSupabaseAdminClient();
@@ -206,9 +291,7 @@ export async function savePromoBannerConfig(
         },
         { onConflict: "key" }
       );
-      if (!error) {
-        savedInDb = true;
-      } else {
+      if (error) {
         console.error(
           `[site-settings] Supabase upsert promo_banner failed (${error.code}): ${error.message}. ` +
           (error.hint ? `Hint: ${error.hint}` : "Check public.site_settings permissions.")
@@ -224,6 +307,7 @@ export async function savePromoBannerConfig(
   currentFallback.promo_banner = updated;
   writeFallbackSettings(currentFallback);
 
+  invalidateSettingsCache();
   return updated;
 }
 
@@ -268,36 +352,8 @@ export async function saveCatalogueMarqueeConfig(
   currentFallback.catalogue_marquee = updated;
   writeFallbackSettings(currentFallback);
 
+  invalidateSettingsCache();
   return updated;
-}
-
-/**
- * Retrieves the currently published customer navbar configuration.
- */
-export async function getNavbarConfig(): Promise<NavbarConfig> {
-  try {
-    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      const supabase = createSupabaseAdminClient();
-      const { data, error } = await supabase
-        .from("site_settings")
-        .select("value")
-        .eq("key", "navbar")
-        .maybeSingle();
-
-      if (!error && data?.value) {
-        return normalizeNavbarConfig(data.value as Partial<NavbarConfig>);
-      }
-    }
-  } catch (err) {
-    console.warn("[site-settings] Supabase getNavbarConfig fallback:", err);
-  }
-
-  const fallback = readFallbackSettings();
-  if (fallback.navbar) {
-    return normalizeNavbarConfig(fallback.navbar);
-  }
-
-  return { ...DEFAULT_NAVBAR_CONFIG };
 }
 
 /**
@@ -338,5 +394,7 @@ export async function saveNavbarConfig(
   currentFallback.navbar = updated;
   writeFallbackSettings(currentFallback);
 
+  invalidateSettingsCache();
   return updated;
 }
+

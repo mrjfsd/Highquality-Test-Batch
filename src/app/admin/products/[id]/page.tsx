@@ -1,8 +1,6 @@
 import { Suspense } from "react";
 import AdminApp from "../../wireframe-ui";
 
-export const instant = false;
-
 interface Props {
   params: Promise<{ id: string }>;
 }

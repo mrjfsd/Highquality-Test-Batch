@@ -3,8 +3,6 @@ import Link from "next/link";
 import { fetchPublishedSaleProducts } from "@/lib/products/storefront";
 import ProductCard from "@/components/ProductCard";
 
-export const instant = false;
-
 export const metadata: Metadata = {
   title: "The Sale Edit | Style-Edit",
   description:

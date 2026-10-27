@@ -12,6 +12,7 @@ import {
   CloseIcon,
   ArrowRightIcon,
 } from "@/components/Icons";
+import { getClientStorefrontSettings } from "@/lib/settings/client-settings";
 
 function BrandLockup() {
   return (
@@ -51,17 +52,14 @@ export default function Navbar() {
     };
   }, [mobileOpen]);
 
-  // Fetch navbar settings on mount
+  // Fetch navbar settings on mount (using deduplicated client cache)
   useEffect(() => {
     let isMounted = true;
     async function fetchNavbarSettings() {
       try {
-        const res = await fetch("/api/settings");
-        if (res.ok) {
-          const data = await res.json();
-          if (isMounted && data?.navbar && typeof data.navbar.showSaleLink === "boolean") {
-            setShowSaleLink(data.navbar.showSaleLink);
-          }
+        const data = await getClientStorefrontSettings();
+        if (isMounted && data?.navbar && typeof data.navbar.showSaleLink === "boolean") {
+          setShowSaleLink(data.navbar.showSaleLink);
         }
       } catch (err) {
         console.warn("[Navbar] Could not load navbar settings:", err);

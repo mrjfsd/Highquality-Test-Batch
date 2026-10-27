@@ -21,8 +21,6 @@ const dosis = Dosis({
   variable: "--font-dosis",
 });
 
-export const instant = false;
-
 // Generate static params for all published products and catalogue items at build time
 export async function generateStaticParams() {
   const mockSlugs = products.map((p) => ({ slug: p.slug }));
@@ -87,6 +85,7 @@ export default async function ProductDetailPage({ params }: Props) {
           href={`/shop/${product.department.toLowerCase()}`}
           className="back-btn-pill"
           aria-label={`Back to ${product.department} collection`}
+          prefetch={true}
         >
           <span className="back-arrow" aria-hidden="true">
             <Icon name="arrow" size={14} />
@@ -95,9 +94,9 @@ export default async function ProductDetailPage({ params }: Props) {
         </Link>
 
         <nav className="breadcrumb detail-breadcrumb" aria-label="Breadcrumb">
-          <Link href="/">Home</Link>
+          <Link href="/" prefetch={true}>Home</Link>
           <span aria-hidden="true">/</span>
-          <Link href={`/shop/${product.department.toLowerCase()}`}>
+          <Link href={`/shop/${product.department.toLowerCase()}`} prefetch={true}>
             {product.department}
           </Link>
           <span aria-hidden="true">/</span>

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import styles from "./CollectionMarquee.module.css";
+import { getClientStorefrontSettings } from "@/lib/settings/client-settings";
 
 export const DEFAULT_PROMO_MESSAGES = [
   "BUY ANY 4 GET Rs.200 OFF",
@@ -21,12 +22,9 @@ export default function CollectionMarquee({ initialMessages }: CollectionMarquee
 
     async function loadSettings() {
       try {
-        const res = await fetch("/api/settings");
-        if (res.ok) {
-          const data = await res.json();
-          if (isMounted && data?.catalogueMarquee?.ads) {
-            setMessages(data.catalogueMarquee.ads);
-          }
+        const data = await getClientStorefrontSettings();
+        if (isMounted && data?.catalogueMarquee?.ads) {
+          setMessages(data.catalogueMarquee.ads);
         }
       } catch (err) {
         console.warn("[CollectionMarquee] Failed to fetch marquee settings:", err);

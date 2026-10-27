@@ -42,13 +42,13 @@ export default function Footer() {
         {/* Shop Navigation */}
         <div className="footer-col">
           <p className="footer-label">Shop</p>
-          <Link href="/shop/women" className="footer-nav-link">
+          <Link href="/shop/women" className="footer-nav-link" prefetch={true}>
             Women
           </Link>
-          <Link href="/shop/men" className="footer-nav-link">
+          <Link href="/shop/men" className="footer-nav-link" prefetch={true}>
             Men
           </Link>
-          <Link href="/shop/kids" className="footer-nav-link">
+          <Link href="/shop/kids" className="footer-nav-link" prefetch={true}>
             Kids
           </Link>
         </div>

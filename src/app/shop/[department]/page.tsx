@@ -13,8 +13,6 @@ export function generateStaticParams() {
   return VALID_DEPARTMENTS.map((d) => ({ department: d.toLowerCase() }));
 }
 
-export const instant = false;
-
 interface Props {
   params: Promise<{ department: string }>;
 }

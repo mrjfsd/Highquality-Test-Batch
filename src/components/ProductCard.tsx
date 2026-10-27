@@ -107,6 +107,7 @@ export default function ProductCard({
           className="product-image-link"
           aria-label={`View ${product.name}`}
           tabIndex={0}
+          prefetch={true}
         >
           {hasDiscount && (
             <span className="sale-tag sale-tag--on-sale" aria-label="On Sale">
@@ -184,6 +185,7 @@ export default function ProductCard({
           <Link
             href={`/product/${product.slug}`}
             className="product-card-title-link"
+            prefetch={true}
           >
             {product.name}
           </Link>

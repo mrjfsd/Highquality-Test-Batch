@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { verifyAdminServer } from "@/lib/supabase/server-auth";
 import {
   getPromoBannerConfig,
@@ -144,6 +144,7 @@ export async function POST(request: NextRequest) {
 
     // Revalidate customer-facing homepage and settings endpoint so Vercel edge/ISR reflects updates immediately
     try {
+      revalidateTag("site-settings", "max");
       revalidatePath("/", "page");
       revalidatePath("/api/settings");
     } catch (revalidateErr) {
