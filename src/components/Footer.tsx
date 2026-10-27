@@ -20,18 +20,15 @@ export default function Footer() {
         <div className="footer-brand">
           <Link className="footer-brand-lockup" href="/" aria-label="Style-Edit home">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <picture>
-              <source srcSet="/Brandlogo.webp" type="image/webp" />
-              <img
-                src="/Brandlogo.svg"
-                alt="Style-Edit Logo"
-                className="footer-brand-logo"
-                width={48}
-                height={48}
-                loading="lazy"
-                decoding="async"
-              />
-            </picture>
+            <img
+              src="/Brandlogo.webp"
+              alt="Style-Edit Logo"
+              className="footer-brand-logo"
+              width={48}
+              height={48}
+              loading="lazy"
+              decoding="async"
+            />
             <span className="footer-brand-text">STYLE EDIT</span>
           </Link>
           <p className="footer-tagline">

@@ -1,7 +1,8 @@
 import { type NextRequest } from "next/server";
+import sharp from "sharp";
 import { getR2Object, generatePresignedReadUrl } from "@/lib/r2/operations";
 
-// Server-side in-memory LRU cache for R2 image objects
+// Server-side in-memory LRU cache for R2 image objects (both original and transformed variants)
 interface CachedR2Object {
   buffer: Uint8Array;
   contentType: string;
@@ -87,8 +88,9 @@ function getCacheControlHeader(objectKey: string): string {
 /**
  * GET /api/images/[...key]
  *
- * Secure proxy serving original product images from the private Cloudflare R2 bucket.
+ * Secure proxy serving original or responsive resized product images from private Cloudflare R2 bucket.
  * Features:
+ * - On-the-fly sharp WebP conversion and responsive resizing (?w=...&q=...)
  * - In-memory LRU cache with entry and byte bounding
  * - Conditional request (304 Not Modified) with ETag matching
  * - Zero-copy buffer delivery
@@ -123,6 +125,10 @@ export async function GET(
   // Parse query parameters
   const { searchParams } = new URL(request.url);
   const isRaw = searchParams.get("raw") === "true" || searchParams.get("raw") === "1";
+  const widthParam = parseInt(searchParams.get("w") || "", 10);
+  const qualityParam = parseInt(searchParams.get("q") || "80", 10);
+  const targetWidth = !isNaN(widthParam) && widthParam >= 60 && widthParam <= 2560 ? widthParam : undefined;
+  const targetQuality = !isNaN(qualityParam) && qualityParam >= 30 && qualityParam <= 100 ? qualityParam : 80;
 
   // Raw bypass: if raw presigned URL is explicitly requested, redirect with 307
   if (isRaw) {
@@ -139,9 +145,10 @@ export async function GET(
   }
 
   const clientEtag = request.headers.get("if-none-match");
+  const cacheKey = targetWidth ? `${objectKey}?w=${targetWidth}&q=${targetQuality}` : objectKey;
 
-  // 1. Check in-memory cache for fast repeat delivery
-  const cached = getFromCache(objectKey);
+  // 1. Check in-memory cache for fast repeat delivery (hit)
+  const cached = getFromCache(cacheKey);
   if (cached) {
     if (matchClientEtag(clientEtag, cached.etag)) {
       return new Response(null, {
@@ -170,54 +177,106 @@ export async function GET(
 
   // 2. Fetch original directly from private R2 bucket (supporting conditional requests)
   try {
-    const r2Result = await getR2Object(objectKey, clientEtag || undefined);
+    // Check if the original object is already in memory cache
+    let originalBuffer: Uint8Array | undefined = getFromCache(objectKey)?.buffer;
+    let baseContentType = inferContentTypeFromKey(objectKey);
+    let baseEtag = `${objectKey}-orig`;
 
-    if (r2Result.isNotModified) {
+    if (!originalBuffer) {
+      const r2Result = await getR2Object(objectKey, clientEtag || undefined);
+
+      if (r2Result.isNotModified && !targetWidth) {
+        return new Response(null, {
+          status: 304,
+          headers: {
+            "ETag": `"${r2Result.etag || cleanServerEtag(clientEtag || "")}"`,
+            "Cache-Control": cacheControl,
+            "Vary": "Accept-Encoding",
+          },
+        });
+      }
+
+      if (!r2Result.body) {
+        throw new Error(`Empty body returned for object ${objectKey}`);
+      }
+
+      originalBuffer = r2Result.body;
+      baseContentType = r2Result.contentType || inferContentTypeFromKey(objectKey);
+      baseEtag = r2Result.etag || `${objectKey}-${originalBuffer.length}`;
+
+      // Cache original in memory
+      addToCache(objectKey, {
+        buffer: originalBuffer,
+        contentType: baseContentType,
+        etag: baseEtag,
+        contentLength: r2Result.contentLength || originalBuffer.length,
+      });
+    }
+
+    // If a target width is requested, resize and convert to WebP on-the-fly using sharp
+    if (targetWidth) {
+      try {
+        const transformedBuffer = await sharp(originalBuffer)
+          .resize({ width: targetWidth, withoutEnlargement: true })
+          .webp({ quality: targetQuality })
+          .toBuffer();
+
+        const transformedEtag = `${baseEtag}-w${targetWidth}-q${targetQuality}`;
+
+        if (matchClientEtag(clientEtag, transformedEtag)) {
+          return new Response(null, {
+            status: 304,
+            headers: {
+              "ETag": `"${transformedEtag}"`,
+              "Cache-Control": cacheControl,
+              "Vary": "Accept-Encoding",
+            },
+          });
+        }
+
+        addToCache(cacheKey, {
+          buffer: transformedBuffer,
+          contentType: "image/webp",
+          etag: transformedEtag,
+          contentLength: transformedBuffer.length,
+        });
+
+        return new Response(transformedBuffer as unknown as BodyInit, {
+          status: 200,
+          headers: {
+            "Content-Type": "image/webp",
+            "Content-Length": transformedBuffer.length.toString(),
+            "Cache-Control": cacheControl,
+            "ETag": `"${transformedEtag}"`,
+            "Vary": "Accept-Encoding",
+            "X-Image-Proxy": "r2-sharp-webp",
+            "X-Cache": "MISS",
+          },
+        });
+      } catch (sharpErr) {
+        console.warn("[image-proxy] sharp processing failed, falling back to original:", sharpErr);
+      }
+    }
+
+    // Default: serve original buffer
+    if (matchClientEtag(clientEtag, baseEtag)) {
       return new Response(null, {
         status: 304,
         headers: {
-          "ETag": `"${r2Result.etag || cleanServerEtag(clientEtag || "")}"`,
+          "ETag": `"${baseEtag}"`,
           "Cache-Control": cacheControl,
           "Vary": "Accept-Encoding",
         },
       });
     }
 
-    if (!r2Result.body) {
-      throw new Error(`Empty body returned for object ${objectKey}`);
-    }
-
-    const contentType = r2Result.contentType || inferContentTypeFromKey(objectKey);
-    const etag = r2Result.etag || `${objectKey}-${r2Result.body.length}`;
-    const contentLength = r2Result.contentLength || r2Result.body.length;
-
-    // Check conditional ETag request (HTTP 304)
-    if (matchClientEtag(clientEtag, etag)) {
-      return new Response(null, {
-        status: 304,
-        headers: {
-          "ETag": `"${etag}"`,
-          "Cache-Control": cacheControl,
-          "Vary": "Accept-Encoding",
-        },
-      });
-    }
-
-    // Cache the object in memory for hot path
-    addToCache(objectKey, {
-      buffer: r2Result.body,
-      contentType,
-      etag,
-      contentLength,
-    });
-
-    return new Response(r2Result.body as unknown as BodyInit, {
+    return new Response(originalBuffer as unknown as BodyInit, {
       status: 200,
       headers: {
-        "Content-Type": contentType,
-        "Content-Length": contentLength.toString(),
+        "Content-Type": baseContentType,
+        "Content-Length": originalBuffer.length.toString(),
         "Cache-Control": cacheControl,
-        "ETag": `"${etag}"`,
+        "ETag": `"${baseEtag}"`,
         "Vary": "Accept-Encoding",
         "X-Image-Proxy": "r2-direct",
         "X-Cache": "MISS",

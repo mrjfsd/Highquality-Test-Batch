@@ -18,17 +18,14 @@ function BrandLockup() {
   return (
     <Link className="nav-brand-lockup" href="/" aria-label="Style-Edit home">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <picture>
-        <source srcSet="/Brandlogo.webp" type="image/webp" />
-        <img
-          src="/Brandlogo.svg"
-          alt="Style-Edit Logo"
-          className="nav-brand-logo"
-          width={40}
-          height={40}
-          decoding="async"
-        />
-      </picture>
+      <img
+        src="/Brandlogo.webp"
+        alt="Style-Edit Logo"
+        className="nav-brand-logo"
+        width={40}
+        height={40}
+        decoding="async"
+      />
       <span className="nav-brand-text">STYLE EDIT</span>
     </Link>
   );

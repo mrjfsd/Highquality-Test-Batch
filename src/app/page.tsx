@@ -27,7 +27,6 @@ type ImageProps = {
 };
 
 const images = {
-  hero: "/assets/hero-campaign.webp",
   men: "https://images.unsplash.com/photo-1592409039573-5a135408dcc4?auto=format&fit=crop&w=900&q=86",
   women: "https://images.unsplash.com/photo-1590399830217-8db7489f911e?auto=format&fit=crop&w=900&q=86",
   kids: "https://images.unsplash.com/photo-1758851552775-7353c60e4906?auto=format&fit=crop&w=900&q=86",
@@ -173,6 +172,28 @@ function SectionHeading({
   );
 }
 
+function getBannerResponsiveSources(url: string) {
+  if (url.startsWith("/api/images/")) {
+    return {
+      mobileSrcSet: `${url}?w=640&q=80`,
+      desktopSrcSet: `${url}?w=1600&q=82`,
+      fallbackSrc: `${url}?w=1600&q=82`,
+    };
+  }
+  if (url === "/assets/image.png" || url === "/assets/image.webp") {
+    return {
+      mobileSrcSet: "/assets/image-mobile.webp",
+      desktopSrcSet: "/assets/image.webp",
+      fallbackSrc: "/assets/image.webp",
+    };
+  }
+  return {
+    mobileSrcSet: url,
+    desktopSrcSet: url,
+    fallbackSrc: url,
+  };
+}
+
 /* ── Section 2: Promotional Banner ── */
 function HomePromotionalBanner({ banner }: { banner?: PromoBannerConfig | null }) {
   // If explicitly disabled, remove the entire section from layout with zero margin/height
@@ -180,11 +201,12 @@ function HomePromotionalBanner({ banner }: { banner?: PromoBannerConfig | null }
     return null;
   }
 
-  const imageUrl = banner?.imageUrl || "/assets/image.png";
+  const imageUrl = banner?.imageUrl || "/assets/image.webp";
   const altText = banner?.altText || "Promotional Banner — Click to explore sale pieces";
   const posX = typeof banner?.positionX === "number" ? banner.positionX : 50;
   const posY = typeof banner?.positionY === "number" ? banner.positionY : 46;
   const zoom = typeof banner?.zoom === "number" ? banner.zoom : 1.0;
+  const sources = getBannerResponsiveSources(imageUrl);
 
   return (
     <section className="home-promo-banner" aria-label="Festive Promotion">
@@ -194,39 +216,19 @@ function HomePromotionalBanner({ banner }: { banner?: PromoBannerConfig | null }
         aria-label="Promotional Sale — Shop The Sale Edit"
         prefetch={true}
       >
-        {imageUrl === "/assets/image.png" ? (
-          <picture>
-            <source
-              media="(max-width: 640px)"
-              srcSet="/assets/image-mobile.webp"
-              type="image/webp"
-            />
-            <source srcSet="/assets/image.webp" type="image/webp" />
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/assets/image.png"
-              alt={altText}
-              className="home-promo-banner-image"
-              style={{
-                objectPosition: `${posX}% ${posY}%`,
-                ...(zoom > 1
-                  ? {
-                      transform: `scale(${zoom})`,
-                      transformOrigin: `${posX}% ${posY}%`,
-                    }
-                  : {}),
-              }}
-              loading="eager"
-              fetchPriority="high"
-              decoding="async"
-              width={2172}
-              height={724}
-            />
-          </picture>
-        ) : (
-          /* eslint-disable-next-line @next/next/no-img-element */
+        <picture>
+          <source
+            media="(max-width: 640px)"
+            srcSet={sources.mobileSrcSet}
+            type="image/webp"
+          />
+          <source
+            srcSet={sources.desktopSrcSet}
+            type="image/webp"
+          />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={imageUrl}
+            src={sources.fallbackSrc}
             alt={altText}
             className="home-promo-banner-image"
             style={{
@@ -241,28 +243,19 @@ function HomePromotionalBanner({ banner }: { banner?: PromoBannerConfig | null }
             loading="eager"
             fetchPriority="high"
             decoding="async"
-            width={2172}
-            height={724}
+            width={1600}
+            height={200}
           />
-        )}
+        </picture>
       </Link>
     </section>
   );
 }
 
 /* ── Section 3: Editorial Hero ── */
-function HeroBanner() {
+function HeroBanner({ isBannerActive = true }: { isBannerActive?: boolean }) {
   return (
     <section className="hero" aria-labelledby="hero-title">
-      <SmartImage
-        src={images.hero}
-        alt="Style Edit editorial fashion campaign featuring tailored bordeaux coat and relaxed tailoring"
-        className="hero-image"
-        loading="eager"
-        priority={true}
-        width={2064}
-        height={1152}
-      />
       <div className="hero-overlay" />
       <div className="hero-content">
         <h1 id="hero-title" className="hero-fade-1">Your Style. Your Edit.</h1>
@@ -279,9 +272,10 @@ function HeroBanner() {
                 alt="Floating blue denim jeans"
                 className="hero-floating-garment-img"
                 loading="eager"
+                fetchPriority="auto"
                 decoding="async"
-                width={440}
-                height={580}
+                width={380}
+                height={507}
               />
             </div>
 
@@ -295,10 +289,10 @@ function HeroBanner() {
                 alt="Style Edit floating fleece zip jacket showcase"
                 className="hero-floating-garment-img"
                 loading="eager"
-                fetchPriority="high"
+                fetchPriority={isBannerActive ? "auto" : "high"}
                 decoding="async"
-                width={480}
-                height={620}
+                width={540}
+                height={540}
               />
             </div>
 
@@ -311,9 +305,10 @@ function HeroBanner() {
                 alt="Floating charcoal graphic camera t-shirt"
                 className="hero-floating-garment-img"
                 loading="eager"
+                fetchPriority="auto"
                 decoding="async"
-                width={440}
-                height={580}
+                width={380}
+                height={504}
               />
             </div>
 
@@ -503,12 +498,13 @@ function BrandStatement() {
 
 export default async function HomePage() {
   const banner = await getPromoBannerConfig();
+  const isBannerActive = banner ? banner.enabled !== false : true;
 
   return (
     <main className="site-shell">
       <HomeScrollAnimator />
       <HomePromotionalBanner banner={banner} />
-      <HeroBanner />
+      <HeroBanner isBannerActive={isBannerActive} />
       <ShopByDepartment />
       <FeaturedProducts />
       <EditorialFeature />

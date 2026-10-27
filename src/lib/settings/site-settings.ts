@@ -26,7 +26,7 @@ export interface NavbarConfig {
 }
 
 export const DEFAULT_PROMO_BANNER: PromoBannerConfig = {
-  imageUrl: "/assets/image.png",
+  imageUrl: "/assets/image.webp",
   storagePath: null,
   altText: "Diwali Sale Promotional Banner — Click to explore sale pieces",
   enabled: true,

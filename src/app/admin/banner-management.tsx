@@ -284,9 +284,9 @@ export function BannerManagementScreen({ showToast }: BannerManagementScreenProp
 
     try {
       const processed = await compressImageForUpload(selectedFile, {
-        maxSizeMB: 2.5,
-        maxWidthOrHeight: 2560,
-        initialQuality: 0.9,
+        maxSizeMB: 0.5,
+        maxWidthOrHeight: 1800,
+        initialQuality: 0.85,
       });
 
       setUploadProgress(35);
