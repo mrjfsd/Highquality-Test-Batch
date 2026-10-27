@@ -265,10 +265,9 @@ function HeroBanner() {
       />
       <div className="hero-overlay" />
       <div className="hero-content">
-        <p className="eyebrow light hero-fade-1">THE NEW EVERYDAY</p>
-        <h1 id="hero-title" className="hero-fade-2">Your Style. Your Edit.</h1>
+        <h1 id="hero-title" className="hero-fade-1">Your Style. Your Edit.</h1>
 
-        {/* Mobile-Only Floating 3D Garment Trio Showcase */}
+        {/* Floating 3D Garment Trio Showcase */}
         <div className="hero-floating-garment-wrapper" aria-hidden="false">
           <div className="hero-floating-garment-stage">
             {/* Left Card: Blue Denim Jeans (subtle CCW tilt, behind center) */}
@@ -323,9 +322,8 @@ function HeroBanner() {
           </div>
         </div>
 
-        <p className="hero-fade-3 hero-description">
-          <span className="hero-desc-desktop">Discover everyday fashion, handpicked for every mood.</span>
-          <span className="hero-desc-mobile">Everyday style, thoughtfully chosen.</span>
+        <p className="hero-fade-2 hero-description">
+          Everyday style, thoughtfully chosen.
         </p>
         
         {/* Refined editorial hero buttons with sophisticated solid/outline pairing */}
