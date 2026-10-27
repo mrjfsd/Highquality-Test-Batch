@@ -7,6 +7,7 @@ import {
 import type { Metadata } from "next";
 import Link from "next/link";
 import HomeScrollAnimator from "@/components/HomeScrollAnimator";
+import HeroGarmentFan from "@/components/HeroGarmentFan";
 import { getPromoBannerConfig, PromoBannerConfig } from "@/lib/settings/site-settings";
 
 export const metadata: Metadata = {
@@ -260,62 +261,8 @@ function HeroBanner({ isBannerActive = true }: { isBannerActive?: boolean }) {
       <div className="hero-content">
         <h1 id="hero-title" className="hero-fade-1">Your Style. Your Edit.</h1>
 
-        {/* Floating 3D Garment Trio Showcase */}
-        <div className="hero-floating-garment-wrapper" aria-hidden="false">
-          <div className="hero-floating-garment-stage">
-            {/* Left Card: Blue Denim Jeans (subtle CCW tilt, behind center) */}
-            <div className="hero-floating-garment-card hero-floating-garment-card--left">
-              <div className="hero-garment-sheen" aria-hidden="true" />
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/assets/floating-jeans-mobile.webp"
-                alt="Floating blue denim jeans"
-                className="hero-floating-garment-img"
-                loading="eager"
-                fetchPriority="auto"
-                decoding="async"
-                width={380}
-                height={507}
-              />
-            </div>
-
-            {/* Center Card: Fleece Jacket (main focal point, forward, larger) */}
-            <div className="hero-floating-garment-card hero-floating-garment-card--center">
-              <div className="hero-garment-sheen" aria-hidden="true" />
-              <div className="hero-garment-light" aria-hidden="true" />
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/assets/floating-garment-mobile.webp"
-                alt="Style Edit floating fleece zip jacket showcase"
-                className="hero-floating-garment-img"
-                loading="eager"
-                fetchPriority={isBannerActive ? "auto" : "high"}
-                decoding="async"
-                width={540}
-                height={540}
-              />
-            </div>
-
-            {/* Right Card: Charcoal Graphic T-Shirt (subtle CW tilt, behind center) */}
-            <div className="hero-floating-garment-card hero-floating-garment-card--right">
-              <div className="hero-garment-sheen" aria-hidden="true" />
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/assets/floating-tshirt-mobile.webp"
-                alt="Floating charcoal graphic camera t-shirt"
-                className="hero-floating-garment-img"
-                loading="eager"
-                fetchPriority="auto"
-                decoding="async"
-                width={380}
-                height={504}
-              />
-            </div>
-
-            {/* Unified diffused 3D floor shadow */}
-            <div className="hero-garment-shadow" aria-hidden="true" />
-          </div>
-        </div>
+        {/* Interactive Six-Card Circular Fan Carousel */}
+        <HeroGarmentFan isBannerActive={isBannerActive} />
 
         <p className="hero-fade-2 hero-description">
           Everyday style, thoughtfully chosen.
@@ -357,7 +304,7 @@ function DepartmentCard({
           <h3>{title}</h3>
           <p>{detail}</p>
         </div>
-        <TextLink href={href}>Explore collection</TextLink>
+        <TextLink href={href} className="department-explore-link">Explore collection</TextLink>
       </div>
     </article>
   );
@@ -423,32 +370,145 @@ function FeaturedProducts() {
   );
 }
 
-/* ── Section 6: The Everyday Edit (Editorial Feature) ── */
-function EditorialFeature() {
-  const currentYear = 2026;
-
+/* ── Section 6: Editorial Scroll Showcase (2-Pair Scroll Transition) ── */
+function EditorialScrollShowcase() {
   return (
-    <section className="editorial section">
-      <div className="editorial-image-wrap reveal-item">
-        <SmartImage
-          src={images.editorial}
-          alt="Woman in a relaxed contemporary look outside a modern building"
-          className="editorial-image"
-          sizes={RESPONSIVE_SIZES.editorial}
-          width={700}
-          height={875}
-        />
-        <span className="vertical-note">STYLE NOTES / {currentYear}</span>
-      </div>
-      <div className="editorial-copy reveal-item stagger-1">
-        <p className="eyebrow">THE EVERYDAY EDIT</p>
-        <h2>Everyday, Elevated.</h2>
-        <p className="editorial-description">
-          Easy-to-wear styles. Fresh looks. More ways to make them yours.
-        </p>
-        <Link className="button button-dark" href="/shop/women">
-          Explore the Collection
-        </Link>
+    <section className="editorial-showcase" id="editorial" aria-label="Editorial Capsule">
+      <div className="editorial-scroll-container">
+        <div className="editorial-scroll-sticky">
+          <div className="editorial-scroll-header">
+            <div className="editorial-header-text">
+              <p className="eyebrow">THE EVERYDAY EDIT</p>
+              <h2>Form & Perspective</h2>
+              <p className="editorial-subtitle">
+                Two perspectives. Everyday versatility. Scroll to reveal the shift in detail.
+              </p>
+            </div>
+            <div className="editorial-header-action">
+              <TextLink href="/shop/women">Explore the Collection</TextLink>
+            </div>
+          </div>
+
+          <div className="editorial-stage">
+            {/* Pair 1: Base Front Silhouette */}
+            <div className="editorial-pair editorial-pair--base" aria-hidden="false">
+              <Link
+                href="/shop/women"
+                className="editorial-card"
+                aria-label="Women's collection — Relaxed Linen Blazer"
+                prefetch={true}
+              >
+                <div className="editorial-image-frame">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/assets/dummy-products/women/women-blazer-front.jpg"
+                    alt="Relaxed Linen Silhouette in natural stone"
+                    className="editorial-image"
+                    loading="lazy"
+                    decoding="async"
+                    width={896}
+                    height={1200}
+                  />
+                  <div className="editorial-card-tag">
+                    <span className="editorial-tag-num">01</span>
+                    <span className="editorial-tag-label">SILHOUETTE</span>
+                  </div>
+                </div>
+                <div className="editorial-card-info">
+                  <h4>The Tailored Blazer</h4>
+                  <p>Women · Relaxed Cut</p>
+                </div>
+              </Link>
+
+              <Link
+                href="/shop/men"
+                className="editorial-card"
+                aria-label="Men's collection — Textured Knitwear"
+                prefetch={true}
+              >
+                <div className="editorial-image-frame">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/assets/dummy-products/men/men-knit-front.jpg"
+                    alt="Textured Everyday Knitwear in charcoal black"
+                    className="editorial-image"
+                    loading="lazy"
+                    decoding="async"
+                    width={896}
+                    height={1200}
+                  />
+                  <div className="editorial-card-tag">
+                    <span className="editorial-tag-num">02</span>
+                    <span className="editorial-tag-label">TEXTURE</span>
+                  </div>
+                </div>
+                <div className="editorial-card-info">
+                  <h4>The Considered Knit</h4>
+                  <p>Men · Heavyweight Weave</p>
+                </div>
+              </Link>
+            </div>
+
+            {/* Pair 2: Transition / Profile & Craft (rises up as user scrolls) */}
+            <div className="editorial-pair editorial-pair--overlay" aria-hidden="false">
+              <Link
+                href="/shop/women"
+                className="editorial-card"
+                aria-label="Women's collection — Blazer Profile View"
+                prefetch={true}
+              >
+                <div className="editorial-image-frame">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/assets/dummy-products/women/women-blazer-side.jpg"
+                    alt="Relaxed Linen Blazer profile line"
+                    className="editorial-image"
+                    loading="lazy"
+                    decoding="async"
+                    width={896}
+                    height={1200}
+                  />
+                  <div className="editorial-card-tag">
+                    <span className="editorial-tag-num">01</span>
+                    <span className="editorial-tag-label">PROFILE</span>
+                  </div>
+                </div>
+                <div className="editorial-card-info">
+                  <h4>Profile & Line</h4>
+                  <p>Structured shoulder drape</p>
+                </div>
+              </Link>
+
+              <Link
+                href="/shop/men"
+                className="editorial-card"
+                aria-label="Men's collection — Knit Detail View"
+                prefetch={true}
+              >
+                <div className="editorial-image-frame">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/assets/dummy-products/men/men-knit-detail.jpg"
+                    alt="Considered Knitwear tactile rib detail"
+                    className="editorial-image"
+                    loading="lazy"
+                    decoding="async"
+                    width={896}
+                    height={1200}
+                  />
+                  <div className="editorial-card-tag">
+                    <span className="editorial-tag-num">02</span>
+                    <span className="editorial-tag-label">CRAFT</span>
+                  </div>
+                </div>
+                <div className="editorial-card-info">
+                  <h4>Tactile Depth</h4>
+                  <p>Ribbed collar & seam craft</p>
+                </div>
+              </Link>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   );
@@ -507,7 +567,7 @@ export default async function HomePage() {
       <HeroBanner isBannerActive={isBannerActive} />
       <ShopByDepartment />
       <FeaturedProducts />
-      <EditorialFeature />
+      <EditorialScrollShowcase />
       <CuratedCollection />
       <BrandStatement />
     </main>
