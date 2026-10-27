@@ -449,44 +449,6 @@ export default function HeroGarmentFan({
         {/* Ambient floor shadow under fan */}
         <div className="hero-fan-floor-shadow" aria-hidden="true" />
       </div>
-
-      {/* Two Small Circular Navigation Controls (Prev / Next) matching reference */}
-      <div className="hero-fan-nav" role="group" aria-label="Carousel navigation">
-        <button
-          type="button"
-          className="hero-fan-nav-btn hero-fan-nav-btn--prev"
-          onClick={handlePrev}
-          aria-label="Previous garment card"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16">
-            <path
-              d="M15 19l-7-7 7-7"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
-        <button
-          type="button"
-          className="hero-fan-nav-btn hero-fan-nav-btn--next"
-          onClick={handleNext}
-          aria-label="Next garment card"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16">
-            <path
-              d="M9 5l7 7-7 7"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
-      </div>
     </div>
   );
 }
