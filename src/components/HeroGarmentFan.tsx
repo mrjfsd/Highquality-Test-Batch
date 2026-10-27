@@ -10,7 +10,7 @@ export type GarmentCardItem = {
   alt: string;
 };
 
-// 10 distinct, authentic product cards from the repository
+// 10 authentic, distinct garment product cards from the repository
 export const HERO_GARMENTS: GarmentCardItem[] = [
   {
     id: 0,
@@ -38,7 +38,7 @@ export const HERO_GARMENTS: GarmentCardItem[] = [
     title: "Casual Outerwear",
     category: "Outerwear Capsule",
     image: "/assets/dummy-products/kids/kids-jacket-front.jpg",
-    alt: "Casual structured outerwear jacket",
+    alt: "Casual structured mustard outerwear jacket",
   },
   {
     id: 4,
@@ -84,7 +84,7 @@ export const HERO_GARMENTS: GarmentCardItem[] = [
   },
 ];
 
-const N = HERO_GARMENTS.length; // 10 cards
+const N = HERO_GARMENTS.length; // 10 cards for wide, symmetrical fan
 
 export default function HeroGarmentFan({
   isBannerActive = true,
@@ -102,6 +102,8 @@ export default function HeroGarmentFan({
   const progressRef = useRef(0);
   const targetProgressRef = useRef(0);
   const isDraggingRef = useRef(false);
+  const dragTiltRef = useRef(0);
+  const dragTiltTargetRef = useRef(0);
   const rafId = useRef<number | null>(null);
 
   // Pointer tracking refs
@@ -127,7 +129,7 @@ export default function HeroGarmentFan({
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Continuous animation loop using critically damped lerp
+  // Continuous animation loop using critically damped lerp with 3D tilt
   const startAnimation = useCallback(() => {
     if (rafId.current !== null) return;
 
@@ -136,12 +138,25 @@ export default function HeroGarmentFan({
       const current = progressRef.current;
       const diff = target - current;
 
-      // Slower, more stately, and luxurious glide
+      // Higher tracking responsiveness during active drag (0.34), silky smooth damping on release (0.09)
       const isDragging = isDraggingRef.current;
-      const lerpFactor = isDragging ? 0.28 : 0.082;
+      const lerpFactor = isDragging ? 0.34 : 0.09;
 
-      if (!isDragging && Math.abs(diff) < 0.0008) {
+      // Direction-aware 3D tilt while dragging (one way pulling right, the other pulling left)
+      const tiltTarget = isDragging
+        ? Math.max(-10, Math.min(10, -velocityX.current * 14))
+        : 0;
+      dragTiltTargetRef.current = tiltTarget;
+      dragTiltRef.current +=
+        (dragTiltTargetRef.current - dragTiltRef.current) * (isDragging ? 0.25 : 0.12);
+
+      if (
+        !isDragging &&
+        Math.abs(diff) < 0.0008 &&
+        Math.abs(dragTiltRef.current) < 0.04
+      ) {
         progressRef.current = target;
+        dragTiltRef.current = 0;
         setProgress(target);
         rafId.current = null;
         return;
@@ -168,6 +183,17 @@ export default function HeroGarmentFan({
       }
     };
   }, []);
+
+  // Step rotation controls for arrow buttons and keyboard
+  const handlePrev = useCallback(() => {
+    targetProgressRef.current = Math.round(targetProgressRef.current) - 1;
+    startAnimation();
+  }, [startAnimation]);
+
+  const handleNext = useCallback(() => {
+    targetProgressRef.current = Math.round(targetProgressRef.current) + 1;
+    startAnimation();
+  }, [startAnimation]);
 
   // Horizontal wheel / trackpad continuous rotation
   useEffect(() => {
@@ -201,15 +227,13 @@ export default function HeroGarmentFan({
     (e: React.KeyboardEvent) => {
       if (e.key === "ArrowLeft") {
         e.preventDefault();
-        targetProgressRef.current = Math.round(targetProgressRef.current) - 1;
-        startAnimation();
+        handlePrev();
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
-        targetProgressRef.current = Math.round(targetProgressRef.current) + 1;
-        startAnimation();
+        handleNext();
       }
     },
-    [startAnimation]
+    [handlePrev, handleNext]
   );
 
   // Pointer event handlers for unified smooth mouse drag and touch swipe
@@ -312,7 +336,7 @@ export default function HeroGarmentFan({
     startAnimation();
   };
 
-  // Compute smooth geometric transform for card `i`
+  // Compute smooth geometric transform for card `i` along the circular tangent arc
   const getCardStyle = (i: number) => {
     // Relative continuous circular distance from current progress (-5 to +5)
     let diff = (i - progress) % N;
@@ -321,49 +345,56 @@ export default function HeroGarmentFan({
 
     const absDiff = Math.abs(diff);
 
-    // Responsive geometry parameters for 10-card fan distribution
-    const spacingX = isMobile ? 42 : isTablet ? 84 : 114;
-    const arcDrop = isMobile ? 2.4 : isTablet ? 3.8 : 4.8;
-    const rotStep = isMobile ? 3.2 : isTablet ? 3.9 : 4.4;
-    const scaleStep = isMobile ? 0.062 : 0.068;
+    // Tangent Arc Geometry (reference implementation model):
+    // Radius of circular wheel and angle step per card
+    const R = isMobile ? 480 : isTablet ? 720 : 920;
+    const angleStepDeg = isMobile ? 6.2 : isTablet ? 7.0 : 7.8;
+    const thetaDeg = diff * angleStepDeg;
+    const thetaRad = (thetaDeg * Math.PI) / 180;
 
-    const translateX = diff * spacingX;
-    const translateY = Math.pow(absDiff, 1.28) * arcDrop;
-    const rotate = diff * rotStep;
-    const scale = Math.max(0.60, 1.05 - absDiff * scaleStep);
+    // Circle arc tangent coordinates:
+    const translateX = R * Math.sin(thetaRad);
+    const translateY = R * (1 - Math.cos(thetaRad));
+    const rotateZ = thetaDeg;
 
-    // Continuous z-index: center card has highest prominence (12), outer cards cascade down
-    const zIndex = Math.max(1, Math.round((5 - absDiff) * 2) + 1);
+    // 3D Perspective Rotation (Y-axis tilt):
+    // Inward facing curvature + direction-aware drag tilt
+    const baseRotateY = -diff * (isMobile ? 2.5 : 3.2);
+    const dynamicTilt = dragTiltRef.current * Math.max(0.3, 1 - absDiff * 0.18);
+    const totalRotateY = baseRotateY + dynamicTilt;
 
-    // Smooth progressive fade curve:
-    // - Active center card (absDiff = 0) is 1.0 (fully visible, crisp, dominant).
+    const scaleStep = isMobile ? 0.065 : 0.075;
+    const scale = Math.max(0.62, (isMobile ? 1.05 : 1.08) - absDiff * scaleStep);
+
+    // Stacking order: center card has highest prominence (18), outer cards cascade down
+    const zIndex = Math.max(1, Math.round((6 - absDiff) * 3));
+
+    // Smooth progressive fade curve (matching reference image):
+    // - Active center card (absDiff = 0) is 1.0 (crisp, prominent, crisp focus).
     // - Immediate adjacent cards (absDiff = 1) remain mostly visible (~0.95) with natural colors.
     // - Side cards progressively soften (absDiff = 2 -> ~0.83, absDiff = 3 -> ~0.63, absDiff = 4 -> ~0.34).
-    // - Smoothly blends into 0.0 before reaching the outer wrapping threshold so cards never pop or snap.
-    const maxVisibleRadius = isMobile ? 3.6 : isTablet ? 4.3 : 4.8;
+    // - Seamlessly fades into 0.0 before reaching the outer wrapping threshold so cards never pop or snap.
+    const maxVisibleRadius = isMobile ? 3.5 : isTablet ? 4.2 : 4.8;
     let opacity = 0;
     if (absDiff < maxVisibleRadius) {
       const normalizedDist = absDiff / maxVisibleRadius;
-      // Cosine ease-out curve with 0.8 exponent for silky, natural opacity falloff
-      opacity = Math.pow(Math.cos((normalizedDist * Math.PI) / 2), 0.8);
+      opacity = Math.pow(Math.cos((normalizedDist * Math.PI) / 2), 0.82);
     }
 
-    // Keep garment colors vivid, natural, and sharp without dark muddying overlays
     const brightness = Math.max(0.88, 1 - absDiff * 0.024);
     const isCenter = absDiff < 0.35;
 
     return {
-      transform: `translateX(calc(-50% + ${translateX.toFixed(2)}px)) translateY(${translateY.toFixed(2)}px) rotate(${rotate.toFixed(2)}deg) scale(${scale.toFixed(3)})`,
+      transform: `translateX(calc(-50% + ${translateX.toFixed(2)}px)) translateY(${translateY.toFixed(2)}px) rotateZ(${rotateZ.toFixed(2)}deg) rotateY(${totalRotateY.toFixed(2)}deg) scale(${scale.toFixed(3)})`,
       zIndex,
       opacity: opacity.toFixed(3),
       filter: `brightness(${brightness.toFixed(3)})`,
-      cursor: isCenter ? "default" : "pointer",
-      pointerEvents: opacity < 0.15 ? ("none" as const) : ("auto" as const),
+      cursor: isCenter ? "grab" : "pointer",
+      pointerEvents: opacity < 0.12 ? ("none" as const) : ("auto" as const),
       boxShadow: isCenter
-        ? "0 24px 50px -10px rgba(6, 17, 12, 0.95), 0 10px 24px rgba(0, 0, 0, 0.6), inset 0 1px 1.5px rgba(247, 243, 238, 0.32)"
+        ? "0 28px 56px -10px rgba(6, 17, 12, 0.96), 0 12px 28px rgba(0, 0, 0, 0.65), inset 0 1px 1.5px rgba(247, 243, 238, 0.34)"
         : "0 12px 28px -8px rgba(6, 17, 12, 0.72), inset 0 1px 1px rgba(247, 243, 238, 0.16)",
-      // No CSS transition delays during continuous pointer drag; instant silky smooth rendering
-      transition: "box-shadow 240ms ease, border-color 240ms ease",
+      transition: "box-shadow 260ms ease, border-color 260ms ease",
     };
   };
 
@@ -376,7 +407,7 @@ export default function HeroGarmentFan({
       className="hero-fan-container"
       role="region"
       aria-roledescription="carousel"
-      aria-label="Hero garment interactive circular fan"
+      aria-label="Hero garment interactive circular arc carousel"
       tabIndex={0}
       onKeyDown={handleKeyDown}
       onPointerDown={handlePointerDown}
@@ -384,7 +415,7 @@ export default function HeroGarmentFan({
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
     >
-      {/* The 10-Card Circular Overlapping Fan Stage */}
+      {/* The 10-Card Semicircular Overlapping Arc Stage */}
       <div className="hero-fan-stage">
         {HERO_GARMENTS.map((item, idx) => {
           const style = getCardStyle(idx);
@@ -417,6 +448,44 @@ export default function HeroGarmentFan({
 
         {/* Ambient floor shadow under fan */}
         <div className="hero-fan-floor-shadow" aria-hidden="true" />
+      </div>
+
+      {/* Two Small Circular Navigation Controls (Prev / Next) matching reference */}
+      <div className="hero-fan-nav" role="group" aria-label="Carousel navigation">
+        <button
+          type="button"
+          className="hero-fan-nav-btn hero-fan-nav-btn--prev"
+          onClick={handlePrev}
+          aria-label="Previous garment card"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16">
+            <path
+              d="M15 19l-7-7 7-7"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+        <button
+          type="button"
+          className="hero-fan-nav-btn hero-fan-nav-btn--next"
+          onClick={handleNext}
+          aria-label="Next garment card"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16">
+            <path
+              d="M9 5l7 7-7 7"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
       </div>
     </div>
   );
