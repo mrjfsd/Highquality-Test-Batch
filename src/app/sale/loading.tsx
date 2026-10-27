@@ -14,7 +14,7 @@ export default function SaleLoading() {
                 <div
                   className="product-image-wrap skeleton-pulse"
                   style={{
-                    background: "var(--card-bg, #f4f3ef)",
+                    background: "var(--card-bg, #171717)",
                     aspectRatio: "320 / 416",
                     borderRadius: 8,
                   }}
@@ -25,7 +25,7 @@ export default function SaleLoading() {
                     style={{
                       width: "75%",
                       height: 16,
-                      background: "var(--line, #e5e5e5)",
+                      background: "var(--line, rgba(247, 243, 238, 0.1))",
                       borderRadius: 4,
                       marginBottom: 8,
                     }}
@@ -35,7 +35,7 @@ export default function SaleLoading() {
                     style={{
                       width: "35%",
                       height: 14,
-                      background: "var(--line, #e5e5e5)",
+                      background: "var(--line, rgba(247, 243, 238, 0.1))",
                       borderRadius: 4,
                     }}
                   />

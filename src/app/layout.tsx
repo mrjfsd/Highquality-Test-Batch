@@ -16,7 +16,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body style={{ margin: 0, background: "#f8f5f0" }}>
+      <body style={{ margin: 0, background: "#06110C", color: "#F7F3EE" }}>
         <StorefrontChrome>{children}</StorefrontChrome>
       </body>
     </html>

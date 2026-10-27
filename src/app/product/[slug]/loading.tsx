@@ -8,8 +8,8 @@ export default function ProductDetailLoading() {
           style={{
             width: 76,
             height: 34,
-            background: "var(--white, #ffffff)",
-            border: "1px solid var(--line, #e5e5e5)",
+            background: "var(--white, #171717)",
+            border: "1px solid var(--line, rgba(247, 243, 238, 0.1))",
             borderRadius: 8,
           }}
         />
@@ -18,7 +18,7 @@ export default function ProductDetailLoading() {
           style={{
             width: 180,
             height: 16,
-            background: "var(--line, #e5e5e5)",
+            background: "var(--line, rgba(247, 243, 238, 0.1))",
             borderRadius: 4,
           }}
         />
@@ -34,8 +34,8 @@ export default function ProductDetailLoading() {
               width: "100%",
               maxWidth: 460,
               aspectRatio: "3 / 4",
-              background: "var(--card-bg, #f7f6f2)",
-              border: "1px solid var(--line, #e5e5e5)",
+              background: "var(--card-bg, #171717)",
+              border: "1px solid var(--line, rgba(247, 243, 238, 0.1))",
               borderRadius: 12,
             }}
           />
@@ -88,7 +88,7 @@ export default function ProductDetailLoading() {
               style={{
                 width: "100%",
                 height: 16,
-                background: "var(--line, #e5e5e5)",
+                background: "var(--line, rgba(247, 243, 238, 0.1))",
                 borderRadius: 4,
                 marginBottom: 8,
               }}
@@ -98,7 +98,7 @@ export default function ProductDetailLoading() {
               style={{
                 width: "92%",
                 height: 16,
-                background: "var(--line, #e5e5e5)",
+                background: "var(--line, rgba(247, 243, 238, 0.1))",
                 borderRadius: 4,
                 marginBottom: 8,
               }}
@@ -108,7 +108,7 @@ export default function ProductDetailLoading() {
               style={{
                 width: "65%",
                 height: 16,
-                background: "var(--line, #e5e5e5)",
+                background: "var(--line, rgba(247, 243, 238, 0.1))",
                 borderRadius: 4,
               }}
             />
@@ -134,7 +134,7 @@ export default function ProductDetailLoading() {
                   width: 32,
                   height: 32,
                   borderRadius: "50%",
-                  background: "var(--line, #e5e5e5)",
+                  background: "var(--line, rgba(247, 243, 238, 0.1))",
                 }}
               />
             ))}
@@ -160,7 +160,7 @@ export default function ProductDetailLoading() {
                   width: 44,
                   height: 38,
                   borderRadius: 6,
-                  background: "var(--line, #e5e5e5)",
+                  background: "var(--line, rgba(247, 243, 238, 0.1))",
                 }}
               />
             ))}

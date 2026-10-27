@@ -10,46 +10,52 @@ html, body {
    ============================================================ */
 
 :root {
-  /* Brand Tokens */
-  --admin-burgundy: #702b38;
-  --admin-burgundy-dark: #57202b;
-  --admin-burgundy-hover: #5d222d;
-  --admin-burgundy-active: #481922;
-  --admin-burgundy-subtle: rgba(112, 43, 56, 0.08);
+  /* Brand Tokens — Contemporary Cinematic Theme */
+  --admin-crimson: #A31C1B;
+  --admin-crimson-dark: #871615;
+  --admin-crimson-hover: #871615;
+  --admin-crimson-active: #6e1110;
+  --admin-crimson-subtle: rgba(163, 28, 27, 0.08);
 
-  --admin-cream: #f8f5f0;
+  --admin-burgundy: var(--admin-crimson);
+  --admin-burgundy-dark: var(--admin-crimson-dark);
+  --admin-burgundy-hover: var(--admin-crimson-hover);
+  --admin-burgundy-active: var(--admin-crimson-active);
+  --admin-burgundy-subtle: var(--admin-crimson-subtle);
+
+  --admin-cream: #F7F3EE;
   /* Warm cream application background */
-  --admin-cream-soft: #f4efe6;
+  --admin-cream-soft: #f2eee8;
   /* Table th, toolbars, subtle hover backings */
-  --admin-cream-tint: #faf7f2;
+  --admin-cream-tint: #faf7f3;
   /* Upload zone, nested cards */
   --admin-white: #ffffff;
   /* Content surfaces */
 
-  --admin-charcoal: #252321;
+  --admin-charcoal: #171717;
   /* Headings & primary dark text */
-  --admin-charcoal-sidebar: #1e1c1a;
-  /* Sidebar deep charcoal black */
-  --admin-charcoal-border: #2d2927;
+  --admin-charcoal-sidebar: #06110C;
+  /* Sidebar deep forest green / charcoal black */
+  --admin-charcoal-border: #14221b;
   /* Sidebar inner borders */
-  --admin-charcoal-hover: #2a2724;
+  --admin-charcoal-hover: #0e2017;
   /* Sidebar interactive hover */
 
-  --admin-gold: #c7ad72;
-  /* Restrained accent gold */
-  --admin-gold-muted: #d8c28f;
-  --admin-gold-subtle: rgba(199, 173, 114, 0.15);
-  --admin-gold-border: rgba(199, 173, 114, 0.4);
+  --admin-gold: #A31C1B;
+  /* Restrained accent crimson */
+  --admin-gold-muted: #c23837;
+  --admin-gold-subtle: rgba(163, 28, 27, 0.12);
+  --admin-gold-border: rgba(163, 28, 27, 0.35);
 
-  --admin-stone: #e5dfd6;
+  --admin-stone: #e8e2d8;
   /* Primary surface borders & dividers */
-  --admin-stone-light: #ece6dc;
+  --admin-stone-light: #eee9e0;
   /* Table rows, soft dividers */
-  --admin-stone-dark: #d7d1c6;
+  --admin-stone-dark: #dcd5c9;
   /* Input borders, button borders */
-  --admin-muted: #746e68;
+  --admin-muted: #6e6962;
   /* Subtext, secondary labels */
-  --admin-muted-light: #9c958c;
+  --admin-muted-light: #969087;
   /* Placeholders, disabled text */
 }
 

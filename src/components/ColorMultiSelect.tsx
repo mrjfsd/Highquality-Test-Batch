@@ -151,7 +151,7 @@ export function ColorMultiSelect({
           hasError
             ? "border-red-400 bg-red-50/30 ring-1 ring-red-300"
             : isOpen
-            ? "border-[#800020] ring-1 ring-[#800020]"
+            ? "border-[#A31C1B] ring-1 ring-[#A31C1B]"
             : "border-neutral-300 hover:border-neutral-400"
         } ${disabled ? "opacity-60 cursor-not-allowed bg-neutral-50" : ""}`}
       >
@@ -193,9 +193,9 @@ export function ColorMultiSelect({
           <button
             type="button"
             onClick={() => setIsOpen((prev) => !prev)}
-            className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-neutral-600 hover:text-[#800020] hover:bg-neutral-50 rounded transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-neutral-600 hover:text-[#A31C1B] hover:bg-neutral-50 rounded transition-colors cursor-pointer"
           >
-            <span className="text-[#800020] font-bold">+</span>
+            <span className="text-[#A31C1B] font-bold">+</span>
             <span>{selectedColors.length === 0 ? "Select Colors..." : "Add Color"}</span>
           </button>
         )}
@@ -235,7 +235,7 @@ export function ColorMultiSelect({
                     onClick={() => handleToggleColor(color.name)}
                     className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium border text-left transition-all cursor-pointer ${
                       isSelected
-                        ? "bg-[#800020]/10 border-[#800020] text-[#800020] font-semibold"
+                        ? "bg-[#A31C1B]/10 border-[#A31C1B] text-[#A31C1B] font-semibold"
                         : "bg-white border-neutral-200 hover:bg-neutral-50 text-neutral-700"
                     }`}
                   >
@@ -272,7 +272,7 @@ export function ColorMultiSelect({
                     handleAddCustomColor();
                   }
                 }}
-                className="flex-1 px-2.5 py-1 text-xs border border-neutral-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#800020] focus:border-[#800020]"
+                className="flex-1 px-2.5 py-1 text-xs border border-neutral-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#A31C1B] focus:border-[#A31C1B]"
               />
               <button
                 type="button"
@@ -290,7 +290,7 @@ export function ColorMultiSelect({
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="w-full py-1.5 text-xs font-semibold rounded-lg bg-[#800020] text-white hover:bg-[#66001a] transition-colors cursor-pointer text-center"
+              className="w-full py-1.5 text-xs font-semibold rounded-lg bg-[#A31C1B] text-white hover:bg-[#871615] transition-colors cursor-pointer text-center"
             >
               Done
             </button>
