@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useProductColor } from "@/components/ProductColorContext";
+import { areColorsMatching } from "@/lib/products/colors";
 import type { ProductGalleryImage } from "@/data/products";
 import Icon from "@/components/Icon";
 import {
@@ -13,18 +15,70 @@ interface ProductGalleryProps {
   images?: ProductGalleryImage[];
   fallbackImage: string;
   productName: string;
+  selectedColor?: string;
+  productColors?: string[];
 }
 
 export default function ProductGallery({
   images = [],
   fallbackImage,
   productName,
+  selectedColor: propSelectedColor,
+  productColors = [],
 }: ProductGalleryProps) {
   // Normalize valid image list
-  const validImages: ProductGalleryImage[] =
-    images.length > 0
-      ? images
-      : [{ url: fallbackImage, alt: productName, is_primary: true }];
+  const colorContext = useProductColor();
+  const activeColor =
+    propSelectedColor !== undefined ? propSelectedColor : (colorContext?.selectedColor || "");
+
+  // Normalize valid image list
+  const allImages: ProductGalleryImage[] = useMemo(() => {
+    return images.length > 0 ? images : [{ url: fallbackImage, alt: productName, is_primary: true }];
+
+
+  }, [images, fallbackImage, productName]);
+
+  // Colors configured on the product
+  const availableColors = useMemo(() => {
+    return Array.isArray(productColors) ? productColors.filter(Boolean) : [];
+  }, [productColors]);
+
+  // Check how colors are assigned across allImages
+  const assignedColors = useMemo(() => {
+    const set = new Set<string>();
+    allImages.forEach((img) => {
+      if (img.color && img.color.trim()) {
+        set.add(img.color.trim().toLowerCase());
+      }
+    });
+    return set;
+  }, [allImages]);
+
+  // A product has "properly assigned color-specific image groups" if:
+  // At least 2 distinct colors have assigned images, OR all images have assigned colors
+  const hasProperColorGroups = useMemo(() => {
+    if (assignedColors.size >= 2) return true;
+    if (allImages.length > 1 && allImages.every((img) => Boolean(img.color && img.color.trim()))) return true;
+    return false;
+  }, [assignedColors, allImages]);
+
+  // Filter gallery images by active color if properly grouped; otherwise preserve allImages
+  const validImages: ProductGalleryImage[] = useMemo(() => {
+    if (!activeColor || !activeColor.trim()) {
+      return allImages;
+    }
+
+    if (!hasProperColorGroups) {
+      // Product does not have complete color groups. Do not filter out unassigned images!
+      return allImages;
+    }
+
+    const matched = allImages.filter((img) =>
+      areColorsMatching(img.color, activeColor)
+    );
+
+    return matched.length > 0 ? matched : allImages;
+  }, [allImages, activeColor, hasProperColorGroups]);
 
   // Find primary image index (defaulting to 0 if not explicitly designated)
   const initialIndex = validImages.findIndex((img) => img.is_primary);
@@ -32,24 +86,90 @@ export default function ProductGallery({
   const [failedImages, setFailedImages] = useState<Set<number>>(new Set());
   const [isLandscape, setIsLandscape] = useState(false);
 
-  // Reset activeIndex when image list changes
+  // Synchronize activeIndex when activeColor or validImages change
   useEffect(() => {
+    if (!activeColor || !activeColor.trim()) return;
+
+    // 1. Direct color match within validImages
+    const directColorIdx = validImages.findIndex((img) =>
+      areColorsMatching(img.color, activeColor)
+    );
+    if (directColorIdx >= 0) {
+      setActiveIndex(directColorIdx);
+      setFailedImages(new Set());
+      return;
+    }
+
+    // 2. Alt text or URL match
+    const fallbackColorIdx = validImages.findIndex((img) => {
+      const alt = (img.alt || '').toLowerCase();
+      const url = (img.url || '').toLowerCase();
+      const col = activeColor.trim().toLowerCase();
+      return col.length > 1 && (alt.includes(col) || url.includes(col));
+    });
+    if (fallbackColorIdx >= 0) {
+      setActiveIndex(fallbackColorIdx);
+      setFailedImages(new Set());
+      return;
+    }
+
+    // 3. Positional 1-to-1 correspondence:
+    // If the product has N colors and N images in validImages, map by index
+    if (availableColors.length > 1 && validImages.length === availableColors.length) {
+      const colorPos = availableColors.findIndex((c) =>
+        areColorsMatching(c, activeColor)
+      );
+      if (colorPos >= 0 && colorPos < validImages.length) {
+        setActiveIndex(colorPos);
+        setFailedImages(new Set());
+        return;
+      }
+    }
+
+    // 4. Default to primary image or 0
     const primaryIdx = validImages.findIndex((img) => img.is_primary);
     setActiveIndex(primaryIdx >= 0 ? primaryIdx : 0);
     setFailedImages(new Set());
-  }, [validImages.length]);
+  }, [validImages, activeColor, availableColors]);
+
+  const selectIndex = useCallback(
+    (newIdx: number) => {
+      setActiveIndex(newIdx);
+      const img = validImages[newIdx];
+      if (img && colorContext?.setSelectedColor) {
+        if (img.color) {
+          const matchingColor = availableColors.find((c) =>
+            areColorsMatching(c, img.color)
+          );
+          if (matchingColor) {
+            colorContext.setSelectedColor(matchingColor);
+            return;
+          }
+        }
+        if (availableColors.length > 1 && validImages.length === availableColors.length) {
+          const correspondingColor = availableColors[newIdx];
+          if (correspondingColor) {
+            colorContext.setSelectedColor(correspondingColor);
+          }
+        }
+      }
+    },
+    [validImages, colorContext, availableColors]
+  );
 
   const hasMultiple = validImages.length > 1;
 
   const goToNext = useCallback(() => {
     if (!hasMultiple) return;
-    setActiveIndex((prev) => (prev + 1) % validImages.length);
-  }, [hasMultiple, validImages.length]);
+    const nextIdx = (activeIndex + 1) % validImages.length;
+    selectIndex(nextIdx);
+  }, [hasMultiple, activeIndex, validImages.length, selectIndex]);
 
   const goToPrev = useCallback(() => {
     if (!hasMultiple) return;
-    setActiveIndex((prev) => (prev - 1 + validImages.length) % validImages.length);
-  }, [hasMultiple, validImages.length]);
+    const prevIdx = (activeIndex - 1 + validImages.length) % validImages.length;
+    selectIndex(prevIdx);
+  }, [hasMultiple, activeIndex, validImages.length, selectIndex]);
 
   // Touch Swipe Handling for Mobile Devices
   const touchStartX = useRef<number | null>(null);
@@ -222,8 +342,8 @@ export default function ProductGallery({
         )}
       </div>
 
-      {/* Synchronized Thumbnail Strip — Hidden when only 1 image */}
-      {hasMultiple && (
+      {/* Synchronized Thumbnail Strip — Rendered when product has multiple images overall or validImages > 1 */}
+      {(hasMultiple || allImages.length > 1) && (
         <div
           className="gallery-thumbnails"
           role="tablist"
@@ -242,7 +362,7 @@ export default function ProductGallery({
                 aria-selected={isSelected}
                 aria-label={`View image ${idx + 1} of ${validImages.length}`}
                 className={`gallery-thumb-btn ${isSelected ? "selected" : ""}`}
-                onClick={() => setActiveIndex(idx)}
+                onClick={() => selectIndex(idx)}
               >
                 {isFailed ? (
                   <div className="gallery-thumb-fallback">

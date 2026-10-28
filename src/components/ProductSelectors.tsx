@@ -6,6 +6,8 @@
 import { useState, useMemo } from "react";
 import type { Product } from "@/data/products";
 import Icon from "@/components/Icon";
+import { useProductColor } from "@/components/ProductColorContext";
+import { areColorsMatching } from "@/lib/products/colors";
 
 const FALLBACK_MOCK_SIZES = ["XS", "S", "M", "L", "XL"] as const;
 
@@ -111,9 +113,13 @@ export default function ProductSelectors({ product }: ProductSelectorsProps) {
   const isDb = isDatabaseBackedProduct(product);
 
   const hasColors = Boolean(product.colors && product.colors.length > 0);
-  const [selectedColor, setSelectedColor] = useState<string>(
+  const colorContext = useProductColor();
+  const [internalSelectedColor, setInternalSelectedColor] = useState<string>(
     hasColors ? product.colors[0] : ""
   );
+
+  const selectedColor = colorContext ? colorContext.selectedColor : internalSelectedColor;
+  const setSelectedColor = colorContext ? colorContext.setSelectedColor : setInternalSelectedColor;
 
   const handleColorChange = (newColor: string) => {
     setSelectedColor(newColor);
@@ -125,7 +131,7 @@ export default function ProductSelectors({ product }: ProductSelectorsProps) {
     if (!isDb || !product.variants) return [];
     if (!selectedColor) return product.variants;
     return product.variants.filter(
-      (v) => v.color.trim().toLowerCase() === selectedColor.trim().toLowerCase()
+      (v) => areColorsMatching(v.color, selectedColor)
     );
   }, [isDb, product.variants, selectedColor]);
 
@@ -217,7 +223,7 @@ export default function ProductSelectors({ product }: ProductSelectorsProps) {
             aria-label="Select color"
           >
             {product.colors.map((color) => {
-              const isSelected = selectedColor === color;
+              const isSelected = areColorsMatching(selectedColor, color);
               const label = formatColorLabel(color);
               const bgColor = resolveSwatchBackground(color);
               return (

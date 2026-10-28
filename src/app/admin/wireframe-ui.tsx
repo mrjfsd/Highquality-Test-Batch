@@ -20,6 +20,7 @@ export interface LiveProductImage {
   height?: number | null;
   file_size_bytes?: number | null;
   mime_type?: string | null;
+  color?: string | null;
 }
 
 export interface LiveProductVariant {
@@ -67,6 +68,7 @@ export interface IntakePhoto {
   uploadProgress?: number;
   error?: string;
   assignedGroup?: string;
+  color?: string | null;
 }
 
 export interface GarmentGroup {
@@ -1184,6 +1186,19 @@ export function Intake({
     showToast("Selected photos removed.");
   };
 
+  const updatePhotoColor = (photoId: string, color: string) => {
+    const cleanColor = color.trim() || null;
+    const updatedPhotos = session.photos.map((p) =>
+      p.id === photoId ? { ...p, color: cleanColor } : p
+    );
+    const updatedSession: IntakeSession = {
+      ...session,
+      updatedAt: new Date().toISOString(),
+      photos: updatedPhotos,
+    };
+    persistSession(updatedSession);
+  };
+
   const updateGroupField = (groupId: string, field: keyof GarmentGroup | "applyDescriptionTemplate", value: any) => {
     setSession((curr) => {
       const updatedGroups = curr.groups.map((g) => {
@@ -1410,9 +1425,10 @@ export function Intake({
       storage_path: p.storagePath!,
       alt_text: `${group.name} image ${idx + 1}`,
       display_order: idx,
-      is_primary: p.id === (group.primaryPhotoId || groupPhotos[0]?.id) || idx === 0,
+      is_primary: group.primaryPhotoId ? p.id === group.primaryPhotoId : idx === 0,
       mime_type: p.mimeType,
       file_size_bytes: p.size,
+      color: p.color && p.color.trim() !== "" ? p.color.trim() : null,
     }));
 
     const variantsPayload = group.variants.map((v) => ({
@@ -1591,9 +1607,10 @@ export function Intake({
         storage_path: p.storagePath!,
         alt_text: `${group.name} image ${idx + 1}`,
         display_order: idx,
-        is_primary: p.id === (group.primaryPhotoId || groupPhotos[0]?.id) || idx === 0,
+        is_primary: group.primaryPhotoId ? p.id === group.primaryPhotoId : idx === 0,
         mime_type: p.mimeType,
         file_size_bytes: p.size,
+      color: p.color && p.color.trim() !== "" ? p.color.trim() : null,
       }));
 
       const variantsPayload = group.variants.map((v) => ({
@@ -2064,6 +2081,64 @@ export function Intake({
                             ))}
                           </div>
                         )}
+                        {/* Photo Colours Panel */}
+                        <div className="garment-photo-colors-panel">
+                          <div className="photo-colors-header">
+                            <span className="photo-colors-title">Assign Colours to Photos</span>
+                            <small className="photo-colors-hint">Select a colour for each photo</small>
+                          </div>
+                          <div className="photo-colors-list">
+                            {groupPhotos.map((p, pIdx) => {
+                              const isPrimary = p.id === (group.primaryPhotoId || primaryPhoto?.id);
+                              const groupColors = Array.from(
+                                new Set(group.variants.map((v) => v.color?.trim()).filter(Boolean))
+                              );
+                              return (
+                                <div key={p.id} className="photo-color-row">
+                                  <div className="photo-color-thumb">
+                                    <ProductThumb src={p.previewUrl} label={isPrimary ? "M" : String(pIdx + 1)} />
+                                  </div>
+                                  <div className="photo-color-controls">
+                                    <div className="photo-color-info-line">
+                                      <span className="photo-color-name" title={p.name}>
+                                        {isPrimary ? "Main photo" : `Photo ${pIdx + 1}`}
+                                      </span>
+                                      {isPrimary ? (
+                                        <span className="primary-photo-tag active">
+                                          <Icon name="check" size={11} /> Main
+                                        </span>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          className="btn-set-primary-sm"
+                                          onClick={() => updateGroupField(group.id, "primaryPhotoId", p.id)}
+                                          title="Set as main photo"
+                                        >
+                                          Set as main
+                                        </button>
+                                      )}
+                                    </div>
+                                    <select
+                                      value={p.color || ""}
+                                      onChange={(e) => updatePhotoColor(p.id, e.target.value)}
+                                      className="photo-color-dropdown"
+                                      aria-label={`Colour for photo ${pIdx + 1}`}
+                                    >
+                                      <option value="">No colour (All)</option>
+                                      {groupColors.map((c) => (
+                                        <option key={c} value={c}>{c}</option>
+                                      ))}
+                                      {p.color && !groupColors.includes(p.color) && (
+                                        <option value={p.color}>{p.color}</option>
+                                      )}
+                                    </select>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
                         <div className="photos-meta-caption">
                           <span>{groupPhotos.length} photo{groupPhotos.length === 1 ? "" : "s"}</span>
                           <small>Click thumbnail to set as main photo</small>
@@ -3265,12 +3340,14 @@ export function Editor({
       fit: fit.trim() || null,
       status: finalStatus,
       images: images.map((img, idx) => ({
+        id: img.id,
         storage_path: img.storage_path,
         is_primary: idx === primaryIndex,
         display_order: idx,
         alt_text: img.alt_text || `${name} image ${idx + 1}`,
         mime_type: img.mime_type || "image/jpeg",
         file_size_bytes: img.file_size_bytes || null,
+        color: img.color && typeof img.color === "string" && img.color.trim() !== "" ? img.color.trim() : null,
       })),
       variants: variants.map((v) => ({
         size: v.size.trim() || "One size",
@@ -3458,18 +3535,19 @@ export function Editor({
               />
               <div className="editor-gallery">
                 {images.map((img, i) => (
-                  <button
+                  <div
                     key={img.storage_path || i}
-                    type="button"
-                    className={primaryIndex === i ? "primary" : ""}
-                    onClick={() => setPrimaryIndex(i)}
+                    className={`editor-gallery-tile ${primaryIndex === i ? "primary" : ""}`}
                   >
-                    <ProductThumb src={`/api/images/${img.storage_path}`} label={`${i + 1}`} large />
-                    {primaryIndex === i && (
-                      <b>
-                        <Icon name="check" size={12} /> Main photo
-                      </b>
-                    )}
+                    <div
+                      className="editor-gallery-thumb-area"
+                      onClick={() => setPrimaryIndex(i)}
+                      role="button"
+                      tabIndex={0}
+                      title="Click to set as main photo"
+                    >
+                      <ProductThumb src={`/api/images/${img.storage_path}`} label={`${i + 1}`} large />
+                    </div>
                     <span
                       className="remove-photo"
                       onClick={(e) => {
@@ -3481,7 +3559,50 @@ export function Editor({
                     >
                       <Icon name="close" size={13} />
                     </span>
-                  </button>
+                    <div className="editor-gallery-actions">
+                      {primaryIndex === i ? (
+                        <span className="primary-photo-tag active">
+                          <Icon name="check" size={11} /> Main photo
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn-set-primary"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPrimaryIndex(i);
+                          }}
+                          title="Set as main photo"
+                        >
+                          Set as main
+                        </button>
+                      )}
+                    </div>
+                    <div className="editor-gallery-color-bar">
+                      <select
+                        value={img.color || ""}
+                        onChange={(e) => {
+                          const val = e.target.value.trim() || null;
+                          setImages((curr) => {
+                            const updated = [...curr];
+                            updated[i] = { ...updated[i], color: val };
+                            return updated;
+                          });
+                        }}
+                        className="editor-gallery-color-select"
+                        aria-label={`Colour for photo ${i + 1}`}
+                        title={img.color ? `Assigned colour: ${img.color}` : "Assign colour to photo"}
+                      >
+                        <option value="">No colour</option>
+                        {Array.from(new Set(variants.map((v) => v.color?.trim()).filter(Boolean))).map((c) => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                        {img.color && !variants.some((v) => v.color?.trim() === img.color) && (
+                          <option value={img.color}>{img.color}</option>
+                        )}
+                      </select>
+                    </div>
+                  </div>
                 ))}
                 <button
                   type="button"

@@ -4850,3 +4850,208 @@ button.button:disabled * {
 
 
 
+
+/* Product Image Color Assignment Controls */
+.editor-gallery-tile {
+  position: relative;
+  min-width: 0;
+  border: 1px solid var(--admin-stone);
+  border-radius: 4px;
+  background: var(--admin-white);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-gallery-tile.primary {
+  border: 2px solid var(--admin-burgundy);
+}
+
+.editor-gallery-thumb-area {
+  position: relative;
+  aspect-ratio: .8;
+  cursor: pointer;
+  overflow: hidden;
+  flex: 1;
+}
+
+.editor-gallery-thumb-area .product-thumb {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+}
+
+.editor-gallery-color-bar {
+  padding: 4px;
+  background: #f8f8f8;
+  border-top: 1px solid var(--admin-stone);
+}
+
+.editor-gallery-color-select {
+  width: 100%;
+  font-size: 11px;
+  padding: 2px 4px;
+  border: 1px solid #d4d4d4;
+  border-radius: 3px;
+  background: #ffffff;
+  color: var(--admin-charcoal);
+  cursor: pointer;
+}
+
+.garment-photo-colors-panel {
+  background: var(--admin-cream-soft);
+  border: 1px solid var(--admin-stone);
+  border-radius: 4px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.photo-colors-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.photo-colors-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--admin-charcoal);
+}
+
+.photo-colors-hint {
+  font-size: 10px;
+  color: var(--admin-muted);
+}
+
+.photo-colors-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.photo-color-row {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 8px;
+  align-items: center;
+  background: var(--admin-white);
+  border: 1px solid var(--admin-stone);
+  border-radius: 3px;
+  padding: 4px 6px;
+}
+
+.photo-color-thumb {
+  width: 36px;
+  height: 36px;
+}
+
+.photo-color-thumb .product-thumb {
+  width: 100%;
+  height: 100%;
+  border-radius: 2px;
+}
+
+.photo-color-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.photo-color-name {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--admin-charcoal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.photo-color-dropdown {
+  width: 100%;
+  font-size: 11px;
+  padding: 2px 4px;
+  border: 1px solid #d4d4d4;
+  border-radius: 2px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.editor-gallery-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 6px;
+  background: var(--admin-cream-soft);
+  border-top: 1px solid var(--admin-stone);
+}
+
+.primary-photo-tag.active {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #fff;
+  background: var(--admin-burgundy);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.btn-set-primary {
+  width: 100%;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--admin-charcoal);
+  background: var(--admin-white);
+  border: 1px solid var(--admin-stone);
+  border-radius: 3px;
+  padding: 3px 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-set-primary:hover {
+  background: var(--admin-cream);
+  border-color: var(--admin-burgundy);
+  color: var(--admin-burgundy);
+}
+
+.photo-color-info-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.btn-set-primary-sm {
+  font-size: 9px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--admin-charcoal);
+  background: var(--admin-white);
+  border: 1px solid var(--admin-stone);
+  border-radius: 2px;
+  padding: 2px 5px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.btn-set-primary-sm:hover {
+  background: var(--admin-cream);
+  border-color: var(--admin-burgundy);
+  color: var(--admin-burgundy);
+}

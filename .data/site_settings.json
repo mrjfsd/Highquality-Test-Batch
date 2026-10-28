@@ -11,14 +11,14 @@
     "imageUrl": "/api/images/products/banner/1793052297406-8af2face-768b-4c2c-a00b-274d81764671.webp",
     "storagePath": "products/banner/1793052297406-8af2face-768b-4c2c-a00b-274d81764671.webp",
     "altText": "Homepage Promotional Banner — Click to explore sale pieces",
-    "enabled": true,
+    "enabled": false,
     "positionX": 51,
     "positionY": 0,
     "zoom": 1,
-    "updatedAt": "2026-10-26T21:37:05.574Z"
+    "updatedAt": "2026-10-28T14:11:14.016Z"
   },
   "navbar": {
-    "showSaleLink": true,
-    "updatedAt": "2026-10-26T21:18:47.192Z"
+    "showSaleLink": false,
+    "updatedAt": "2026-10-28T14:11:15.484Z"
   }
 }

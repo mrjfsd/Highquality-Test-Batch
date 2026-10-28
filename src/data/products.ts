@@ -16,6 +16,7 @@ export type ProductGalleryImage = {
   alt?: string;
   is_primary?: boolean;
   display_order?: number;
+  color?: string | null;
 };
 
 export type Product = {

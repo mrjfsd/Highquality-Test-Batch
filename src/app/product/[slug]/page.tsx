@@ -13,6 +13,8 @@ import ProductGallery from "@/components/ProductGallery";
 import ProductSelectors from "@/components/ProductSelectors";
 import SectionHeading from "@/components/SectionHeading";
 import Icon from "@/components/Icon";
+import { ProductColorProvider } from "@/components/ProductColorContext";
+import { areColorsMatching } from "@/lib/products/colors";
 
 const dosis = Dosis({
   subsets: ["latin"],
@@ -77,6 +79,17 @@ export default async function ProductDetailPage({ params }: Props) {
   }
   const displayRelated = related.slice(0, 4);
 
+  // Determine sensible default color from primary image or first available color
+  const primaryImgColor = product.images?.find((img) => img.is_primary)?.color?.trim();
+  const validPrimaryColor =
+    primaryImgColor && product.colors?.some((c) => areColorsMatching(c, primaryImgColor))
+      ? product.colors.find((c) => areColorsMatching(c, primaryImgColor))
+      : undefined;
+
+  const defaultColor =
+    validPrimaryColor ||
+    (product.colors && product.colors.length > 0 ? product.colors[0] : "");
+
   return (
     <main className={`detail ${dosis.className} ${dosis.variable}`}>
       {/* Top navigation bar: Back button + Breadcrumb */}
@@ -105,6 +118,7 @@ export default async function ProductDetailPage({ params }: Props) {
       </div>
 
       {/* Main detail layout: Left Imagery + Right Product Info */}
+      <ProductColorProvider initialColor={defaultColor}>
       <div className="detail-layout">
         {/* Left Column — Product Imagery with Swipe Gallery */}
         <section className="product-imagery" aria-label="Product imagery">
@@ -112,6 +126,7 @@ export default async function ProductDetailPage({ params }: Props) {
             images={product.images}
             fallbackImage={product.image}
             productName={product.name}
+            productColors={product.colors}
           />
         </section>
 
@@ -139,6 +154,8 @@ export default async function ProductDetailPage({ params }: Props) {
           <ProductSelectors product={product} />
         </aside>
       </div>
+
+      </ProductColorProvider>
 
       {/* Related products */}
       {displayRelated.length > 0 && (

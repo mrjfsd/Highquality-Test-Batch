@@ -36,6 +36,7 @@ export function mapDbProductToStorefront(p: {
     alt_text?: string | null;
     is_primary?: boolean | null;
     display_order?: number | null;
+    color?: string | null;
   }>;
   product_variants?: Array<{
     id?: string;
@@ -50,7 +51,7 @@ export function mapDbProductToStorefront(p: {
   // Extract all valid images in ascending display_order while respecting primary selection
   const rawImages = Array.isArray(p.product_images)
     ? [...p.product_images]
-        .filter((img): img is { id?: string; storage_path: string; alt_text?: string | null; is_primary?: boolean | null; display_order?: number | null } => Boolean(img.storage_path))
+        .filter((img): img is { id?: string; storage_path: string; alt_text?: string | null; is_primary?: boolean | null; display_order?: number | null; color?: string | null } => Boolean(img.storage_path))
         .sort((a, b) => {
           const orderDiff = (a.display_order ?? 0) - (b.display_order ?? 0);
           if (orderDiff !== 0) return orderDiff;
@@ -66,6 +67,7 @@ export function mapDbProductToStorefront(p: {
     alt: img.alt_text || p.name,
     is_primary: Boolean(img.is_primary),
     display_order: img.display_order ?? 0,
+    color: img.color && typeof img.color === "string" && img.color.trim() !== "" ? img.color.trim() : null,
   }));
 
   const primaryImage =
