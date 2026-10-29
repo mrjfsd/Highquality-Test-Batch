@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import AnnouncementBanner from "@/components/AnnouncementBanner";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import { CartProvider } from "@/context/CartContext";
 
 function StorefrontChromeInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -27,8 +28,10 @@ function StorefrontChromeInner({ children }: { children: React.ReactNode }) {
 
 export default function StorefrontChrome({ children }: { children: React.ReactNode }) {
   return (
-    <Suspense fallback={<>{children}</>}>
-      <StorefrontChromeInner>{children}</StorefrontChromeInner>
-    </Suspense>
+    <CartProvider>
+      <Suspense fallback={<>{children}</>}>
+        <StorefrontChromeInner>{children}</StorefrontChromeInner>
+      </Suspense>
+    </CartProvider>
   );
 }

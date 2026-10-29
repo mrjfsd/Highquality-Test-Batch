@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:pricing": "node --experimental-strip-types scripts/test-quantity-offers.ts",
+    "test:admin-offers": "node --experimental-strip-types scripts/test-admin-offers-live.ts",
+    "test:storefront-offers": "node --experimental-strip-types scripts/test-storefront-offers.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1152.0",

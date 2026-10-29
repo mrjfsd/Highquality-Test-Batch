@@ -12,45 +12,82 @@ export function isUnsplashUrl(url?: string): boolean {
 }
 
 /**
+ * Checks if a URL is a Cloudflare R2 image proxy URL (/api/images/...).
+ */
+export function isR2ImageUrl(url?: string): boolean {
+  if (!url) return false;
+  if (url.includes("raw=true") || url.includes("raw=1")) return false;
+  return url.startsWith("/api/images/") || url.includes("/api/images/");
+}
+
+/**
+ * Checks if a URL can be dynamically resized and optimized.
+ */
+export function isOptimizableImageUrl(url?: string): boolean {
+  return isUnsplashUrl(url) || isR2ImageUrl(url);
+}
+
+/**
  * Generates an optimized image URL with tailored width and quality.
- * For Unsplash images, updates w and q query params to avoid downloading oversized originals.
- * Non-Unsplash URLs are returned unchanged.
+ * Supports:
+ * 1. Unsplash images (updates w, q, auto=format, fit=crop)
+ * 2. Cloudflare R2 proxy images (/api/images/[...key], updates w and q)
+ * Non-optimizable URLs are returned unchanged.
  */
 export function getOptimizedImageUrl(
   url: string,
   width?: number,
   quality: number = 80
 ): string {
-  if (!url || !isUnsplashUrl(url)) {
-    return url;
+  if (!url) return url;
+
+  if (isUnsplashUrl(url)) {
+    try {
+      const urlObj = new URL(url);
+      if (width) {
+        urlObj.searchParams.set("w", width.toString());
+      }
+      urlObj.searchParams.set("q", quality.toString());
+      urlObj.searchParams.set("auto", "format");
+      if (!urlObj.searchParams.has("fit")) {
+        urlObj.searchParams.set("fit", "crop");
+      }
+      return urlObj.toString();
+    } catch {
+      return url;
+    }
   }
 
-  try {
-    const urlObj = new URL(url);
-    if (width) {
-      urlObj.searchParams.set("w", width.toString());
+  if (isR2ImageUrl(url)) {
+    try {
+      const isRelative = url.startsWith("/");
+      const dummyBase = "https://style-edit.local";
+      const urlObj = new URL(url, dummyBase);
+
+      if (width) {
+        urlObj.searchParams.set("w", width.toString());
+      }
+      urlObj.searchParams.set("q", quality.toString());
+
+      return isRelative ? `${urlObj.pathname}${urlObj.search}` : urlObj.toString();
+    } catch {
+      return url;
     }
-    urlObj.searchParams.set("q", quality.toString());
-    urlObj.searchParams.set("auto", "format");
-    if (!urlObj.searchParams.has("fit")) {
-      urlObj.searchParams.set("fit", "crop");
-    }
-    return urlObj.toString();
-  } catch {
-    return url;
   }
+
+  return url;
 }
 
 /**
- * Generates a responsive srcSet string for Unsplash images across specified breakpoints.
- * Returns undefined for non-Unsplash images so the browser uses the standard src.
+ * Generates a responsive srcSet string for Unsplash and R2 images across specified breakpoints.
+ * Returns undefined for non-optimizable images so the browser uses the standard src.
  */
 export function getResponsiveImageSrcSet(
   url: string,
   widths: number[] = [320, 480, 640, 800, 1000],
   quality: number = 80
 ): string | undefined {
-  if (!url || !isUnsplashUrl(url)) {
+  if (!url || (!isUnsplashUrl(url) && !isR2ImageUrl(url))) {
     return undefined;
   }
 

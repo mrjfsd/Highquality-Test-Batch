@@ -106,7 +106,7 @@ function SmartImage({
 }: ImageProps) {
   const isPriority = priority || loading === "eager";
   const srcSet = getResponsiveImageSrcSet(src);
-  const optimizedSrc = isUnsplashUrl(src) ? getOptimizedImageUrl(src, 800, 82) : src;
+  const optimizedSrc = getOptimizedImageUrl(src, 800, 82);
 
   return (
     // eslint-disable-next-line @next/next/no-img-element

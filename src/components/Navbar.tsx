@@ -13,6 +13,7 @@ import {
   ArrowRightIcon,
 } from "@/components/Icons";
 import { getClientStorefrontSettings } from "@/lib/settings/client-settings";
+import { useCart } from "@/context/CartContext";
 
 function BrandLockup() {
   return (
@@ -34,6 +35,7 @@ function BrandLockup() {
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showSaleLink, setShowSaleLink] = useState<boolean>(true);
+  const { totalCount, isLoaded } = useCart();
   const pathname = usePathname();
   const isHome = pathname === "/";
 
@@ -126,15 +128,16 @@ export default function Navbar() {
           </a>
 
           {/* 4. Cart */}
-          <button
+          <Link
+            href="/cart"
             className="icon-button bag-button"
-            type="button"
-            aria-label="Shopping bag (0 items)"
-            title="Shopping bag (0 items)"
+            aria-label={`Shopping bag (${isLoaded ? totalCount : 0} items)`}
+            title={`Shopping bag (${isLoaded ? totalCount : 0} items)`}
+            prefetch={true}
           >
             <CartIcon size={20} />
-            <span>0</span>
-          </button>
+            <span>{isLoaded ? totalCount : 0}</span>
+          </Link>
 
           {/* 5. Mobile menu toggle button */}
           <button
@@ -193,6 +196,10 @@ export default function Navbar() {
                   <ArrowRightIcon size={16} />
                 </Link>
               )}
+              <Link href="/cart" prefetch={true} onClick={closeMenu} className="mobile-nav-cart-link">
+                <span>Shopping Bag ({isLoaded ? totalCount : 0})</span>
+                <ArrowRightIcon size={16} />
+              </Link>
             </nav>
 
             <div className="mobile-nav-footer">

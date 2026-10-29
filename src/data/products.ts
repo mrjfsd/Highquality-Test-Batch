@@ -37,6 +37,7 @@ export type Product = {
   created_at?: string;
   variants?: StorefrontVariantOption[];
   is_database?: boolean;
+  offers?: import("@/types/offers").ProductQuantityOffer[];
 };
 
 const photos = {

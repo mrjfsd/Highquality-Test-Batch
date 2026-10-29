@@ -5,9 +5,17 @@
 
 import { useState, useMemo } from "react";
 import type { Product } from "@/data/products";
+import { formatPrice } from "@/data/products";
 import Icon from "@/components/Icon";
 import { useProductColor } from "@/components/ProductColorContext";
 import { areColorsMatching } from "@/lib/products/colors";
+import { useCart } from "@/context/CartContext";
+import { calculateItemPriceWithOffers } from "@/lib/pricing/quantity-offers";
+import { WhatsAppIcon } from "@/components/Icons";
+import {
+  generateBuyNowWhatsAppUrl,
+  STORE_WHATSAPP_NUMBER,
+} from "@/lib/cart/cart-utils";
 
 const FALLBACK_MOCK_SIZES = ["XS", "S", "M", "L", "XL"] as const;
 
@@ -124,6 +132,7 @@ export default function ProductSelectors({ product }: ProductSelectorsProps) {
   const handleColorChange = (newColor: string) => {
     setSelectedColor(newColor);
     setUserSelectedSize(null);
+    setValidationError(null);
   };
 
   // Compute variants configured for the currently selected color
@@ -170,8 +179,31 @@ export default function ProductSelectors({ product }: ProductSelectorsProps) {
     return firstInStock ? firstInStock.size : (availableSizes[0] || "");
   }, [isDb, userSelectedSize, availableSizes, variantsForSelectedColor]);
 
+  const { items, addItem, removeItem, getProductOffer } = useCart();
   const [quantity, setQuantity] = useState<number>(1);
-  const [added, setAdded] = useState<boolean>(false);
+
+  // Active quantity offer lookup from product prop or CartContext offers map
+  const activeOffer = useMemo(() => {
+    if (product.offers && product.offers.length > 0) {
+      return product.offers[0];
+    }
+    return getProductOffer(product.id);
+  }, [product.offers, product.id, getProductOffer]);
+
+  // Dynamic pricing calculation evaluated via shared pricing engine
+  const pricingCalculation = useMemo(() => {
+    return calculateItemPriceWithOffers(quantity, product.price, activeOffer);
+  }, [quantity, product.price, activeOffer]);
+
+  const baseOfferSavings = useMemo(() => {
+    if (!activeOffer) return 0;
+    return Math.max(0, activeOffer.qualifying_quantity * product.price - activeOffer.bundle_price);
+  }, [activeOffer, product.price]);
+
+  const unitsNeeded = useMemo(() => {
+    if (!activeOffer) return 0;
+    return Math.max(0, activeOffer.qualifying_quantity - quantity);
+  }, [activeOffer, quantity]);
 
   // Check if current selection corresponds to an available in-stock variant
   const currentVariant = useMemo(() => {
@@ -191,18 +223,128 @@ export default function ProductSelectors({ product }: ProductSelectorsProps) {
     return Boolean(currentVariant && currentVariant.is_available);
   }, [isDb, availableSizes.length, selectedSize, currentVariant]);
 
-  const handleAddToCart = () => {
+  // Effective selected variant attributes
+  const effectiveVariantId = currentVariant?.id || null;
+  const effectiveSize = selectedSize || null;
+  const effectiveColor = selectedColor ? formatColorLabel(selectedColor) : null;
+
+  // Derive cart presence from shared CartContext items (persistent, synced with catalog & refresh)
+  const currentCartItem = useMemo(() => {
+    return items.find((item) => {
+      if (String(item.productId) !== String(product.id)) return false;
+
+      if (effectiveVariantId && item.variantId) {
+        if (String(item.variantId) !== String(effectiveVariantId)) return false;
+      }
+
+      const itemSize = item.size ? item.size.trim().toLowerCase() : "";
+      const curSize = effectiveSize ? effectiveSize.trim().toLowerCase() : "";
+      if (itemSize !== curSize) return false;
+
+      const itemColor = item.color ? item.color.trim().toLowerCase() : "";
+      const curColor = effectiveColor ? effectiveColor.trim().toLowerCase() : "";
+      if (itemColor !== curColor) return false;
+
+      return true;
+    });
+  }, [items, product.id, effectiveVariantId, effectiveSize, effectiveColor]);
+
+  const isInCart = Boolean(currentCartItem);
+
+  // Toggle behavior: Add when absent, remove when present
+  const handleAddToCartToggle = () => {
     if (!isCurrentSelectionAvailable) return;
-    setAdded(true);
-    setTimeout(() => setAdded(false), 2000);
+
+    if (isInCart && currentCartItem) {
+      removeItem(currentCartItem.id);
+      return;
+    }
+
+    addItem({
+      product: {
+        id: product.id,
+        name: product.name,
+        slug: product.slug,
+        price: product.price,
+        image: product.image,
+      },
+      variantId: effectiveVariantId,
+      size: effectiveSize,
+      color: effectiveColor,
+      quantity,
+    });
+  };
+
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [isProcessingBuyNow, setIsProcessingBuyNow] = useState<boolean>(false);
+
+  const handleBuyNow = () => {
+    if (isProcessingBuyNow) return;
+
+    // 1. Validate required color selection where applicable
+    if (hasColors && !selectedColor) {
+      setValidationError("Please select a color before ordering.");
+      return;
+    }
+
+    // 2. Validate required size selection where applicable
+    if (availableSizes.length > 0 && !selectedSize) {
+      setValidationError("Please select a size before ordering.");
+      return;
+    }
+
+    // 3. Validate stock availability
+    if (!isCurrentSelectionAvailable) {
+      setValidationError("The selected option is currently out of stock.");
+      return;
+    }
+
+    // 4. Validate store WhatsApp number
+    const cleanPhone = STORE_WHATSAPP_NUMBER.replace(/\D/g, "");
+    if (!cleanPhone || cleanPhone.length < 7) {
+      setValidationError("Store WhatsApp order number is not configured.");
+      return;
+    }
+
+    setValidationError(null);
+    setIsProcessingBuyNow(true);
+
+    try {
+      const url = generateBuyNowWhatsAppUrl({
+        product: {
+          id: product.id,
+          name: product.name,
+          price: product.price,
+        },
+        variantId: effectiveVariantId,
+        size: effectiveSize,
+        color: effectiveColor,
+        quantity,
+        activeOffer,
+      });
+
+      if (url) {
+        window.open(url, "_blank", "noopener,noreferrer");
+      } else {
+        setValidationError("Could not generate WhatsApp order URL.");
+      }
+    } catch (err) {
+      console.error("[BuyNow] Error generating WhatsApp order:", err);
+      setValidationError("An error occurred while opening WhatsApp.");
+    } finally {
+      // Debounce repeated clicks
+      setTimeout(() => {
+        setIsProcessingBuyNow(false);
+      }, 1000);
+    }
   };
 
   const getButtonText = () => {
-    if (added) return "Added to cart";
     if (isDb) {
       if (availableSizes.length === 0) return "Unavailable";
       if (!isCurrentSelectionAvailable) return "Out of stock";
     }
+    if (isInCart) return "✓ Added";
     return "Add to cart";
   };
 
@@ -283,7 +425,10 @@ export default function ProductSelectors({ product }: ProductSelectorsProps) {
                     !isSizeAvailable ? "disabled" : ""
                   }`}
                   onClick={() => {
-                    if (isSizeAvailable) setUserSelectedSize(size);
+                    if (isSizeAvailable) {
+                      setUserSelectedSize(size);
+                      setValidationError(null);
+                    }
                   }}
                 >
                   {size}
@@ -295,6 +440,63 @@ export default function ProductSelectors({ product }: ProductSelectorsProps) {
           )}
         </div>
       </div>
+
+      {/* Active Quantity Offer Banner & Interactive Preview */}
+      {activeOffer && (
+        <div className="detail-offer-box" aria-live="polite">
+          <div className="detail-offer-head">
+            <div className="detail-offer-badge">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z" />
+                <path d="M7 7h.01" />
+              </svg>
+              <span>Buy {activeOffer.qualifying_quantity} for ₹{Math.round(activeOffer.bundle_price).toLocaleString("en-IN")}</span>
+            </div>
+            {baseOfferSavings > 0 && (
+              <span className="detail-offer-savings-pill">
+                Save ₹{Math.round(baseOfferSavings).toLocaleString("en-IN")}
+              </span>
+            )}
+          </div>
+
+          {pricingCalculation.hasOfferApplied ? (
+            <div className="detail-offer-pricing-preview">
+              <div>
+                <span style={{ fontSize: "11px", color: "rgba(247, 243, 238, 0.7)", marginRight: "6px" }}>
+                  For {quantity} {quantity === 1 ? "item" : "items"}:
+                </span>
+                <span className="old-subtotal">{formatPrice(pricingCalculation.regularSubtotal)}</span>
+                <span className="deal-total">{formatPrice(pricingCalculation.finalTotal)}</span>
+              </div>
+              <span className="detail-offer-savings-pill">
+                You save {formatPrice(pricingCalculation.totalSavings)}
+              </span>
+            </div>
+          ) : (
+            <div className="detail-offer-tip">
+              <span>
+                Add <strong>{unitsNeeded} more</strong> to unlock this offer ({formatPrice(pricingCalculation.regularSubtotal)} regular)
+              </span>
+              <button
+                type="button"
+                className="detail-offer-qualify-btn"
+                onClick={() => setQuantity(activeOffer.qualifying_quantity)}
+                title={`Set quantity to ${activeOffer.qualifying_quantity}`}
+              >
+                Set to {activeOffer.qualifying_quantity}
+              </button>
+            </div>
+          )}
+
+          {pricingCalculation.hasOfferApplied && pricingCalculation.remainingUnits > 0 && (
+            <div className="detail-offer-tip">
+              <span>
+                Add <strong>{activeOffer.qualifying_quantity - pricingCalculation.remainingUnits} more</strong> to qualify for another bundle!
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Quantity and purchase actions */}
       <div className="purchase-controls">
@@ -328,27 +530,34 @@ export default function ProductSelectors({ product }: ProductSelectorsProps) {
           <button
             id="add-to-bag-button"
             type="button"
-            className="btn-add-to-cart"
-            aria-label={`Add ${product.name} to cart`}
+            className={`btn-add-to-cart ${isInCart ? "in-cart" : ""}`}
+            aria-label={isInCart ? `Remove ${product.name} from cart` : `Add ${product.name} to cart`}
             disabled={!isCurrentSelectionAvailable}
-            onClick={handleAddToCart}
+            onClick={handleAddToCartToggle}
           >
-            <Icon name="bag" size={18} />
+            {!isInCart && <Icon name="bag" size={18} />}
             <span>{getButtonText()}</span>
           </button>
         </div>
 
-        {/* Buy it now button */}
+        {/* Buy Now button via WhatsApp */}
         <button
           id="buy-it-now-button"
           type="button"
           className="btn-buy-it-now"
-          aria-label={`Buy ${product.name} now`}
-          disabled
-          title="Checkout functionality coming soon"
+          aria-label={`Buy ${product.name} now via WhatsApp`}
+          disabled={!isCurrentSelectionAvailable || isProcessingBuyNow}
+          onClick={handleBuyNow}
         >
-          Buy it now
+          <WhatsAppIcon size={18} />
+          <span>{isProcessingBuyNow ? "Opening WhatsApp..." : "Buy Now"}</span>
         </button>
+
+        {validationError && (
+          <div className="buy-now-validation-error" role="alert">
+            {validationError}
+          </div>
+        )}
       </div>
 
       {/* Product details specifications (permanently visible) */}

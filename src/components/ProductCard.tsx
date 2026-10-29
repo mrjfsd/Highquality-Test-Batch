@@ -9,6 +9,7 @@ import {
   getResponsiveImageSrcSet,
   RESPONSIVE_SIZES,
 } from "@/lib/images/responsive";
+import { useCart } from "@/context/CartContext";
 
 interface ProductCardProps {
   product: Product;
@@ -16,11 +17,37 @@ interface ProductCardProps {
   isSalePage?: boolean;
 }
 
-export default function ProductCard({
+const ProductCard = React.memo(function ProductCard({
   product,
   priority = false,
   isSalePage = false,
 }: ProductCardProps) {
+  const { items, addItem, removeItem, isLoaded, getProductOffer } = useCart();
+  const [showSizeSelector, setShowSizeSelector] = useState(false);
+
+  const activeOffer = useMemo(() => {
+    if (product.offers && product.offers.length > 0) return product.offers[0];
+    return getProductOffer(product.id);
+  }, [product.offers, product.id, getProductOffer]);
+
+  const offerBadge = useMemo(() => {
+    if (!activeOffer || !activeOffer.is_active) return null;
+    const effectiveUnitPrice = product.sale ?? product.price;
+    const regularCost = activeOffer.qualifying_quantity * effectiveUnitPrice;
+    const savings = Math.round((regularCost - activeOffer.bundle_price + Number.EPSILON) * 100) / 100;
+    if (savings <= 0) return null;
+    return `Buy ${activeOffer.qualifying_quantity} for ₹${Math.round(activeOffer.bundle_price).toLocaleString("en-IN")}`;
+  }, [activeOffer, product.sale, product.price]);
+
+  // Derive cart status directly from shared cart context
+  const cartItemsForProduct = useMemo(() => {
+    if (!isLoaded) return [];
+    const pid = String(product.id).trim();
+    return items.filter((item) => item.productId === pid);
+  }, [items, product.id, isLoaded]);
+
+  const isInCart = cartItemsForProduct.length > 0;
+
   const hasDiscount =
     typeof product.sale === "number" && product.sale < product.price;
 
@@ -48,6 +75,20 @@ export default function ProductCard({
     url: product.image,
     alt: product.alt,
   };
+
+  // Determine available variants and sizes
+  const availableVariants = useMemo(() => {
+    if (!Array.isArray(product.variants) || product.variants.length === 0) return [];
+    return product.variants.filter((v) => v.is_available);
+  }, [product.variants]);
+
+  const availableSizes = useMemo(() => {
+    const set = new Set<string>();
+    availableVariants.forEach((v) => {
+      if (v.size && v.size.trim()) set.add(v.size.trim());
+    });
+    return Array.from(set);
+  }, [availableVariants]);
 
   const handlePrev = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
@@ -92,6 +133,88 @@ export default function ProductCard({
     }
   };
 
+  const triggerAddToCart = (size?: string | null, variantId?: string | null, color?: string | null) => {
+    addItem({
+      product: {
+        id: product.id,
+        name: product.name,
+        slug: product.slug,
+        price: product.price,
+        image: currentImage.url || product.image,
+      },
+      variantId: variantId || null,
+      size: size || null,
+      color: color || null,
+      quantity: 1,
+    });
+    setShowSizeSelector(false);
+  };
+
+  const handleQuickAddClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // ── Toggle Behavior: If already in cart -> Remove / Undo ──
+    if (isInCart) {
+      if (availableSizes.length > 1) {
+        if (cartItemsForProduct.length === 1) {
+          // Exactly 1 variant in cart: remove it directly without ambiguity
+          removeItem(cartItemsForProduct[0].id);
+          setShowSizeSelector(false);
+        } else {
+          // Multiple distinct variants in cart: toggle size popup so user can choose which to remove
+          setShowSizeSelector((prev) => !prev);
+        }
+      } else if (cartItemsForProduct.length > 0) {
+        // Single size or non-variant product: remove it directly
+        removeItem(cartItemsForProduct[0].id);
+        setShowSizeSelector(false);
+      }
+      return;
+    }
+
+    // ── Not in cart: Add to cart ──
+    if (availableSizes.length > 1) {
+      // Must prompt customer to select size
+      setShowSizeSelector((prev) => !prev);
+      return;
+    }
+
+    if (availableSizes.length === 1) {
+      // Exactly 1 size available: add directly
+      const size = availableSizes[0];
+      const match = availableVariants.find((v) => v.size.trim().toLowerCase() === size.toLowerCase());
+      triggerAddToCart(size, match?.id, match?.color);
+      return;
+    }
+
+    // No explicit size variants: add product directly
+    triggerAddToCart(null, null, null);
+  };
+
+  const handleSelectSize = (size: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Check if this specific size is already in cart
+    const existingItem = cartItemsForProduct.find(
+      (item) => item.size?.trim().toLowerCase() === size.trim().toLowerCase()
+    );
+
+    if (existingItem) {
+      // Toggle off / remove this size from cart
+      removeItem(existingItem.id);
+      if (cartItemsForProduct.length <= 1) {
+        setShowSizeSelector(false);
+      }
+    } else {
+      // Add this size to cart
+      const match = availableVariants.find((v) => v.size.trim().toLowerCase() === size.toLowerCase());
+      triggerAddToCart(size, match?.id, match?.color);
+      setShowSizeSelector(false);
+    }
+  };
+
   const srcSet = getResponsiveImageSrcSet(currentImage.url);
   const optimizedSrc = getOptimizedImageUrl(currentImage.url, 640, 80);
 
@@ -129,6 +252,61 @@ export default function ProductCard({
             height={416}
           />
         </Link>
+
+        {/* Quick Size Selection Overlay when multiple sizes exist */}
+        {showSizeSelector && (
+          <div
+            className="product-card-size-popup"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          >
+            <div className="product-card-size-header">
+              <span className="product-card-size-title">Select Size</span>
+              <button
+                type="button"
+                className="product-card-size-close"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setShowSizeSelector(false);
+                }}
+                aria-label="Close size selector"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="product-card-size-list" role="group" aria-label="Select size">
+              {availableSizes.map((size) => {
+                const isSizeInCart = cartItemsForProduct.some(
+                  (item) => item.size?.trim().toLowerCase() === size.trim().toLowerCase()
+                );
+
+                return (
+                  <button
+                    key={size}
+                    type="button"
+                    className={`product-card-size-chip ${isSizeInCart ? "in-cart" : ""}`}
+                    onClick={(e) => handleSelectSize(size, e)}
+                    aria-label={
+                      isSizeInCart
+                        ? `Remove size ${size} from bag`
+                        : `Add size ${size} to bag`
+                    }
+                    title={
+                      isSizeInCart
+                        ? `Size ${size} in bag — click to remove`
+                        : `Add size ${size}`
+                    }
+                  >
+                    {isSizeInCart ? `✓ ${size}` : size}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {hasMultipleImages && (
           <div className="product-card-arrows" aria-hidden="false">
@@ -181,6 +359,27 @@ export default function ProductCard({
       </div>
 
       <div className="product-meta">
+        {offerBadge && (
+          <div className="product-card-offer-tag">
+            <span className="product-card-offer-badge">
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z" />
+                <circle cx="7" cy="7" r="1.5" />
+              </svg>
+              <span>{offerBadge}</span>
+            </span>
+          </div>
+        )}
         <h3 className="product-card-title">
           <Link
             href={`/product/${product.slug}`}
@@ -190,15 +389,74 @@ export default function ProductCard({
             {product.name}
           </Link>
         </h3>
-        <div className="price product-card-price">
-          {hasDiscount && (
-            <span className="old-price">{formatPrice(product.price)}</span>
-          )}
-          <span className="current-price">
-            {formatPrice(product.sale ?? product.price)}
-          </span>
+        <div className="product-card-bottom-row">
+          <div className="price product-card-price">
+            {hasDiscount && (
+              <span className="old-price">{formatPrice(product.price)}</span>
+            )}
+            <span className="current-price">
+              {formatPrice(product.sale ?? product.price)}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            className={`product-card-add-btn ${isInCart ? "in-cart" : ""}`}
+            onClick={handleQuickAddClick}
+            aria-label={
+              isInCart
+                ? `Remove ${product.name} from cart`
+                : `Add ${product.name} to cart`
+            }
+            title={
+              isInCart
+                ? "In cart — click to remove"
+                : availableSizes.length > 1
+                ? "Choose size to add"
+                : "Add to cart"
+            }
+          >
+            {isInCart ? (
+              <>
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <span>Added</span>
+              </>
+            ) : (
+              <>
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                <span>Add</span>
+              </>
+            )}
+          </button>
         </div>
       </div>
     </article>
   );
-}
+});
+
+export default ProductCard;

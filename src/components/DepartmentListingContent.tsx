@@ -782,8 +782,12 @@ export default function DepartmentListingContent({
       <section className="product-area" aria-label="Product collection">
         {filteredProducts.length > 0 ? (
           <div className="collection-product-grid collection-product-grid--4">
-            {filteredProducts.map((product) => (
-              <ProductCard key={product.id} product={product} />
+            {filteredProducts.map((product, index) => (
+              <ProductCard
+                key={product.id}
+                product={product}
+                priority={index < 4}
+              />
             ))}
           </div>
         ) : (

@@ -6,8 +6,9 @@ import { verifyAdminAuthorization } from "@/lib/supabase/auth";
 import { compressImageForUpload, uploadToR2WithProgress } from "@/lib/images/client-compression";
 import { getProductDescriptionTemplate, isKnownDescriptionTemplate } from "@/lib/products/description-templates";
 import { BannerManagementScreen } from "./banner-management";
+import { QuantityOffersScreen } from "./quantity-offers-management";
 
-export type Page = "overview" | "intake" | "catalogue" | "editor" | "media" | "banner";
+export type Page = "overview" | "intake" | "catalogue" | "editor" | "offers" | "media" | "banner";
 export type ProductStatus = "Published" | "Draft" | "Review" | "Archived";
 
 export interface LiveProductImage {
@@ -215,6 +216,7 @@ export const nav: { id: Page; label: string; icon: string }[] = [
   { id: "intake", label: "Add Clothes", icon: "upload" },
   { id: "catalogue", label: "All Clothes", icon: "list" },
   { id: "editor", label: "Edit Garment", icon: "edit" },
+  { id: "offers", label: "Quantity Offers", icon: "tag" },
   { id: "banner", label: "Banner", icon: "image" },
 ];
 
@@ -251,6 +253,12 @@ export function Icon({ name, size = 18 }: { name: string; size?: number }) {
         <rect x="3" y="3" width="18" height="18" rx="2" />
         <circle cx="8.5" cy="8.5" r="1.5" />
         <path d="m21 15-5-5L5 21" />
+      </>
+    ),
+    tag: (
+      <>
+        <path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z" />
+        <circle cx="7" cy="7" r="1.5" />
       </>
     ),
     settings: (
@@ -4243,6 +4251,7 @@ export default function App({
         : editingProductId
         ? `/admin/products/${editingProductId}`
         : "/admin/editor",
+      offers: "/admin/offers",
       media: "/admin/media",
       banner: "/admin/banner",
     };
@@ -4294,6 +4303,14 @@ export default function App({
           showToast={showToast}
           navigate={setPage}
           onProductSaved={refreshProducts}
+        />
+      );
+    if (page === "offers")
+      return (
+        <QuantityOffersScreen
+          products={products}
+          showToast={showToast}
+          navigate={setPage}
         />
       );
     if (page === "banner")

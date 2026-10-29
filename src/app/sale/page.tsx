@@ -21,8 +21,13 @@ export default async function SalePage() {
         {saleProducts.length > 0 ? (
           <section className="product-area" aria-label="Sale collection products">
             <div className="collection-product-grid collection-product-grid--4">
-              {saleProducts.map((product) => (
-                <ProductCard key={product.id} product={product} isSalePage />
+              {saleProducts.map((product, index) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  isSalePage
+                  priority={index < 4}
+                />
               ))}
             </div>
           </section>
