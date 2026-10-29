@@ -331,6 +331,7 @@ export function formatProductUrl(
 /**
  * Constructs an absolute, publicly accessible product image URL.
  * Rejects local file paths, temporary blobs, and base64 data URLs.
+ * Cleans thumbnail resizing query params for a short, direct link.
  * If relative, prepends canonical base URL.
  */
 export function formatImageUrl(
@@ -350,15 +351,24 @@ export function formatImageUrl(
     return "";
   }
 
+  // Clean thumbnail query params (e.g. ?w=192&q=80) for a cleaner, full-resolution image URL
+  let cleanUrl = trimmed;
+  if (cleanUrl.includes("?")) {
+    const [pathPart] = cleanUrl.split("?");
+    if (pathPart.includes("/api/images/") || pathPart.startsWith("/assets/")) {
+      cleanUrl = pathPart;
+    }
+  }
+
   // If already absolute HTTP/HTTPS URL
-  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-    return trimmed;
+  if (cleanUrl.startsWith("http://") || cleanUrl.startsWith("https://")) {
+    return cleanUrl;
   }
 
   // If relative path (e.g. /api/images/... or /assets/...), prepend baseUrl
-  if (trimmed.startsWith("/")) {
+  if (cleanUrl.startsWith("/")) {
     const cleanBase = baseUrl.trim().replace(/\/+$/, "");
-    return `${cleanBase}${trimmed}`;
+    return `${cleanBase}${cleanUrl}`;
   }
 
   return "";
@@ -367,26 +377,28 @@ export function formatImageUrl(
 /**
  * Generates the human-readable WhatsApp order message including line item
  * breakdowns, product links, image URLs, variant details, applied quantity offers,
- * and order summary totals.
+ * and order summary totals using WhatsApp bulleted and bold formatting.
  *
  * Example:
  * Hello! I'd like to place an order from Style Edit.
  *
- * 1. Relaxed Fit Collar Down Shirt
- *    Product link: https://style-edit.com/product/relaxed-fit-collar-down-shirt
- *    Product image: https://style-edit.com/shirt.jpg
- *    Size: L
- *    Colour: Pink
- *    Quantity: 1
- *    Regular price: ₹1,200 each
- *    Regular subtotal: ₹1,200
- *    Savings: ₹0
- *    Final item total: ₹1,200
+ * *1. Relaxed Fit Collar Down Shirt*
+ * - Product: https://style-edit.com/product/relaxed-fit-collar-down-shirt
+ * - Image: https://style-edit.com/shirt.jpg
+ * - Size: L
+ * - Colour: Pink
+ * - Quantity: 1
+ * - Regular price: ₹1,200 each
+ * - Regular subtotal: ₹1,200
+ * - Savings: ₹0
+ * - Final item total: ₹1,200
  *
- * --------------------------------
- * Selected order subtotal: ₹1,200
- * Offer savings: ₹0
- * Final order total: ₹1,200
+ * ---
+ *
+ * *Order Summary*
+ * - Selected order subtotal: ₹1,200
+ * - Offer savings: ₹0
+ * - Final order total: ₹1,200
  *
  * Please confirm availability and the order details. Thank you!
  */
@@ -409,57 +421,52 @@ export function generateWhatsAppOrderMessage(
     const productUrl = formatProductUrl(item.slug, baseUrl);
     const imageUrl = formatImageUrl(item.image, baseUrl);
 
-    lines.push(`${index + 1}. ${item.name}`);
+    lines.push(`*${index + 1}. ${item.name}*`);
 
     if (productUrl) {
-      lines.push(`   Product link: ${productUrl}`);
+      lines.push(`- Product: ${productUrl}`);
     }
 
     if (imageUrl) {
-      lines.push(`   Product image: ${imageUrl}`);
+      lines.push(`- Image: ${imageUrl}`);
     }
 
     if (item.size && item.size.trim() && item.size.trim().toLowerCase() !== "nosize") {
-      lines.push(`   Size: ${item.size.trim()}`);
+      lines.push(`- Size: ${item.size.trim()}`);
     }
 
     if (item.color && item.color.trim() && item.color.trim().toLowerCase() !== "nocolor") {
-      lines.push(`   Colour: ${item.color.trim()}`);
+      lines.push(`- Colour: ${item.color.trim()}`);
     }
 
     const safeQty = Math.max(1, Math.floor(item.quantity || 1));
-    lines.push(`   Quantity: ${safeQty}`);
-    lines.push(`   Regular price: ${formatCartCurrency(item.price)} each`);
-    lines.push(`   Regular subtotal: ${formatCartCurrency(itemPricing.regularSubtotal)}`);
+    lines.push(`- Quantity: ${safeQty}`);
+    lines.push(`- Regular price: ${formatCartCurrency(item.price)} each`);
+    lines.push(`- Regular subtotal: ${formatCartCurrency(itemPricing.regularSubtotal)}`);
 
     if (itemPricing.hasOfferApplied && itemPricing.appliedOffer) {
       lines.push(
-        `   Offer: Buy ${itemPricing.appliedOffer.qualifying_quantity} for ${formatCartCurrency(
+        `- Offer: Buy ${itemPricing.appliedOffer.qualifying_quantity} for ${formatCartCurrency(
           itemPricing.appliedOffer.bundle_price
         )}`
       );
-      lines.push(`   Savings: ${formatCartCurrency(itemPricing.discountAmount)}`);
+      lines.push(`- Savings: ${formatCartCurrency(itemPricing.discountAmount)}`);
     } else {
-      lines.push("   Savings: ₹0");
+      lines.push("- Savings: ₹0");
     }
 
-    lines.push(`   Final item total: ${formatCartCurrency(itemPricing.finalTotal)}`);
-
-    if (index < items.length - 1) {
-      lines.push("");
-      lines.push("--------------------------------");
-      lines.push("");
-    } else {
-      lines.push("");
-    }
+    lines.push(`- Final item total: ${formatCartCurrency(itemPricing.finalTotal)}`);
+    lines.push("");
+    lines.push("---");
+    lines.push("");
   });
 
   const totals = calculateCartTotalsWithOffers(items, offersMap);
 
-  lines.push("--------------------------------");
-  lines.push(`Selected order subtotal: ${formatCartCurrency(totals.regularSubtotal)}`);
-  lines.push(`Offer savings: ${formatCartCurrency(totals.totalSavings)}`);
-  lines.push(`Final order total: ${formatCartCurrency(totals.finalTotal)}`);
+  lines.push("*Order Summary*");
+  lines.push(`- Selected order subtotal: ${formatCartCurrency(totals.regularSubtotal)}`);
+  lines.push(`- Offer savings: ${formatCartCurrency(totals.totalSavings)}`);
+  lines.push(`- Final order total: ${formatCartCurrency(totals.finalTotal)}`);
   lines.push("");
   lines.push("Please confirm availability and the order details. Thank you!");
 
@@ -525,39 +532,39 @@ export function generateBuyNowWhatsAppMessage(
   const lines: string[] = [
     "Hello! I'd like to order from Style Edit.",
     "",
-    `Product: ${product.name}`,
+    `*Product: ${product.name}*`,
   ];
 
   if (productUrl) {
-    lines.push(`Product link: ${productUrl}`);
+    lines.push(`- Product: ${productUrl}`);
   }
   if (imageUrl) {
-    lines.push(`Product image: ${imageUrl}`);
+    lines.push(`- Image: ${imageUrl}`);
   }
 
   if (size && size.trim() && size.trim().toLowerCase() !== "nosize") {
-    lines.push(`Size: ${size.trim()}`);
+    lines.push(`- Size: ${size.trim()}`);
   }
   if (color && color.trim() && color.trim().toLowerCase() !== "nocolor") {
-    lines.push(`Colour: ${color.trim()}`);
+    lines.push(`- Colour: ${color.trim()}`);
   }
-  lines.push(`Quantity: ${safeQty}`);
+  lines.push(`- Quantity: ${safeQty}`);
   lines.push("");
-  lines.push(`Regular price: ${formatCartCurrency(safeUnitPrice)} each`);
-  lines.push(`Regular subtotal: ${formatCartCurrency(pricing.regularSubtotal)}`);
+  lines.push(`- Regular price: ${formatCartCurrency(safeUnitPrice)} each`);
+  lines.push(`- Regular subtotal: ${formatCartCurrency(pricing.regularSubtotal)}`);
 
   if (pricing.hasOfferApplied && pricing.appliedOffer) {
     lines.push(
-      `Offer: Buy ${pricing.appliedOffer.qualifying_quantity} for ${formatCartCurrency(
+      `- Offer: Buy ${pricing.appliedOffer.qualifying_quantity} for ${formatCartCurrency(
         pricing.appliedOffer.bundle_price
       )}`
     );
-    lines.push(`Savings: ${formatCartCurrency(pricing.discountAmount)}`);
+    lines.push(`- Savings: ${formatCartCurrency(pricing.discountAmount)}`);
   } else {
-    lines.push("Savings: ₹0");
+    lines.push("- Savings: ₹0");
   }
 
-  lines.push(`Final total: ${formatCartCurrency(pricing.finalTotal)}`);
+  lines.push(`- Final total: ${formatCartCurrency(pricing.finalTotal)}`);
   lines.push("");
   lines.push("Please confirm availability and the order details. Thank you!");
 

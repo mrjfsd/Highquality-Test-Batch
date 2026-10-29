@@ -401,27 +401,28 @@ function runTests() {
     const message = generateWhatsAppOrderMessage(items, offersMap);
 
     assert.ok(message.includes("Hello! I'd like to place an order from Style Edit."));
-    assert.ok(message.includes("1. Classic Denim Jeans"));
-    assert.ok(message.includes("Product link: https://style-edit.com/product/classic-denim-jeans"));
-    assert.ok(message.includes("Product image: https://style-edit.com/jeans.jpg"));
-    assert.ok(message.includes("Size: 32"));
-    assert.ok(message.includes("Colour: Denim"));
-    assert.ok(message.includes("Quantity: 3"));
-    assert.ok(message.includes("Regular price: ₹400 each"));
-    assert.ok(message.includes("Regular subtotal: ₹1,200"));
-    assert.ok(message.includes("Offer: Buy 3 for ₹1,000"));
-    assert.ok(message.includes("Savings: ₹200"));
-    assert.ok(message.includes("Final item total: ₹1,000"));
-    assert.ok(message.includes("Selected order subtotal: ₹1,200"));
-    assert.ok(message.includes("Offer savings: ₹200"));
-    assert.ok(message.includes("Final order total: ₹1,000"));
+    assert.ok(message.includes("*1. Classic Denim Jeans*"));
+    assert.ok(message.includes("- Product: https://style-edit.com/product/classic-denim-jeans"));
+    assert.ok(message.includes("- Image: https://style-edit.com/jeans.jpg"));
+    assert.ok(message.includes("- Size: 32"));
+    assert.ok(message.includes("- Colour: Denim"));
+    assert.ok(message.includes("- Quantity: 3"));
+    assert.ok(message.includes("- Regular price: ₹400 each"));
+    assert.ok(message.includes("- Regular subtotal: ₹1,200"));
+    assert.ok(message.includes("- Offer: Buy 3 for ₹1,000"));
+    assert.ok(message.includes("- Savings: ₹200"));
+    assert.ok(message.includes("- Final item total: ₹1,000"));
+    assert.ok(message.includes("*Order Summary*"));
+    assert.ok(message.includes("- Selected order subtotal: ₹1,200"));
+    assert.ok(message.includes("- Offer savings: ₹200"));
+    assert.ok(message.includes("- Final order total: ₹1,000"));
     assert.ok(message.includes("Please confirm availability and the order details. Thank you!"));
 
     const url = generateWhatsAppOrderUrl(items, offersMap);
     assert.ok(url.startsWith("https://wa.me/"));
     assert.ok(url.includes("text="));
     assert.ok(url.includes(encodeURIComponent("Hello! I'd like to place an order from Style Edit.")));
-    assert.ok(url.includes(encodeURIComponent("Product link: https://style-edit.com/product/classic-denim-jeans")));
+    assert.ok(url.includes(encodeURIComponent("- Product: https://style-edit.com/product/classic-denim-jeans")));
   });
 
   // Case 12: Selective WhatsApp Ordering — subset selection excludes deselected item
@@ -460,12 +461,12 @@ function runTests() {
     assert.equal(selectedTotals.finalTotal, 1000);
 
     const whatsappMsg = generateWhatsAppOrderMessage(selectedItems, offersMap);
-    assert.ok(whatsappMsg.includes("1. Classic Denim Jeans"));
-    assert.ok(whatsappMsg.includes("Product link: https://style-edit.com/product/classic-denim-jeans"));
+    assert.ok(whatsappMsg.includes("*1. Classic Denim Jeans*"));
+    assert.ok(whatsappMsg.includes("- Product: https://style-edit.com/product/classic-denim-jeans"));
     assert.ok(!whatsappMsg.includes("Kids Floral Dress"));
-    assert.ok(whatsappMsg.includes("Selected order subtotal: ₹1,200"));
-    assert.ok(whatsappMsg.includes("Offer savings: ₹200"));
-    assert.ok(whatsappMsg.includes("Final order total: ₹1,000"));
+    assert.ok(whatsappMsg.includes("- Selected order subtotal: ₹1,200"));
+    assert.ok(whatsappMsg.includes("- Offer savings: ₹200"));
+    assert.ok(whatsappMsg.includes("- Final order total: ₹1,000"));
 
     // Full cart still contains 2 items
     assert.equal(fullCart.length, 2);
@@ -510,10 +511,10 @@ function runTests() {
     assert.equal(aTotals.finalTotal, 800);
 
     const messageA = generateWhatsAppOrderMessage(onlyASelected, offersMap);
-    assert.ok(messageA.includes("Savings: ₹0"));
-    assert.ok(messageA.includes("Selected order subtotal: ₹800"));
-    assert.ok(messageA.includes("Offer savings: ₹0"));
-    assert.ok(messageA.includes("Final order total: ₹800"));
+    assert.ok(messageA.includes("- Savings: ₹0"));
+    assert.ok(messageA.includes("- Selected order subtotal: ₹800"));
+    assert.ok(messageA.includes("- Offer savings: ₹0"));
+    assert.ok(messageA.includes("- Final order total: ₹800"));
   });
 
   // Case 14: Zero selected items generates empty WhatsApp order URL
@@ -603,17 +604,17 @@ function runTests() {
     const message = generateBuyNowWhatsAppMessage(buyNowInput);
 
     assert.ok(message.includes("Hello! I'd like to order from Style Edit."));
-    assert.ok(message.includes("Product: Blue Jeans"));
-    assert.ok(message.includes("Product link: https://style-edit.com/product/blue-jeans"));
-    assert.ok(message.includes("Product image: https://your-image-host.com/blue-jeans.jpg"));
-    assert.ok(message.includes("Size: L"));
-    assert.ok(message.includes("Colour: Black"));
-    assert.ok(message.includes("Quantity: 3"));
-    assert.ok(message.includes("Regular price: ₹1,200 each"));
-    assert.ok(message.includes("Regular subtotal: ₹3,600"));
-    assert.ok(message.includes("Offer: Buy 3 for ₹3,200"));
-    assert.ok(message.includes("Savings: ₹400"));
-    assert.ok(message.includes("Final total: ₹3,200"));
+    assert.ok(message.includes("*Product: Blue Jeans*"));
+    assert.ok(message.includes("- Product: https://style-edit.com/product/blue-jeans"));
+    assert.ok(message.includes("- Image: https://your-image-host.com/blue-jeans.jpg"));
+    assert.ok(message.includes("- Size: L"));
+    assert.ok(message.includes("- Colour: Black"));
+    assert.ok(message.includes("- Quantity: 3"));
+    assert.ok(message.includes("- Regular price: ₹1,200 each"));
+    assert.ok(message.includes("- Regular subtotal: ₹3,600"));
+    assert.ok(message.includes("- Offer: Buy 3 for ₹3,200"));
+    assert.ok(message.includes("- Savings: ₹400"));
+    assert.ok(message.includes("- Final total: ₹3,200"));
     assert.ok(message.includes("Please confirm availability and the order details. Thank you!"));
   });
 
@@ -644,17 +645,17 @@ function runTests() {
     const message = generateBuyNowWhatsAppMessage(buyNowInput);
 
     assert.ok(message.includes("Hello! I'd like to order from Style Edit."));
-    assert.ok(message.includes("Product: Blue Jeans"));
-    assert.ok(message.includes("Product link: https://style-edit.com/product/blue-jeans"));
-    assert.ok(message.includes("Product image: https://your-image-host.com/blue-jeans.jpg"));
-    assert.ok(message.includes("Size: M"));
-    assert.ok(message.includes("Colour: Dark Blue"));
-    assert.ok(message.includes("Quantity: 2"));
-    assert.ok(message.includes("Regular price: ₹1,200 each"));
-    assert.ok(message.includes("Regular subtotal: ₹2,400"));
-    assert.ok(!message.includes("Offer: Buy 3 for ₹3,200"));
-    assert.ok(message.includes("Savings: ₹0"));
-    assert.ok(message.includes("Final total: ₹2,400"));
+    assert.ok(message.includes("*Product: Blue Jeans*"));
+    assert.ok(message.includes("- Product: https://style-edit.com/product/blue-jeans"));
+    assert.ok(message.includes("- Image: https://your-image-host.com/blue-jeans.jpg"));
+    assert.ok(message.includes("- Size: M"));
+    assert.ok(message.includes("- Colour: Dark Blue"));
+    assert.ok(message.includes("- Quantity: 2"));
+    assert.ok(message.includes("- Regular price: ₹1,200 each"));
+    assert.ok(message.includes("- Regular subtotal: ₹2,400"));
+    assert.ok(!message.includes("- Offer: Buy 3 for ₹3,200"));
+    assert.ok(message.includes("- Savings: ₹0"));
+    assert.ok(message.includes("- Final total: ₹2,400"));
     assert.ok(message.includes("Please confirm availability and the order details. Thank you!"));
   });
 
@@ -675,11 +676,11 @@ function runTests() {
 
     const validUrl = generateBuyNowWhatsAppUrl(buyNowInput, "917676105819");
     assert.ok(validUrl.startsWith("https://wa.me/917676105819?text="));
-    assert.ok(validUrl.includes(encodeURIComponent("Product: Classic Linen Tee")));
-    assert.ok(validUrl.includes(encodeURIComponent("Product link: https://style-edit.com/product/classic-linen-tee")));
-    assert.ok(validUrl.includes(encodeURIComponent("Product image: https://style-edit.com/tee.jpg")));
-    assert.ok(validUrl.includes(encodeURIComponent("Size: S")));
-    assert.ok(validUrl.includes(encodeURIComponent("Colour: Ivory")));
+    assert.ok(validUrl.includes(encodeURIComponent("*Product: Classic Linen Tee*")));
+    assert.ok(validUrl.includes(encodeURIComponent("- Product: https://style-edit.com/product/classic-linen-tee")));
+    assert.ok(validUrl.includes(encodeURIComponent("- Image: https://style-edit.com/tee.jpg")));
+    assert.ok(validUrl.includes(encodeURIComponent("- Size: S")));
+    assert.ok(validUrl.includes(encodeURIComponent("- Colour: Ivory")));
 
     // Empty phone produces empty URL
     const emptyPhoneUrl = generateBuyNowWhatsAppUrl(buyNowInput, "");
@@ -715,8 +716,8 @@ function runTests() {
     const message = generateBuyNowWhatsAppMessage(buyNowInput);
 
     // Verify Buy Now message has only Blue Jeans, and no cart items
-    assert.ok(message.includes("Product: Blue Jeans"));
-    assert.ok(message.includes("Product link: https://style-edit.com/product/blue-jeans"));
+    assert.ok(message.includes("*Product: Blue Jeans*"));
+    assert.ok(message.includes("- Product: https://style-edit.com/product/blue-jeans"));
     assert.ok(!message.includes("Unrelated Silk Dress"));
     assert.equal(cartItems.length, 1); // Cart remains completely unchanged
   });
@@ -734,12 +735,12 @@ function runTests() {
     };
 
     const message = generateWhatsAppOrderMessage([itemWithoutImageOrSlug]);
-    assert.ok(message.includes("1. Minimalist Beanie"));
-    assert.ok(!message.includes("Product link:"));
-    assert.ok(!message.includes("Product image:"));
-    assert.ok(message.includes("Regular price: ₹600 each"));
-    assert.ok(message.includes("Final item total: ₹600"));
-    assert.ok(message.includes("Final order total: ₹600"));
+    assert.ok(message.includes("*1. Minimalist Beanie*"));
+    assert.ok(!message.includes("- Product:"));
+    assert.ok(!message.includes("- Image:"));
+    assert.ok(message.includes("- Regular price: ₹600 each"));
+    assert.ok(message.includes("- Final item total: ₹600"));
+    assert.ok(message.includes("- Final order total: ₹600"));
   });
 
   // Case 22: Multi-product cart formatting with dividers and pricing engine consistency
@@ -773,34 +774,35 @@ function runTests() {
 
     assert.ok(message.includes("Hello! I'd like to place an order from Style Edit."));
     // Item 1
-    assert.ok(message.includes("1. Relaxed Fit Collar Down Shirt"));
-    assert.ok(message.includes("   Product link: https://style-edit.com/product/relaxed-fit-collar-down-shirt"));
-    assert.ok(message.includes("   Product image: https://style-edit.com/shirt-pink.jpg"));
-    assert.ok(message.includes("   Size: L"));
-    assert.ok(message.includes("   Colour: Pink"));
-    assert.ok(message.includes("   Quantity: 1"));
-    assert.ok(message.includes("   Regular price: ₹1,200 each"));
-    assert.ok(message.includes("   Savings: ₹0"));
-    assert.ok(message.includes("   Final item total: ₹1,200"));
+    assert.ok(message.includes("*1. Relaxed Fit Collar Down Shirt*"));
+    assert.ok(message.includes("- Product: https://style-edit.com/product/relaxed-fit-collar-down-shirt"));
+    assert.ok(message.includes("- Image: https://style-edit.com/shirt-pink.jpg"));
+    assert.ok(message.includes("- Size: L"));
+    assert.ok(message.includes("- Colour: Pink"));
+    assert.ok(message.includes("- Quantity: 1"));
+    assert.ok(message.includes("- Regular price: ₹1,200 each"));
+    assert.ok(message.includes("- Savings: ₹0"));
+    assert.ok(message.includes("- Final item total: ₹1,200"));
 
     // Simple divider between products
-    assert.ok(message.includes("--------------------------------"));
+    assert.ok(message.includes("---"));
 
     // Item 2
-    assert.ok(message.includes("2. Classic Denim Jeans"));
-    assert.ok(message.includes("   Product link: https://style-edit.com/product/classic-denim-jeans"));
-    assert.ok(message.includes("   Product image: https://style-edit.com/jeans-blue.jpg"));
-    assert.ok(message.includes("   Size: 32"));
-    assert.ok(message.includes("   Colour: Dark Blue"));
-    assert.ok(message.includes("   Quantity: 3"));
-    assert.ok(message.includes("   Offer: Buy 3 for ₹1,000"));
-    assert.ok(message.includes("   Savings: ₹200"));
-    assert.ok(message.includes("   Final item total: ₹1,000"));
+    assert.ok(message.includes("*2. Classic Denim Jeans*"));
+    assert.ok(message.includes("- Product: https://style-edit.com/product/classic-denim-jeans"));
+    assert.ok(message.includes("- Image: https://style-edit.com/jeans-blue.jpg"));
+    assert.ok(message.includes("- Size: 32"));
+    assert.ok(message.includes("- Colour: Dark Blue"));
+    assert.ok(message.includes("- Quantity: 3"));
+    assert.ok(message.includes("- Offer: Buy 3 for ₹1,000"));
+    assert.ok(message.includes("- Savings: ₹200"));
+    assert.ok(message.includes("- Final item total: ₹1,000"));
 
     // Summary block
-    assert.ok(message.includes("Selected order subtotal: ₹2,400"));
-    assert.ok(message.includes("Offer savings: ₹200"));
-    assert.ok(message.includes("Final order total: ₹2,200"));
+    assert.ok(message.includes("*Order Summary*"));
+    assert.ok(message.includes("- Selected order subtotal: ₹2,400"));
+    assert.ok(message.includes("- Offer savings: ₹200"));
+    assert.ok(message.includes("- Final order total: ₹2,200"));
     assert.ok(message.includes("Please confirm availability and the order details. Thank you!"));
   });
 
