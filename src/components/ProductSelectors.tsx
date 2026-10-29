@@ -8,7 +8,7 @@ import type { Product } from "@/data/products";
 import { formatPrice } from "@/data/products";
 import Icon from "@/components/Icon";
 import { useProductColor } from "@/components/ProductColorContext";
-import { areColorsMatching } from "@/lib/products/colors";
+import { areColorsMatching, resolveProductColorImage } from "@/lib/products/colors";
 import { useCart } from "@/context/CartContext";
 import { calculateItemPriceWithOffers } from "@/lib/pricing/quantity-offers";
 import { WhatsAppIcon } from "@/components/Icons";
@@ -260,13 +260,17 @@ export default function ProductSelectors({ product }: ProductSelectorsProps) {
       return;
     }
 
+    const resolvedColorImage = resolveProductColorImage(product, selectedColor);
+
     addItem({
       product: {
         id: product.id,
         name: product.name,
         slug: product.slug,
         price: product.price,
-        image: product.image,
+        image: resolvedColorImage || product.image,
+        images: product.images,
+        colors: product.colors,
       },
       variantId: effectiveVariantId,
       size: effectiveSize,

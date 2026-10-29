@@ -10,6 +10,7 @@ import {
   RESPONSIVE_SIZES,
 } from "@/lib/images/responsive";
 import { useCart } from "@/context/CartContext";
+import { resolveProductColorImage } from "@/lib/products/colors";
 
 interface ProductCardProps {
   product: Product;
@@ -134,13 +135,16 @@ const ProductCard = React.memo(function ProductCard({
   };
 
   const triggerAddToCart = (size?: string | null, variantId?: string | null, color?: string | null) => {
+    const resolvedColorImage = color ? resolveProductColorImage(product, color) : null;
     addItem({
       product: {
         id: product.id,
         name: product.name,
         slug: product.slug,
         price: product.price,
-        image: currentImage.url || product.image,
+        image: resolvedColorImage || currentImage.url || product.image,
+        images: product.images,
+        colors: product.colors,
       },
       variantId: variantId || null,
       size: size || null,

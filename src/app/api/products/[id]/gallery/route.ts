@@ -47,7 +47,7 @@ export async function GET(
 
   let productQuery = supabase
     .from("products")
-    .select("id, name, slug, status, category");
+    .select("id, name, slug, status, category, product_variants(color)");
 
   if (isUuid) {
     productQuery = productQuery.eq("id", decodedParam);
@@ -133,11 +133,20 @@ export async function GET(
     height: img.height,
   }));
 
+  const colorsSet = new Set<string>();
+  if (Array.isArray((product as any).product_variants)) {
+    (product as any).product_variants.forEach((v: { color?: string | null }) => {
+      if (v?.color && v.color.trim()) colorsSet.add(v.color.trim());
+    });
+  }
+  const colors = Array.from(colorsSet);
+
   return NextResponse.json({
     productId: product.id,
     productName: product.name,
     productSlug: product.slug,
     images,
+    colors,
     page,
     limit,
     total,

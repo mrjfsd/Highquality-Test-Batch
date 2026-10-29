@@ -108,3 +108,84 @@ export function resolveSwatchBackground(rawColor: string): string {
   return trimmed;
 }
 
+export interface ColorResolvableImage {
+  url?: string;
+  proxyUrl?: string;
+  color?: string | null;
+  alt?: string | null;
+  altText?: string | null;
+  is_primary?: boolean;
+  isPrimary?: boolean;
+  display_order?: number;
+  displayOrder?: number;
+}
+
+export interface ColorResolvableProduct {
+  image?: string;
+  images?: ColorResolvableImage[];
+  colors?: string[];
+}
+
+/**
+ * Deterministically resolves the most accurate product image for a given color.
+ *
+ * Evaluation Strategy:
+ * 1. Direct match: image where areColorsMatching(img.color, targetColor) is true.
+ * 2. Alt text / URL match: image whose altText or url includes the color name.
+ * 3. Positional 1-to-1 correspondence: when available product.colors and images have
+ *    matching lengths (N > 1), map the index of targetColor in product.colors to images[index].
+ * 4. Safe fallback: product's designated primary image, first image, or product.image fallback.
+ */
+export function resolveProductColorImage(
+  product: ColorResolvableProduct,
+  targetColor?: string | null
+): string {
+  if (!product) return "";
+  const fallback = product.image || "";
+  if (!targetColor || !targetColor.trim()) return fallback;
+
+  const images = Array.isArray(product.images) && product.images.length > 0 ? product.images : [];
+  if (images.length === 0) return fallback;
+
+  const getImgUrl = (img?: ColorResolvableImage): string => img?.url || img?.proxyUrl || "";
+  const isImgPrimary = (img?: ColorResolvableImage): boolean => Boolean(img?.is_primary || img?.isPrimary);
+  const getImgAlt = (img?: ColorResolvableImage): string => img?.alt || img?.altText || "";
+
+  const trimmedTarget = targetColor.trim();
+
+  // 1. Direct color match on assigned image color
+  const directMatch = images.find((img) => areColorsMatching(img.color, trimmedTarget));
+  if (directMatch && getImgUrl(directMatch)) {
+    return getImgUrl(directMatch);
+  }
+
+  // 2. Alt text or URL match
+  const lowerTarget = trimmedTarget.toLowerCase();
+  if (lowerTarget.length > 1) {
+    const textMatch = images.find((img) => {
+      const alt = getImgAlt(img).toLowerCase();
+      const u = getImgUrl(img).toLowerCase();
+      return alt.includes(lowerTarget) || u.includes(lowerTarget);
+    });
+    if (textMatch && getImgUrl(textMatch)) {
+      return getImgUrl(textMatch);
+    }
+  }
+
+  // 3. Positional 1-to-1 correspondence:
+  // If product has N colors and N images, map targetColor's position to the corresponding image
+  const availableColors = Array.isArray(product.colors) ? product.colors.filter(Boolean) : [];
+  if (availableColors.length > 1 && images.length === availableColors.length) {
+    const colorPos = availableColors.findIndex((c) => areColorsMatching(c, trimmedTarget));
+    if (colorPos >= 0 && colorPos < images.length) {
+      const mappedImg = images[colorPos];
+      if (mappedImg && getImgUrl(mappedImg)) {
+        return getImgUrl(mappedImg);
+      }
+    }
+  }
+
+  // 4. Fallback to primary image, first image, or product fallback
+  const primaryImg = images.find((img) => isImgPrimary(img));
+  return getImgUrl(primaryImg) || getImgUrl(images[0]) || fallback;
+}

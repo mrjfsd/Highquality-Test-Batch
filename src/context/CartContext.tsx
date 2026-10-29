@@ -27,6 +27,7 @@ import {
   generateWhatsAppOrderUrl,
 } from "@/lib/cart/cart-utils";
 import { createRegularPricing } from "@/lib/pricing/quantity-offers";
+import { resolveProductColorImage } from "@/lib/products/colors";
 
 const CartContext = createContext<CartContextValue | null>(null);
 
@@ -156,6 +157,79 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("storage", handleStorageChange);
   }, []);
 
+  // Reconcile color-specific images for existing cart items non-destructively
+  useEffect(() => {
+    if (!isLoaded || items.length === 0) return;
+
+    const itemsWithColor = items.filter((item) => Boolean(item.color && item.color.trim()));
+    if (itemsWithColor.length === 0) return;
+
+    let isMounted = true;
+
+    async function reconcileColorImages() {
+      const productIds = Array.from(new Set(itemsWithColor.map((i) => i.productId)));
+      const updates: Record<string, string> = {};
+
+      await Promise.all(
+        productIds.map(async (pid) => {
+          try {
+            const res = await fetch(`/api/products/${encodeURIComponent(pid)}/gallery?limit=50`, {
+              headers: { Accept: "application/json" },
+            });
+            if (!res.ok) return;
+            const data = await res.json();
+            if (!data?.images || !Array.isArray(data.images) || data.images.length === 0) return;
+
+            const relevantItems = itemsWithColor.filter((i) => i.productId === pid);
+            for (const item of relevantItems) {
+              const resolved = resolveProductColorImage(
+                {
+                  image: item.image,
+                  images: data.images,
+                  colors: data.colors,
+                },
+                item.color
+              );
+              if (resolved && resolved !== item.image) {
+                updates[item.id] = resolved;
+              }
+            }
+          } catch (err) {
+            console.warn(`[CartContext] Color image reconciliation skipped for product ${pid}:`, err);
+          }
+        })
+      );
+
+      if (!isMounted || Object.keys(updates).length === 0) return;
+
+      setItems((prevItems) => {
+        let hasChanges = false;
+        const updated = prevItems.map((item) => {
+          if (updates[item.id] && updates[item.id] !== item.image) {
+            hasChanges = true;
+            return {
+              ...item,
+              image: updates[item.id],
+            };
+          }
+          return item;
+        });
+
+        if (hasChanges) {
+          persistItems(updated);
+          return updated;
+        }
+        return prevItems;
+      });
+    }
+
+    reconcileColorImages();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isLoaded, persistItems]);
+
   const addItem = useCallback(
     (input: AddToCartInput): { success: boolean; itemId: string } => {
       const { product, variantId, size, color, quantity = 1 } = input;
@@ -178,13 +252,25 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             return item;
           });
         } else {
-          // Add as new item
+          // Add as new item (resolving color image if available)
+          const resolvedColorImage =
+            color && product.images && product.images.length > 0
+              ? resolveProductColorImage(
+                  {
+                    image: product.image,
+                    images: product.images,
+                    colors: product.colors,
+                  },
+                  color
+                )
+              : product.image;
+
           const newItem: CartItem = {
             id: targetId,
             productId: String(product.id),
             name: product.name,
             slug: product.slug,
-            image: product.image,
+            image: resolvedColorImage || product.image,
             price: Number.isFinite(product.price) ? Math.max(0, product.price) : 0,
             variantId: variantId || null,
             size: size || null,

@@ -27,6 +27,18 @@ export interface AddToCartInput {
     slug: string;
     price: number;
     image: string;
+    images?: Array<{
+      url?: string;
+      proxyUrl?: string;
+      color?: string | null;
+      alt?: string | null;
+      altText?: string | null;
+      is_primary?: boolean;
+      isPrimary?: boolean;
+      display_order?: number;
+      displayOrder?: number;
+    }>;
+    colors?: string[];
   };
   variantId?: string | null;
   size?: string | null;
