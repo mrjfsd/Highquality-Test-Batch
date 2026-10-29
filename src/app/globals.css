@@ -1480,6 +1480,7 @@
   min-width: 0;
   position: relative;
   cursor: pointer;
+  height: 100%;
 }
 
 .product-card .product-meta {
@@ -1487,28 +1488,29 @@
   flex-direction: column;
   align-items: flex-start;
   justify-content: flex-start;
-  padding-top: 14px;
+  padding-top: 11px;
   width: 100%;
   gap: 0;
   box-sizing: border-box;
+  flex: 1;
 }
 
 .product-meta h3,
 .product-card-title {
   margin: 0;
   font-size: 13.5px;
-  font-weight: 600;
-  line-height: 1.45;
+  font-weight: 500;
+  line-height: 1.4;
   color: var(--text-primary-dark, #F7F3EE);
 }
 
 /* Product Card Title: Clean, readable, left-aligned fashion typography */
 .product-card .product-card-title,
 .product-card .product-meta h3 {
-  margin: 0 0 6px 0;
+  margin: 0 0 5px 0;
   font-family: var(--sans);
-  font-size: 14.5px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 500;
   line-height: 1.35;
   letter-spacing: 0.01em;
   color: var(--text-primary-dark, #F7F3EE);
@@ -1549,11 +1551,10 @@
 .product-card .price {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: 7px;
   font-family: var(--sans);
   font-size: 13.5px;
-  font-weight: 600;
-  line-height: 1.25;
+  line-height: 1.2;
   color: var(--text-primary-dark, #F7F3EE);
   margin: 0;
   white-space: nowrap;
@@ -1561,14 +1562,15 @@
 
 .product-card .current-price {
   font-weight: 700;
-  font-size: 14px;
+  font-size: 14.5px;
   color: var(--text-primary-dark, #F7F3EE);
+  letter-spacing: -0.01em;
 }
 
 .product-card .old-price {
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--text-muted-dark, #9B9B93) !important;
+  font-size: 12px;
+  font-weight: 400;
+  color: #8C8C84 !important;
   text-decoration: line-through;
   margin: 0;
 }
@@ -1580,7 +1582,8 @@
   justify-content: space-between;
   width: 100%;
   gap: 8px;
-  margin-top: 8px;
+  margin-top: auto;
+  padding-top: 6px;
 }
 
 .product-card-add-btn {
@@ -3934,44 +3937,43 @@
 
 /* Product Card Styling within detail / related */
 .product-card { cursor: pointer; min-width: 0; }
-/* ── Horizontal Red Sale Tag for storefront product cards ── */
+/* ── Refined Storefront Product Badges (ON SALE & SPECIAL OFFER) ── */
 .product-card .sale-tag,
 .product-card .sale-tag--on-sale,
-.sale-page .product-card .sale-tag {
+.sale-page .product-card .sale-tag,
+.product-card .special-offer-tag {
   position: absolute;
   z-index: 3;
-  top: 12px;
-  left: 12px;
+  top: 10px;
+  left: 10px;
   display: inline-flex;
   align-items: center;
-  gap: 6.5px;
-  background: var(--crimson, #A31C1B) !important;
-  color: #ffffff !important;
-  height: 20px;
-  padding: 0 8px 0 9px;
+  justify-content: center;
+  height: 19px;
+  padding: 0 7px;
+  border-radius: 2px;
   box-sizing: border-box;
-  clip-path: polygon(
-    2px 0%,
-    calc(100% - 5px) 0%,
-    100% 5px,
-    100% calc(100% - 5px),
-    calc(100% - 5px) 100%,
-    2px 100%,
-    0% calc(100% - 2px),
-    0% 2px
-  );
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.25));
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.28);
   line-height: 1;
   pointer-events: none;
   user-select: none;
-  transition: transform 0.2s ease, filter 0.2s ease;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* ON SALE: Crimson Red with white text */
+.product-card .sale-tag,
+.product-card .sale-tag--on-sale,
+.sale-page .product-card .sale-tag {
+  background: var(--crimson, #A31C1B) !important;
+  color: #ffffff !important;
+  border: none;
 }
 
 .product-card:hover .sale-tag,
 .product-card:hover .sale-tag--on-sale,
 .sale-page .product-card:hover .sale-tag {
   transform: translateY(-1px);
-  filter: drop-shadow(0 3px 6px rgba(163, 28, 27, 0.45));
+  box-shadow: 0 3px 8px rgba(163, 28, 27, 0.4);
 }
 
 .product-card .sale-tag .sale-tag-text,
@@ -3980,7 +3982,7 @@
   font-family: inherit;
   font-size: 8.5px;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: #ffffff;
   line-height: 1;
@@ -3989,39 +3991,52 @@
 .product-card .sale-tag .sale-tag-hole,
 .product-card .sale-tag--on-sale .sale-tag-hole,
 .sale-page .product-card .sale-tag .sale-tag-hole {
-  display: inline-block;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background-color: #ffffff;
-  box-shadow: inset 0 1px 1.5px rgba(0, 0, 0, 0.4);
-  flex-shrink: 0;
-  opacity: 0.95;
+  display: none !important;
+}
+
+/* SPECIAL OFFER: Charcoal / Near-Black (#171717) with Warm Cream text */
+.product-card .special-offer-tag {
+  background: #171717 !important;
+  color: #F7F3EE !important;
+  border: 1px solid rgba(247, 243, 238, 0.2);
+}
+
+.product-card:hover .special-offer-tag {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5);
+}
+
+.product-card .special-offer-tag .special-offer-text {
+  font-family: inherit;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #F7F3EE;
+  line-height: 1;
+}
+
+.product-card .special-offer-tag .special-offer-dot {
+  display: none !important;
 }
 
 @media (max-width: 640px) {
   .product-card .sale-tag,
   .product-card .sale-tag--on-sale,
-  .sale-page .product-card .sale-tag {
-    top: 10px;
-    left: 10px;
-    height: 18px;
-    padding: 0 7px 0 8px;
-    gap: 5px;
+  .sale-page .product-card .sale-tag,
+  .product-card .special-offer-tag {
+    top: 8px;
+    left: 8px;
+    height: 17px;
+    padding: 0 6px;
   }
 
   .product-card .sale-tag .sale-tag-text,
   .product-card .sale-tag--on-sale .sale-tag-text,
-  .sale-page .product-card .sale-tag .sale-tag-text {
+  .sale-page .product-card .sale-tag .sale-tag-text,
+  .product-card .special-offer-tag .special-offer-text {
     font-size: 7.5px;
-    letter-spacing: 0.1em;
-  }
-
-  .product-card .sale-tag .sale-tag-hole,
-  .product-card .sale-tag--on-sale .sale-tag-hole,
-  .sale-page .product-card .sale-tag .sale-tag-hole {
-    width: 4px;
-    height: 4px;
+    letter-spacing: 0.08em;
   }
 }
 .product-card .old-price {
@@ -5861,24 +5876,30 @@ html.animations-ready .departments .reveal-item.stagger-3 {
 .product-card-offer-tag {
   display: flex;
   align-items: center;
-  margin-bottom: 6px;
+  margin-bottom: 5px;
   width: 100%;
 }
 
 .product-card-offer-badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: #F7F3EE;
-  background-color: rgba(163, 28, 27, 0.88);
-  border: 1px solid rgba(224, 59, 58, 0.4);
-  border-radius: 999px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
-  line-height: 1.2;
+  gap: 4.5px;
+  padding: 2px 7px;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: #E8E4DD;
+  background: rgba(247, 243, 238, 0.08);
+  border: 1px solid rgba(247, 243, 238, 0.16);
+  border-radius: 4px;
+  line-height: 1.25;
+  box-shadow: none;
+}
+
+.product-card-offer-badge svg {
+  color: var(--crimson, #A31C1B);
+  opacity: 0.9;
+  flex-shrink: 0;
 }
 
 /* 2. Product Detail Page Offer Section */

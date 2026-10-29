@@ -27,9 +27,13 @@ const ProductCard = React.memo(function ProductCard({
   const [showSizeSelector, setShowSizeSelector] = useState(false);
 
   const activeOffer = useMemo(() => {
-    if (product.offers && product.offers.length > 0) return product.offers[0];
+    if (product.offers && product.offers.length > 0) {
+      return product.offers.find((o) => o.is_active) || null;
+    }
     return getProductOffer(product.id);
   }, [product.offers, product.id, getProductOffer]);
+
+  const hasActiveOffer = Boolean(activeOffer && activeOffer.is_active);
 
   const offerBadge = useMemo(() => {
     if (!activeOffer || !activeOffer.is_active) return null;
@@ -236,12 +240,15 @@ const ProductCard = React.memo(function ProductCard({
           tabIndex={0}
           prefetch={true}
         >
-          {hasDiscount && (
+          {hasDiscount ? (
             <span className="sale-tag sale-tag--on-sale" aria-label="On Sale">
               <span className="sale-tag-text">ON SALE</span>
-              <span className="sale-tag-hole" aria-hidden="true" />
             </span>
-          )}
+          ) : hasActiveOffer ? (
+            <span className="special-offer-tag" aria-label="Special Offer">
+              <span className="special-offer-text">SPECIAL OFFER</span>
+            </span>
+          ) : null}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             className="product-image"

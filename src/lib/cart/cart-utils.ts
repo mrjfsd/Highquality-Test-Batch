@@ -282,11 +282,118 @@ export function sanitizeCartItems(raw: unknown): CartItem[] {
  * Offer savings: ₹200
  * Final total: ₹1,000
  *
+/**
+ * Resolves the canonical base URL for the deployed storefront.
+ * Checks environment configuration with fallback to runtime origin or default domain.
+ */
+export function getCanonicalSiteUrl(): string {
+  const envUrl =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.NEXT_PUBLIC_CANONICAL_URL;
+
+  if (envUrl && typeof envUrl === "string" && envUrl.trim().length > 0) {
+    return envUrl.trim().replace(/\/+$/, "");
+  }
+
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return window.location.origin.replace(/\/+$/, "");
+  }
+
+  return "https://style-edit.com";
+}
+
+/**
+ * Constructs an absolute product details URL using canonical site URL and product slug.
+ * Safely handles missing slugs, leading slashes, and redundant route segments.
+ */
+export function formatProductUrl(
+  slug?: string | null,
+  baseUrl: string = getCanonicalSiteUrl()
+): string {
+  if (!slug || typeof slug !== "string") return "";
+  const trimmed = slug.trim();
+  if (!trimmed) return "";
+
+  // If already an absolute URL
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    return trimmed;
+  }
+
+  const cleanBase = baseUrl.trim().replace(/\/+$/, "");
+  // Strip redundant leading /product/ or /
+  const cleanSlug = trimmed.replace(/^\/?(product\/)?/, "").replace(/^\/+/, "");
+  if (!cleanSlug) return "";
+
+  return `${cleanBase}/product/${cleanSlug}`;
+}
+
+/**
+ * Constructs an absolute, publicly accessible product image URL.
+ * Rejects local file paths, temporary blobs, and base64 data URLs.
+ * If relative, prepends canonical base URL.
+ */
+export function formatImageUrl(
+  imageUrl?: string | null,
+  baseUrl: string = getCanonicalSiteUrl()
+): string {
+  if (!imageUrl || typeof imageUrl !== "string") return "";
+  const trimmed = imageUrl.trim();
+  if (!trimmed) return "";
+
+  // Reject local file paths, temporary browser blob URLs, and data URLs
+  if (
+    trimmed.startsWith("blob:") ||
+    trimmed.startsWith("file:") ||
+    trimmed.startsWith("data:")
+  ) {
+    return "";
+  }
+
+  // If already absolute HTTP/HTTPS URL
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    return trimmed;
+  }
+
+  // If relative path (e.g. /api/images/... or /assets/...), prepend baseUrl
+  if (trimmed.startsWith("/")) {
+    const cleanBase = baseUrl.trim().replace(/\/+$/, "");
+    return `${cleanBase}${trimmed}`;
+  }
+
+  return "";
+}
+
+/**
+ * Generates the human-readable WhatsApp order message including line item
+ * breakdowns, product links, image URLs, variant details, applied quantity offers,
+ * and order summary totals.
+ *
+ * Example:
+ * Hello! I'd like to place an order from Style Edit.
+ *
+ * 1. Relaxed Fit Collar Down Shirt
+ *    Product link: https://style-edit.com/product/relaxed-fit-collar-down-shirt
+ *    Product image: https://style-edit.com/shirt.jpg
+ *    Size: L
+ *    Colour: Pink
+ *    Quantity: 1
+ *    Regular price: ₹1,200 each
+ *    Regular subtotal: ₹1,200
+ *    Savings: ₹0
+ *    Final item total: ₹1,200
+ *
+ * --------------------------------
+ * Selected order subtotal: ₹1,200
+ * Offer savings: ₹0
+ * Final order total: ₹1,200
+ *
  * Please confirm availability and the order details. Thank you!
  */
 export function generateWhatsAppOrderMessage(
   items: CartItem[],
-  offersMap: Record<string, ProductQuantityOffer[]> = {}
+  offersMap: Record<string, ProductQuantityOffer[]> = {},
+  baseUrl: string = getCanonicalSiteUrl()
 ): string {
   if (!items || items.length === 0) {
     return "Hello! I'm interested in ordering from Style Edit.";
@@ -299,27 +406,52 @@ export function generateWhatsAppOrderMessage(
 
   items.forEach((item, index) => {
     const itemPricing = calculateItemPricingInCart(item, items, offersMap);
+    const productUrl = formatProductUrl(item.slug, baseUrl);
+    const imageUrl = formatImageUrl(item.image, baseUrl);
 
     lines.push(`${index + 1}. ${item.name}`);
-    if (item.size) {
-      lines.push(`   Size: ${item.size}`);
-    }
-    if (item.color) {
-      lines.push(`   Color: ${item.color}`);
-    }
-    lines.push(`   Quantity: ${item.quantity}`);
-    lines.push(`   Regular price: ${formatCartCurrency(item.price)} each`);
 
+    if (productUrl) {
+      lines.push(`   Product link: ${productUrl}`);
+    }
+
+    if (imageUrl) {
+      lines.push(`   Product image: ${imageUrl}`);
+    }
+
+    if (item.size && item.size.trim() && item.size.trim().toLowerCase() !== "nosize") {
+      lines.push(`   Size: ${item.size.trim()}`);
+    }
+
+    if (item.color && item.color.trim() && item.color.trim().toLowerCase() !== "nocolor") {
+      lines.push(`   Colour: ${item.color.trim()}`);
+    }
+
+    const safeQty = Math.max(1, Math.floor(item.quantity || 1));
+    lines.push(`   Quantity: ${safeQty}`);
+    lines.push(`   Regular price: ${formatCartCurrency(item.price)} each`);
     lines.push(`   Regular subtotal: ${formatCartCurrency(itemPricing.regularSubtotal)}`);
 
     if (itemPricing.hasOfferApplied && itemPricing.appliedOffer) {
-      lines.push(`   Offer: Buy ${itemPricing.appliedOffer.qualifying_quantity} for ${formatCartCurrency(itemPricing.appliedOffer.bundle_price)}`);
+      lines.push(
+        `   Offer: Buy ${itemPricing.appliedOffer.qualifying_quantity} for ${formatCartCurrency(
+          itemPricing.appliedOffer.bundle_price
+        )}`
+      );
       lines.push(`   Savings: ${formatCartCurrency(itemPricing.discountAmount)}`);
     } else {
       lines.push("   Savings: ₹0");
     }
+
     lines.push(`   Final item total: ${formatCartCurrency(itemPricing.finalTotal)}`);
-    lines.push("");
+
+    if (index < items.length - 1) {
+      lines.push("");
+      lines.push("--------------------------------");
+      lines.push("");
+    } else {
+      lines.push("");
+    }
   });
 
   const totals = calculateCartTotalsWithOffers(items, offersMap);
@@ -340,13 +472,17 @@ export function generateWhatsAppOrderMessage(
 export function generateWhatsAppOrderUrl(
   items: CartItem[],
   offersMap: Record<string, ProductQuantityOffer[]> = {},
-  customPhone: string = STORE_WHATSAPP_NUMBER
+  customPhone: string = STORE_WHATSAPP_NUMBER,
+  baseUrl: string = getCanonicalSiteUrl()
 ): string {
   if (!items || items.length === 0) {
     return "";
   }
   const cleanPhone = customPhone.replace(/\D/g, "");
-  const message = generateWhatsAppOrderMessage(items, offersMap);
+  if (!cleanPhone) {
+    return "";
+  }
+  const message = generateWhatsAppOrderMessage(items, offersMap, baseUrl);
   const encodedMessage = encodeURIComponent(message);
   return `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
 }
@@ -356,6 +492,8 @@ export interface BuyNowInput {
     id: string | number;
     name: string;
     price: number;
+    slug?: string;
+    image?: string;
   };
   variantId?: string | null;
   size?: string | null;
@@ -367,26 +505,13 @@ export interface BuyNowInput {
 /**
  * Generates the WhatsApp order message for a direct "Buy Now" action
  * on a single product without modifying or including cart items.
- *
- * Example:
- * Hello! I'd like to order from Style Edit.
- *
- * Product: Blue Jeans
- * Size: L
- * Color: Black
- * Quantity: 3
- *
- * Regular price: ₹1,200 each
- * Regular subtotal: ₹3,600
- * Offer: Buy 3 for ₹3,200
- * Savings: ₹400
- * Final total: ₹3,200
- *
- * Please confirm availability and the order details. Thank you!
  */
-export function generateBuyNowWhatsAppMessage(input: BuyNowInput): string {
+export function generateBuyNowWhatsAppMessage(
+  input: BuyNowInput,
+  baseUrl: string = getCanonicalSiteUrl()
+): string {
   const { product, size, color, quantity, activeOffer } = input;
-  const safeQty = Math.max(1, Math.floor(quantity));
+  const safeQty = Math.max(1, Math.floor(quantity || 1));
   const safeUnitPrice =
     Number.isFinite(product.price) && product.price > 0
       ? Math.max(0, product.price)
@@ -394,6 +519,8 @@ export function generateBuyNowWhatsAppMessage(input: BuyNowInput): string {
 
   // Use the shared quantity-offer pricing engine
   const pricing = calculateItemPriceWithOffers(safeQty, safeUnitPrice, activeOffer);
+  const productUrl = formatProductUrl(product.slug, baseUrl);
+  const imageUrl = formatImageUrl(product.image, baseUrl);
 
   const lines: string[] = [
     "Hello! I'd like to order from Style Edit.",
@@ -401,11 +528,18 @@ export function generateBuyNowWhatsAppMessage(input: BuyNowInput): string {
     `Product: ${product.name}`,
   ];
 
-  if (size) {
-    lines.push(`Size: ${size}`);
+  if (productUrl) {
+    lines.push(`Product link: ${productUrl}`);
   }
-  if (color) {
-    lines.push(`Color: ${color}`);
+  if (imageUrl) {
+    lines.push(`Product image: ${imageUrl}`);
+  }
+
+  if (size && size.trim() && size.trim().toLowerCase() !== "nosize") {
+    lines.push(`Size: ${size.trim()}`);
+  }
+  if (color && color.trim() && color.trim().toLowerCase() !== "nocolor") {
+    lines.push(`Colour: ${color.trim()}`);
   }
   lines.push(`Quantity: ${safeQty}`);
   lines.push("");
@@ -435,13 +569,14 @@ export function generateBuyNowWhatsAppMessage(input: BuyNowInput): string {
  */
 export function generateBuyNowWhatsAppUrl(
   input: BuyNowInput,
-  customPhone: string = STORE_WHATSAPP_NUMBER
+  customPhone: string = STORE_WHATSAPP_NUMBER,
+  baseUrl: string = getCanonicalSiteUrl()
 ): string {
   const cleanPhone = customPhone.replace(/\D/g, "");
   if (!cleanPhone) {
     return "";
   }
-  const message = generateBuyNowWhatsAppMessage(input);
+  const message = generateBuyNowWhatsAppMessage(input, baseUrl);
   const encodedMessage = encodeURIComponent(message);
   return `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
 }

@@ -313,11 +313,15 @@ export default function ProductSelectors({ product }: ProductSelectorsProps) {
     setValidationError(null);
     setIsProcessingBuyNow(true);
 
+    const resolvedColorImage = resolveProductColorImage(product, selectedColor);
+
     try {
       const url = generateBuyNowWhatsAppUrl({
         product: {
           id: product.id,
           name: product.name,
+          slug: product.slug,
+          image: resolvedColorImage || product.image,
           price: product.price,
         },
         variantId: effectiveVariantId,
