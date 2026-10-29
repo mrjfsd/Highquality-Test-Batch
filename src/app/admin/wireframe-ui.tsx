@@ -7,8 +7,9 @@ import { compressImageForUpload, uploadToR2WithProgress } from "@/lib/images/cli
 import { getProductDescriptionTemplate, isKnownDescriptionTemplate } from "@/lib/products/description-templates";
 import { BannerManagementScreen } from "./banner-management";
 import { QuantityOffersScreen } from "./quantity-offers-management";
+import { BulkUploadScreen } from "./bulk-upload";
 
-export type Page = "overview" | "intake" | "catalogue" | "editor" | "offers" | "media" | "banner";
+export type Page = "overview" | "intake" | "bulk" | "catalogue" | "editor" | "offers" | "media" | "banner";
 export type ProductStatus = "Published" | "Draft" | "Review" | "Archived";
 
 export interface LiveProductImage {
@@ -214,6 +215,7 @@ export function formatUpdatedDate(dateStr: string): string {
 export const nav: { id: Page; label: string; icon: string }[] = [
   { id: "overview", label: "Dashboard", icon: "grid" },
   { id: "intake", label: "Add Clothes", icon: "upload" },
+  { id: "bulk", label: "Bulk Upload", icon: "layers" },
   { id: "catalogue", label: "All Clothes", icon: "list" },
   { id: "editor", label: "Edit Garment", icon: "edit" },
   { id: "offers", label: "Quantity Offers", icon: "tag" },
@@ -234,6 +236,13 @@ export function Icon({ name, size = 18 }: { name: string; size?: number }) {
       <>
         <path d="M12 16V4m0 0L7 9m5-5 5 5" />
         <path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4" />
+      </>
+    ),
+    layers: (
+      <>
+        <polygon points="12 2 2 7 12 12 22 7 12 2" />
+        <polyline points="2 17 12 22 22 17" />
+        <polyline points="2 12 12 17 22 12" />
       </>
     ),
     list: (
@@ -865,7 +874,7 @@ export const PREDEFINED_COLOURS = [
   "Other",
 ] as const;
 
-const DEPARTMENT_CATEGORIES: Record<string, string[]> = {
+export const DEPARTMENT_CATEGORIES: Record<string, string[]> = {
   Women: [
     "T-Shirts",
     "Track Pants",
@@ -4245,6 +4254,7 @@ export default function App({
     const routeMap: Record<Page, string> = {
       overview: "/admin",
       intake: "/admin/intake",
+      bulk: "/admin/bulk",
       catalogue: "/admin/products",
       editor: pId
         ? `/admin/products/${pId}`
@@ -4285,6 +4295,14 @@ export default function App({
             refreshProducts();
             refreshIntakeSession();
           }}
+        />
+      );
+    if (page === "bulk")
+      return (
+        <BulkUploadScreen
+          showToast={showToast}
+          navigate={setPage}
+          onProductsCreated={refreshProducts}
         />
       );
     if (page === "catalogue")
