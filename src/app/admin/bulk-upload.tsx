@@ -812,18 +812,16 @@ export function BulkUploadScreen({
 
           {/* Batch Progress Bar during processing */}
           {isProcessing && (
-            <div style={{ marginBottom: "20px", padding: "16px", background: "var(--admin-cream-soft)", borderRadius: "8px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", fontWeight: 600, marginBottom: "8px" }}>
-                <span>Processing batch: {overallPercent}%</span>
-                <span>{successItems.length + failedItems.length} of {totalItems} items completed</span>
+            <div className="bulk-progress-box">
+              <div className="bulk-progress-header">
+                <span className="bulk-progress-title">Processing batch: {overallPercent}%</span>
+                <span className="bulk-progress-count">{successItems.length + failedItems.length} of {totalItems} items completed</span>
               </div>
-              <div style={{ height: "8px", background: "var(--admin-border)", borderRadius: "4px", overflow: "hidden" }}>
+              <div className="bulk-progress-track">
                 <div
+                  className="bulk-progress-bar"
                   style={{
-                    height: "100%",
                     width: `${overallPercent}%`,
-                    background: "var(--admin-burgundy)",
-                    transition: "width 0.3s ease",
                   }}
                 />
               </div>
@@ -832,16 +830,7 @@ export function BulkUploadScreen({
 
           {/* Results Summary Banner */}
           {isCompleted && (
-            <div
-              style={{
-                padding: "16px",
-                borderRadius: "8px",
-                marginBottom: "20px",
-                background: failedItems.length === 0 ? "#ecfdf5" : "#fffbeb",
-                border: `1px solid ${failedItems.length === 0 ? "#a7f3d0" : "#fde68a"}`,
-                color: failedItems.length === 0 ? "#065f46" : "#92400e",
-              }}
-            >
+            <div className={`bulk-results-banner ${failedItems.length === 0 ? "success" : "warning"}`}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
                   <strong style={{ fontSize: "14px", display: "block" }}>
@@ -932,47 +921,21 @@ export function BulkUploadScreen({
                       {/* Status Indicator */}
                       <div className="bulk-photo-status">
                         {isItemPending && (
-                          <span
-                            style={{
-                              fontSize: "10px",
-                              fontWeight: 600,
-                              padding: "3px 8px",
-                              borderRadius: "4px",
-                              background: "var(--admin-cream-soft)",
-                              color: "var(--admin-muted)",
-                              display: "inline-block",
-                            }}
-                          >
+                          <span className="bulk-badge-pending">
                             Pending
                           </span>
                         )}
 
                         {isItemProcessing && (
-                          <div>
-                            <div
-                              style={{
-                                fontSize: "10px",
-                                fontWeight: 600,
-                                color: "var(--admin-burgundy)",
-                                marginBottom: "4px",
-                              }}
-                            >
+                          <div className="bulk-photo-progress-wrap">
+                            <div className="bulk-photo-stage">
                               {item.stageLabel}
                             </div>
-                            <div
-                              style={{
-                                height: "4px",
-                                background: "var(--admin-border)",
-                                borderRadius: "2px",
-                                overflow: "hidden",
-                              }}
-                            >
+                            <div className="bulk-photo-track">
                               <div
+                                className="bulk-photo-bar"
                                 style={{
-                                  height: "100%",
                                   width: `${item.progressPercent}%`,
-                                  background: "var(--admin-burgundy)",
-                                  transition: "width 0.2s ease",
                                 }}
                               />
                             </div>
@@ -981,20 +944,7 @@ export function BulkUploadScreen({
 
                         {isItemSuccess && item.savedProduct && (
                           <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                            <span
-                              style={{
-                                fontSize: "10px",
-                                fontWeight: 700,
-                                padding: "2px 6px",
-                                borderRadius: "4px",
-                                background: "#d1fae5",
-                                color: "#065f46",
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "4px",
-                                width: "fit-content",
-                              }}
-                            >
+                            <span className="bulk-badge-success">
                               <Icon name="check" size={12} /> Published
                             </span>
                             <div style={{ display: "flex", gap: "8px", fontSize: "10px", marginTop: "2px" }}>
@@ -1002,6 +952,7 @@ export function BulkUploadScreen({
                                 href={`/product/${item.savedProduct.slug}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
+                                className="bulk-photo-link"
                                 style={{ color: "var(--admin-burgundy)", textDecoration: "underline", fontWeight: 600 }}
                               >
                                 View Page ↗
@@ -1010,6 +961,7 @@ export function BulkUploadScreen({
                                 <button
                                   type="button"
                                   onClick={() => navigate("editor", item.savedProduct?.id)}
+                                  className="bulk-photo-edit-btn"
                                   style={{
                                     background: "none",
                                     border: "none",
@@ -1029,18 +981,7 @@ export function BulkUploadScreen({
 
                         {isItemError && (
                           <div>
-                            <span
-                              style={{
-                                fontSize: "10px",
-                                fontWeight: 700,
-                                padding: "2px 6px",
-                                borderRadius: "4px",
-                                background: "#fee2e2",
-                                color: "#991b1b",
-                                display: "inline-block",
-                                marginBottom: "4px",
-                              }}
-                            >
+                            <span className="bulk-badge-error">
                               Failed
                             </span>
                             {item.error && (
