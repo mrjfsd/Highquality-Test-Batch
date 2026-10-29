@@ -71,6 +71,32 @@ export function BulkUploadScreen({
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // ── Theme State (Scoped to Bulk Upload) ──
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+
+  useEffect(() => {
+    try {
+      const savedTheme = localStorage.getItem("style_edit_bulk_theme");
+      if (savedTheme === "dark" || savedTheme === "light") {
+        setTheme(savedTheme);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    setTheme((prev) => {
+      const next = prev === "dark" ? "light" : "dark";
+      try {
+        localStorage.setItem("style_edit_bulk_theme", next);
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
+
   // Sync category options when department changes
   const handleDepartmentChange = (newDept: "Men" | "Women" | "Kids") => {
     setDepartment(newDept);
@@ -420,9 +446,9 @@ export function BulkUploadScreen({
   const categories = DEPARTMENT_CATEGORIES[department] || [];
 
   return (
-    <div className="page bulk-upload-page">
+    <div className={`page bulk-upload-page ${theme === "dark" ? "theme-dark" : ""}`}>
       <PageHeader
-        title="Bulk Upload Old Stock"
+        title="Bulk Upload"
         actions={
           <div className="bulk-header-actions">
             {isCompleted && (
@@ -439,16 +465,47 @@ export function BulkUploadScreen({
                 Retry Failed ({failedItems.length})
               </Button>
             )}
-            <Button
-              variant="primary"
-              onClick={() => processBatch(false)}
-              disabled={isProcessing || items.length === 0 || pendingItems.length === 0}
-              icon="upload"
+            <button
+              type="button"
+              className="bulk-theme-toggle"
+              onClick={toggleTheme}
+              aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+              title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
             >
-              {isProcessing
-                ? "Creating Products..."
-                : `Create ${items.length > 0 ? items.length : ""} Products`}
-            </Button>
+              {theme === "dark" ? (
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <circle cx="12" cy="12" r="4" />
+                  <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+                </svg>
+              ) : (
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+                </svg>
+              )}
+              <span className="sr-only">
+                {theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+              </span>
+            </button>
           </div>
         }
       />
@@ -626,15 +683,18 @@ export function BulkUploadScreen({
                     type="text"
                     placeholder="Enter custom size (e.g. 32, 34, UK 8)"
                     value={customSizeValue}
+                    onClick={(e) => e.stopPropagation()}
                     onChange={(e) => {
                       const val = e.target.value;
                       setCustomSizeValue(val);
                       setSize(val);
-                      setValidationErrors((prev) => {
-                        const next = { ...prev };
-                        delete next.size;
-                        return next;
-                      });
+                      if (val.trim()) {
+                        setValidationErrors((prev) => {
+                          const next = { ...prev };
+                          delete next.size;
+                          return next;
+                        });
+                      }
                     }}
                     disabled={isProcessing}
                     style={{ marginTop: "8px" }}
@@ -721,7 +781,6 @@ export function BulkUploadScreen({
             </div>
             <div className="bulk-upload-zone-text">
               <strong>Drag and drop garment photos here, or click to browse</strong>
-              <p>Supports batches of 20+ images (JPEG, PNG, WebP, AVIF up to 10MB each).</p>
             </div>
             <Button
               type="button"
@@ -852,10 +911,10 @@ export function BulkUploadScreen({
                           type="button"
                           onClick={() => removeItem(item.id)}
                           className="bulk-photo-remove-btn"
-                          title="Remove photo"
-                          aria-label={`Remove photo ${item.file.name}`}
+                          title="Remove image"
+                          aria-label="Remove image"
                         >
-                          <Icon name="close" size={12} />
+                          <Icon name="close" size={13} />
                         </button>
                       )}
                     </div>

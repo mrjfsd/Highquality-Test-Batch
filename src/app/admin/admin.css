@@ -5139,15 +5139,19 @@ button.button:disabled * {
   grid-column: span 4;
 }
 
-/* Unified Control Dimensions & Styling */
+/* Unified Control Dimensions & Dropdown Trigger Tiles */
+.app-shell button.bulk-dropdown-trigger,
+button.bulk-dropdown-trigger,
+.bulk-dropdown-trigger,
+.bulk-shared-grid button.bulk-dropdown-trigger,
 .bulk-form-control {
   width: 100%;
   height: 42px;
   min-height: 42px;
   box-sizing: border-box;
   padding: 0 14px;
-  background: var(--admin-white);
-  border: 1px solid var(--admin-stone-dark);
+  background-color: var(--admin-white) !important;
+  border: 1px solid var(--admin-stone-dark) !important;
   border-radius: 8px;
   font-size: 13px;
   font-weight: 500;
@@ -5155,24 +5159,41 @@ button.button:disabled * {
   outline: none;
   display: flex;
   align-items: center;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  justify-content: space-between;
+  cursor: pointer;
+  text-align: left;
+  user-select: none;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
 }
 
+.app-shell button.bulk-dropdown-trigger:hover:not(:disabled),
+button.bulk-dropdown-trigger:hover:not(:disabled),
+.bulk-dropdown-trigger:hover:not(:disabled),
 .bulk-form-control:hover:not(:disabled) {
-  border-color: var(--admin-charcoal);
+  border-color: var(--admin-charcoal) !important;
+  background-color: var(--admin-white) !important;
 }
 
-.bulk-form-control:focus,
+.app-shell button.bulk-dropdown-trigger:focus,
+.app-shell button.bulk-dropdown-trigger:focus-visible,
+button.bulk-dropdown-trigger:focus,
+button.bulk-dropdown-trigger:focus-visible,
+.bulk-dropdown-trigger.open,
 .bulk-form-control.open {
-  border-color: var(--admin-burgundy);
-  box-shadow: 0 0 0 3px rgba(112, 43, 56, 0.12);
+  border-color: var(--admin-burgundy) !important;
+  box-shadow: 0 0 0 3px rgba(112, 43, 56, 0.12) !important;
+  background-color: var(--admin-white) !important;
 }
 
+.app-shell button.bulk-dropdown-trigger:disabled,
+button.bulk-dropdown-trigger:disabled,
 .bulk-form-control:disabled {
-  background: var(--admin-cream-tint);
-  color: var(--admin-muted);
-  cursor: not-allowed;
-  opacity: 0.65;
+  background-color: var(--admin-cream-tint) !important;
+  border-color: var(--admin-stone) !important;
+  color: var(--admin-muted) !important;
+  cursor: not-allowed !important;
+  opacity: 0.65 !important;
 }
 
 .bulk-shared-grid input[type="text"],
@@ -5447,23 +5468,42 @@ button.button:disabled * {
 
 .bulk-photo-remove-btn {
   position: absolute;
-  top: 6px;
-  right: 6px;
-  background: rgba(31, 29, 26, 0.75);
-  color: #fff;
-  border: none;
-  width: 24px;
-  height: 24px;
+  top: 8px;
+  right: 8px;
+  background-color: #dc2626 !important;
+  color: #ffffff !important;
+  border: none !important;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   cursor: pointer;
   display: grid;
   place-items: center;
-  transition: background 0.15s ease;
-  backdrop-filter: blur(2px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  transition: background-color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+  z-index: 5;
+  padding: 0;
+}
+
+.bulk-photo-remove-btn svg {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
 }
 
 .bulk-photo-remove-btn:hover {
-  background: var(--admin-burgundy);
+  background-color: #b91c1c !important;
+  transform: scale(1.08);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5);
+}
+
+.bulk-photo-remove-btn:active {
+  background-color: #991b1b !important;
+  transform: scale(0.95);
+}
+
+.bulk-photo-remove-btn:focus-visible {
+  outline: 2px solid #ffffff !important;
+  outline-offset: 2px;
 }
 
 .bulk-photo-meta {
@@ -5653,4 +5693,294 @@ button.button:disabled * {
     width: 100%;
     justify-content: center;
   }
+}
+
+.bulk-upload-page .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+.bulk-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  border-radius: 8px;
+  border: 1px solid var(--admin-stone-dark);
+  background-color: var(--admin-white);
+  color: var(--admin-charcoal);
+  cursor: pointer;
+  padding: 0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.bulk-theme-toggle:hover {
+  background-color: var(--admin-cream-soft);
+  border-color: var(--admin-charcoal);
+  color: var(--admin-charcoal);
+}
+
+.bulk-theme-toggle:focus-visible {
+  outline: 2px solid var(--admin-burgundy);
+  outline-offset: 2px;
+}
+
+/* ============================================================
+   BULK UPLOAD DARK THEME SCOPED STYLES
+   ============================================================ */
+
+.main-region:has(.bulk-upload-page.theme-dark) {
+  background-color: #0c0c0e !important;
+}
+
+.bulk-upload-page.theme-dark {
+  background-color: #0c0c0e !important;
+  color: #f4f4f5 !important;
+}
+
+.bulk-upload-page.theme-dark .page-header h1 {
+  color: #f4f4f5 !important;
+}
+
+.bulk-upload-page.theme-dark .page-header p {
+  color: #9ca3af !important;
+}
+
+/* Panels */
+.bulk-upload-page.theme-dark .bulk-panel {
+  background: #161619 !important;
+  border: 1px solid #27272b !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4) !important;
+}
+
+.bulk-upload-page.theme-dark .bulk-upload-header {
+  border-bottom: 1px solid #27272b !important;
+}
+
+.bulk-upload-page.theme-dark .bulk-upload-header h2,
+.bulk-upload-page.theme-dark .section-title {
+  color: #f4f4f5 !important;
+}
+
+.bulk-upload-page.theme-dark .bulk-count-badge {
+  background: #222227 !important;
+  border-color: #383840 !important;
+  color: #f4f4f5 !important;
+}
+
+/* Field labels */
+.bulk-upload-page.theme-dark .field-label,
+.bulk-upload-page.theme-dark .bulk-shared-grid .field-label {
+  color: #f4f4f5 !important;
+}
+
+.bulk-upload-page.theme-dark .field-required,
+.bulk-upload-page.theme-dark .bulk-shared-grid .field-required {
+  color: #f87171 !important;
+}
+
+.bulk-upload-page.theme-dark .field-hint {
+  color: #9ca3af !important;
+}
+
+/* Inputs & Dropdowns Trigger Tiles */
+.bulk-upload-page.theme-dark .app-shell button.bulk-dropdown-trigger,
+.bulk-upload-page.theme-dark button.bulk-dropdown-trigger,
+.bulk-upload-page.theme-dark .bulk-dropdown-trigger,
+.bulk-upload-page.theme-dark .bulk-shared-grid button.bulk-dropdown-trigger,
+.bulk-upload-page.theme-dark .bulk-form-control,
+.bulk-upload-page.theme-dark .bulk-shared-grid input[type="text"],
+.bulk-upload-page.theme-dark .bulk-shared-grid input[type="number"] {
+  background-color: #1c1c20 !important;
+  border: 1px solid #333338 !important;
+  color: #f4f4f5 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25) !important;
+}
+
+.bulk-upload-page.theme-dark .app-shell button.bulk-dropdown-trigger:hover:not(:disabled),
+.bulk-upload-page.theme-dark button.bulk-dropdown-trigger:hover:not(:disabled),
+.bulk-upload-page.theme-dark .bulk-dropdown-trigger:hover:not(:disabled),
+.bulk-upload-page.theme-dark .bulk-form-control:hover:not(:disabled),
+.bulk-upload-page.theme-dark .bulk-shared-grid input[type="text"]:hover:not(:disabled),
+.bulk-upload-page.theme-dark .bulk-shared-grid input[type="number"]:hover:not(:disabled) {
+  border-color: #52525b !important;
+  background-color: #24242a !important;
+}
+
+.bulk-upload-page.theme-dark .app-shell button.bulk-dropdown-trigger:focus,
+.bulk-upload-page.theme-dark .app-shell button.bulk-dropdown-trigger:focus-visible,
+.bulk-upload-page.theme-dark button.bulk-dropdown-trigger:focus,
+.bulk-upload-page.theme-dark button.bulk-dropdown-trigger:focus-visible,
+.bulk-upload-page.theme-dark .bulk-dropdown-trigger.open,
+.bulk-upload-page.theme-dark .bulk-form-control.open,
+.bulk-upload-page.theme-dark .bulk-shared-grid input[type="text"]:focus,
+.bulk-upload-page.theme-dark .bulk-shared-grid input[type="number"]:focus {
+  border-color: #f87171 !important;
+  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.16) !important;
+  background-color: #1c1c20 !important;
+}
+
+.bulk-upload-page.theme-dark .app-shell button.bulk-dropdown-trigger:disabled,
+.bulk-upload-page.theme-dark button.bulk-dropdown-trigger:disabled,
+.bulk-upload-page.theme-dark .bulk-form-control:disabled,
+.bulk-upload-page.theme-dark .bulk-shared-grid input:disabled {
+  background-color: #141416 !important;
+  border-color: #27272b !important;
+  color: #6b7280 !important;
+  opacity: 0.6 !important;
+}
+
+.bulk-upload-page.theme-dark .bulk-trigger-chevron {
+  color: #9ca3af !important;
+}
+
+.bulk-upload-page.theme-dark .bulk-dropdown-trigger.open .bulk-trigger-chevron {
+  color: #f87171 !important;
+}
+
+.bulk-upload-page.theme-dark .bulk-dropdown-trigger:hover .bulk-trigger-chevron {
+  color: #ffffff !important;
+}
+
+.bulk-upload-page.theme-dark .bulk-shared-grid input::placeholder {
+  color: #6b7280 !important;
+}
+
+/* Dropdown Content Popup */
+.bulk-upload-page.theme-dark .bulk-dropdown-content {
+  background: #161619 !important;
+  border: 1px solid #333338 !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.75), 0 2px 8px rgba(0, 0, 0, 0.5) !important;
+}
+
+.bulk-upload-page.theme-dark .bulk-dropdown-radio-item {
+  color: #e4e4e7 !important;
+}
+
+.bulk-upload-page.theme-dark .bulk-dropdown-radio-item:hover {
+  background: #27272b !important;
+  color: #ffffff !important;
+}
+
+.bulk-upload-page.theme-dark .bulk-dropdown-radio-item.selected {
+  background: #2a2a30 !important;
+  color: #f87171 !important;
+  font-weight: 650 !important;
+}
+
+.bulk-upload-page.theme-dark .bulk-radio-item-check {
+  color: #f87171 !important;
+}
+
+/* Upload Dropzone */
+.bulk-upload-page.theme-dark .bulk-upload-zone {
+  background: #121215 !important;
+  border-color: #333338 !important;
+}
+
+.bulk-upload-page.theme-dark .bulk-upload-zone:hover,
+.bulk-upload-page.theme-dark .bulk-upload-zone.dragging {
+  background: #1a1a1f !important;
+  border-color: #f87171 !important;
+}
+
+.bulk-upload-page.theme-dark .bulk-upload-zone .upload-icon {
+  background: #1c1c20 !important;
+  border-color: #333338 !important;
+  color: #f87171 !important;
+}
+
+.bulk-upload-page.theme-dark .bulk-upload-zone-text strong {
+  color: #f4f4f5 !important;
+}
+
+.bulk-upload-page.theme-dark .bulk-upload-zone-text p {
+  color: #9ca3af !important;
+}
+
+/* Photo Preview Cards */
+.bulk-upload-page.theme-dark .bulk-photo-card {
+  background: #161619 !important;
+  border-color: #27272b !important;
+}
+
+.bulk-upload-page.theme-dark .bulk-photo-card:hover {
+  border-color: #52525b !important;
+}
+
+.bulk-upload-page.theme-dark .bulk-photo-thumb-wrap {
+  background: #0c0c0e !important;
+}
+
+.bulk-upload-page.theme-dark .bulk-photo-name {
+  color: #f4f4f5 !important;
+}
+
+.bulk-upload-page.theme-dark .bulk-photo-size {
+  color: #9ca3af !important;
+}
+
+.bulk-upload-page.theme-dark .bulk-clear-btn {
+  color: #f87171 !important;
+}
+
+.bulk-upload-page.theme-dark .bulk-clear-btn:hover {
+  background: #26262c !important;
+}
+
+/* Sticky Bottom Bar */
+.bulk-upload-page.theme-dark .bulk-bottom-bar {
+  background: #161619 !important;
+  border-color: #27272b !important;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.7) !important;
+}
+
+.bulk-upload-page.theme-dark .bulk-summary-count {
+  color: #f4f4f5 !important;
+}
+
+.bulk-upload-page.theme-dark .bulk-summary-details {
+  color: #9ca3af !important;
+}
+
+/* Theme Toggle Button in Dark Mode */
+.bulk-upload-page.theme-dark .bulk-theme-toggle {
+  background-color: #1c1c20 !important;
+  border-color: #333338 !important;
+  color: #facc15 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+}
+
+.bulk-upload-page.theme-dark .bulk-theme-toggle:hover {
+  background-color: #26262c !important;
+  border-color: #52525b !important;
+  color: #fde047 !important;
+}
+
+.bulk-upload-page.theme-dark .bulk-theme-toggle:focus-visible {
+  outline: 2px solid #facc15 !important;
+  outline-offset: 2px;
+}
+
+/* Secondary Buttons in Dark Mode */
+.bulk-upload-page.theme-dark .button:not(.primary) {
+  background: #1c1c20 !important;
+  border-color: #333338 !important;
+  color: #f4f4f5 !important;
+}
+
+.bulk-upload-page.theme-dark .button:not(.primary):hover:not(:disabled) {
+  background: #26262c !important;
+  border-color: #52525b !important;
 }

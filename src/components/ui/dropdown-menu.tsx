@@ -35,11 +35,16 @@ export function DropdownMenu({ children, open: controlledOpen, onOpenChange }: D
   const open = isControlled ? controlledOpen : uncontrolledOpen;
 
   const setOpen = (updater: boolean | ((prev: boolean) => boolean)) => {
-    const nextVal = typeof updater === "function" ? updater(open) : updater;
-    if (!isControlled) {
-      setUncontrolledOpen(nextVal);
+    if (isControlled) {
+      const nextVal = typeof updater === "function" ? updater(controlledOpen) : updater;
+      onOpenChange?.(nextVal);
+    } else {
+      setUncontrolledOpen((prev) => {
+        const nextVal = typeof updater === "function" ? updater(prev) : updater;
+        onOpenChange?.(nextVal);
+        return nextVal;
+      });
     }
-    onOpenChange?.(nextVal);
   };
 
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -107,6 +112,7 @@ export function DropdownMenuTrigger({
   if (!ctx) throw new Error("DropdownMenuTrigger must be used within DropdownMenu");
 
   const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
     onClick?.(e);
     if (!e.defaultPrevented && !disabled) {
       ctx.setOpen((prev) => !prev);
@@ -167,6 +173,8 @@ export function DropdownMenuContent({
   children,
   className = "",
   align = "start",
+  onClick,
+  onPointerDown,
   ...props
 }: DropdownMenuContentProps) {
   const ctx = useContext(DropdownContext);
@@ -180,6 +188,14 @@ export function DropdownMenuContent({
       className={`bulk-dropdown-content align-${align} ${className}`.trim()}
       role="listbox"
       tabIndex={-1}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick?.(e);
+      }}
+      onPointerDown={(e) => {
+        e.stopPropagation();
+        onPointerDown?.(e);
+      }}
       {...props}
     >
       {children}
@@ -249,10 +265,12 @@ export function DropdownMenuRadioItem({
   const isSelected = group?.value === value;
 
   const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    e.preventDefault();
     onClick?.(e);
-    if (!e.defaultPrevented && !disabled) {
-      group?.onValueChange?.(value);
+    if (!disabled) {
       dropdown?.setOpen(false);
+      group?.onValueChange?.(value);
       dropdown?.triggerRef.current?.focus();
     }
   };
@@ -260,8 +278,9 @@ export function DropdownMenuRadioItem({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if ((e.key === "Enter" || e.key === " ") && !disabled) {
       e.preventDefault();
-      group?.onValueChange?.(value);
+      e.stopPropagation();
       dropdown?.setOpen(false);
+      group?.onValueChange?.(value);
       dropdown?.triggerRef.current?.focus();
     }
   };
