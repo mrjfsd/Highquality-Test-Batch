@@ -13,6 +13,7 @@ export interface CartItem {
   name: string;
   slug: string;
   image: string;
+  imageId?: string | null;
   price: number; // Regular unit price in INR
   variantId?: string | null;
   size?: string | null;
@@ -27,7 +28,9 @@ export interface AddToCartInput {
     slug: string;
     price: number;
     image: string;
+    imageId?: string | null;
     images?: Array<{
+      id?: string;
       url?: string;
       proxyUrl?: string;
       color?: string | null;

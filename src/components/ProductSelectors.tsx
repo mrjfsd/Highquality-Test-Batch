@@ -8,7 +8,7 @@ import type { Product } from "@/data/products";
 import { formatPrice } from "@/data/products";
 import Icon from "@/components/Icon";
 import { useProductColor } from "@/components/ProductColorContext";
-import { areColorsMatching, resolveProductColorImage } from "@/lib/products/colors";
+import { areColorsMatching, resolveProductColorImage, resolveProductColorImageObject } from "@/lib/products/colors";
 import { useCart } from "@/context/CartContext";
 import { calculateItemPriceWithOffers } from "@/lib/pricing/quantity-offers";
 import { WhatsAppIcon } from "@/components/Icons";
@@ -313,7 +313,11 @@ export default function ProductSelectors({ product }: ProductSelectorsProps) {
     setValidationError(null);
     setIsProcessingBuyNow(true);
 
-    const resolvedColorImage = resolveProductColorImage(product, selectedColor);
+    const resolvedImageObj = resolveProductColorImageObject(product, selectedColor);
+    const resolvedColorImage =
+      resolvedImageObj?.url || resolvedImageObj?.proxyUrl || product.image;
+    const resolvedImageId =
+      resolvedImageObj?.id || (product as { imageId?: string }).imageId || null;
 
     try {
       const url = generateBuyNowWhatsAppUrl({
@@ -322,6 +326,7 @@ export default function ProductSelectors({ product }: ProductSelectorsProps) {
           name: product.name,
           slug: product.slug,
           image: resolvedColorImage || product.image,
+          imageId: resolvedImageId,
           price: product.price,
         },
         variantId: effectiveVariantId,

@@ -109,6 +109,7 @@ export function resolveSwatchBackground(rawColor: string): string {
 }
 
 export interface ColorResolvableImage {
+  id?: string;
   url?: string;
   proxyUrl?: string;
   color?: string | null;
@@ -124,6 +125,45 @@ export interface ColorResolvableProduct {
   image?: string;
   images?: ColorResolvableImage[];
   colors?: string[];
+}
+
+/**
+ * Returns the resolved ColorResolvableImage object matching the color, or primary/first image.
+ */
+export function resolveProductColorImageObject(
+  product: ColorResolvableProduct,
+  targetColor?: string | null
+): ColorResolvableImage | null {
+  if (!product) return null;
+  const images = Array.isArray(product.images) && product.images.length > 0 ? product.images : [];
+  if (images.length === 0) return null;
+
+  const trimmedTarget = targetColor?.trim();
+  if (trimmedTarget) {
+    const directMatch = images.find((img) => areColorsMatching(img.color, trimmedTarget));
+    if (directMatch) return directMatch;
+
+    const lowerTarget = trimmedTarget.toLowerCase();
+    if (lowerTarget.length > 1) {
+      const textMatch = images.find((img) => {
+        const alt = (img.alt || img.altText || "").toLowerCase();
+        const u = (img.url || img.proxyUrl || "").toLowerCase();
+        return alt.includes(lowerTarget) || u.includes(lowerTarget);
+      });
+      if (textMatch) return textMatch;
+    }
+
+    const availableColors = Array.isArray(product.colors) ? product.colors.filter(Boolean) : [];
+    if (availableColors.length > 1 && images.length === availableColors.length) {
+      const colorPos = availableColors.findIndex((c) => areColorsMatching(c, trimmedTarget));
+      if (colorPos >= 0 && colorPos < images.length) {
+        return images[colorPos];
+      }
+    }
+  }
+
+  const primaryImg = images.find((img) => Boolean(img.is_primary || img.isPrimary));
+  return primaryImg || images[0] || null;
 }
 
 /**

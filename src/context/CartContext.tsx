@@ -27,7 +27,7 @@ import {
   generateWhatsAppOrderUrl,
 } from "@/lib/cart/cart-utils";
 import { createRegularPricing } from "@/lib/pricing/quantity-offers";
-import { resolveProductColorImage } from "@/lib/products/colors";
+import { resolveProductColorImage, resolveProductColorImageObject } from "@/lib/products/colors";
 
 const CartContext = createContext<CartContextValue | null>(null);
 
@@ -252,18 +252,21 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             return item;
           });
         } else {
-          // Add as new item (resolving color image if available)
+          // Add as new item (resolving color image and imageId if available)
+          const resolvedImageObj = resolveProductColorImageObject(
+            {
+              image: product.image,
+              images: product.images,
+              colors: product.colors,
+            },
+            color
+          );
           const resolvedColorImage =
-            color && product.images && product.images.length > 0
-              ? resolveProductColorImage(
-                  {
-                    image: product.image,
-                    images: product.images,
-                    colors: product.colors,
-                  },
-                  color
-                )
-              : product.image;
+            resolvedImageObj?.url || resolvedImageObj?.proxyUrl || product.image;
+          const resolvedImageId =
+            resolvedImageObj?.id ||
+            product.imageId ||
+            null;
 
           const newItem: CartItem = {
             id: targetId,
@@ -271,6 +274,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             name: product.name,
             slug: product.slug,
             image: resolvedColorImage || product.image,
+            imageId: resolvedImageId,
             price: Number.isFinite(product.price) ? Math.max(0, product.price) : 0,
             variantId: variantId || null,
             size: size || null,

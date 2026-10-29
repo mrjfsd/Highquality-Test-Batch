@@ -402,8 +402,8 @@ function runTests() {
 
     assert.ok(message.includes("Hello! I'd like to place an order from Style Edit."));
     assert.ok(message.includes("*1. Classic Denim Jeans*"));
-    assert.ok(message.includes("- Product: https://style-edit.com/product/classic-denim-jeans"));
-    assert.ok(message.includes("- Image: https://style-edit.com/jeans.jpg"));
+    assert.ok(message.includes("- Product: https://style-edit.com/p/classic-denim-jeans"));
+    assert.ok(message.includes("- Image: https://style-edit.com/i/jeans.jpg"));
     assert.ok(message.includes("- Size: 32"));
     assert.ok(message.includes("- Colour: Denim"));
     assert.ok(message.includes("- Quantity: 3"));
@@ -422,7 +422,7 @@ function runTests() {
     assert.ok(url.startsWith("https://wa.me/"));
     assert.ok(url.includes("text="));
     assert.ok(url.includes(encodeURIComponent("Hello! I'd like to place an order from Style Edit.")));
-    assert.ok(url.includes(encodeURIComponent("- Product: https://style-edit.com/product/classic-denim-jeans")));
+    assert.ok(url.includes(encodeURIComponent("- Product: https://style-edit.com/p/classic-denim-jeans")));
   });
 
   // Case 12: Selective WhatsApp Ordering — subset selection excludes deselected item
@@ -462,7 +462,7 @@ function runTests() {
 
     const whatsappMsg = generateWhatsAppOrderMessage(selectedItems, offersMap);
     assert.ok(whatsappMsg.includes("*1. Classic Denim Jeans*"));
-    assert.ok(whatsappMsg.includes("- Product: https://style-edit.com/product/classic-denim-jeans"));
+    assert.ok(whatsappMsg.includes("- Product: https://style-edit.com/p/classic-denim-jeans"));
     assert.ok(!whatsappMsg.includes("Kids Floral Dress"));
     assert.ok(whatsappMsg.includes("- Selected order subtotal: ₹1,200"));
     assert.ok(whatsappMsg.includes("- Offer savings: ₹200"));
@@ -605,8 +605,8 @@ function runTests() {
 
     assert.ok(message.includes("Hello! I'd like to order from Style Edit."));
     assert.ok(message.includes("*Product: Blue Jeans*"));
-    assert.ok(message.includes("- Product: https://style-edit.com/product/blue-jeans"));
-    assert.ok(message.includes("- Image: https://your-image-host.com/blue-jeans.jpg"));
+    assert.ok(message.includes("- Product: https://style-edit.com/p/blue-jeans"));
+    assert.ok(message.includes("- Image: https://style-edit.com/i/blue-jeans"));
     assert.ok(message.includes("- Size: L"));
     assert.ok(message.includes("- Colour: Black"));
     assert.ok(message.includes("- Quantity: 3"));
@@ -646,8 +646,8 @@ function runTests() {
 
     assert.ok(message.includes("Hello! I'd like to order from Style Edit."));
     assert.ok(message.includes("*Product: Blue Jeans*"));
-    assert.ok(message.includes("- Product: https://style-edit.com/product/blue-jeans"));
-    assert.ok(message.includes("- Image: https://your-image-host.com/blue-jeans.jpg"));
+    assert.ok(message.includes("- Product: https://style-edit.com/p/blue-jeans"));
+    assert.ok(message.includes("- Image: https://style-edit.com/i/blue-jeans"));
     assert.ok(message.includes("- Size: M"));
     assert.ok(message.includes("- Colour: Dark Blue"));
     assert.ok(message.includes("- Quantity: 2"));
@@ -677,8 +677,8 @@ function runTests() {
     const validUrl = generateBuyNowWhatsAppUrl(buyNowInput, "917676105819");
     assert.ok(validUrl.startsWith("https://wa.me/917676105819?text="));
     assert.ok(validUrl.includes(encodeURIComponent("*Product: Classic Linen Tee*")));
-    assert.ok(validUrl.includes(encodeURIComponent("- Product: https://style-edit.com/product/classic-linen-tee")));
-    assert.ok(validUrl.includes(encodeURIComponent("- Image: https://style-edit.com/tee.jpg")));
+    assert.ok(validUrl.includes(encodeURIComponent("- Product: https://style-edit.com/p/classic-linen-tee")));
+    assert.ok(validUrl.includes(encodeURIComponent("- Image: https://style-edit.com/i/tee.jpg")));
     assert.ok(validUrl.includes(encodeURIComponent("- Size: S")));
     assert.ok(validUrl.includes(encodeURIComponent("- Colour: Ivory")));
 
@@ -717,7 +717,7 @@ function runTests() {
 
     // Verify Buy Now message has only Blue Jeans, and no cart items
     assert.ok(message.includes("*Product: Blue Jeans*"));
-    assert.ok(message.includes("- Product: https://style-edit.com/product/blue-jeans"));
+    assert.ok(message.includes("- Product: https://style-edit.com/p/blue-jeans"));
     assert.ok(!message.includes("Unrelated Silk Dress"));
     assert.equal(cartItems.length, 1); // Cart remains completely unchanged
   });
@@ -775,8 +775,8 @@ function runTests() {
     assert.ok(message.includes("Hello! I'd like to place an order from Style Edit."));
     // Item 1
     assert.ok(message.includes("*1. Relaxed Fit Collar Down Shirt*"));
-    assert.ok(message.includes("- Product: https://style-edit.com/product/relaxed-fit-collar-down-shirt"));
-    assert.ok(message.includes("- Image: https://style-edit.com/shirt-pink.jpg"));
+    assert.ok(message.includes("- Product: https://style-edit.com/p/relaxed-fit-collar-down-shirt"));
+    assert.ok(message.includes("- Image: https://style-edit.com/i/shirt-pink.jpg"));
     assert.ok(message.includes("- Size: L"));
     assert.ok(message.includes("- Colour: Pink"));
     assert.ok(message.includes("- Quantity: 1"));
@@ -789,8 +789,8 @@ function runTests() {
 
     // Item 2
     assert.ok(message.includes("*2. Classic Denim Jeans*"));
-    assert.ok(message.includes("- Product: https://style-edit.com/product/classic-denim-jeans"));
-    assert.ok(message.includes("- Image: https://style-edit.com/jeans-blue.jpg"));
+    assert.ok(message.includes("- Product: https://style-edit.com/p/classic-denim-jeans"));
+    assert.ok(message.includes("- Image: https://style-edit.com/i/jeans-blue.jpg"));
     assert.ok(message.includes("- Size: 32"));
     assert.ok(message.includes("- Colour: Dark Blue"));
     assert.ok(message.includes("- Quantity: 3"));
@@ -804,6 +804,41 @@ function runTests() {
     assert.ok(message.includes("- Offer savings: ₹200"));
     assert.ok(message.includes("- Final order total: ₹2,200"));
     assert.ok(message.includes("Please confirm availability and the order details. Thank you!"));
+  });
+
+  // Case 23: Persistent image UUID formats short image URL /i/[uuid]
+  test("23. Persistent image UUID produces clean /i/[uuid] short image link", () => {
+    const itemWithImageId: CartItem = {
+      id: "prod-db-uuid-item",
+      productId: "3015b6fe-2cf7-4fec-8b2b-0bbfa1923e42",
+      name: "Structured Wool Blazer",
+      slug: "structured-wool-blazer",
+      image: "/api/images/products/3015b6fe-2cf7-4fec-8b2b-0bbfa1923e42/1730000000-img.webp",
+      imageId: "550e8400-e29b-41d4-a716-446655440000",
+      price: 3500,
+      quantity: 1,
+    };
+
+    const message = generateWhatsAppOrderMessage([itemWithImageId]);
+    assert.ok(message.includes("- Product: https://style-edit.com/p/structured-wool-blazer"));
+    assert.ok(message.includes("- Image: https://style-edit.com/i/550e8400-e29b-41d4-a716-446655440000"));
+  });
+
+  // Case 24: Direct R2 storage proxy URL formats short /i/products/... URL
+  test("24. Direct R2 image path converts cleanly to /i/products/... short URL", () => {
+    const itemWithR2Path: CartItem = {
+      id: "prod-r2-item",
+      productId: "prod-linen-1",
+      name: "Pure Linen Shirt",
+      slug: "pure-linen-shirt",
+      image: "/api/images/products/prod-linen-1/1730000000-front.webp?w=192&q=80",
+      price: 1800,
+      quantity: 1,
+    };
+
+    const message = generateWhatsAppOrderMessage([itemWithR2Path]);
+    assert.ok(message.includes("- Product: https://style-edit.com/p/pure-linen-shirt"));
+    assert.ok(message.includes("- Image: https://style-edit.com/i/products/prod-linen-1/1730000000-front.webp"));
   });
 
   console.log("\n================================================================");

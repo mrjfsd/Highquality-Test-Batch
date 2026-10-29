@@ -238,6 +238,10 @@ export function sanitizeCartItems(raw: unknown): CartItem[] {
     const variantId = maybeItem.variantId ? String(maybeItem.variantId).trim() : null;
     const size = maybeItem.size ? String(maybeItem.size).trim() : null;
     const color = maybeItem.color ? String(maybeItem.color).trim() : null;
+    const imageId =
+      maybeItem.imageId && typeof maybeItem.imageId === "string" && maybeItem.imageId.trim().length > 0
+        ? maybeItem.imageId.trim()
+        : null;
 
     const id =
       maybeItem.id && typeof maybeItem.id === "string" && maybeItem.id.length > 0
@@ -250,6 +254,7 @@ export function sanitizeCartItems(raw: unknown): CartItem[] {
       name,
       slug,
       image: image || "/assets/floating-garment-mobile.webp",
+      imageId,
       price,
       variantId,
       size,
@@ -304,7 +309,8 @@ export function getCanonicalSiteUrl(): string {
 }
 
 /**
- * Constructs an absolute product details URL using canonical site URL and product slug.
+ * Constructs an absolute short product details URL using canonical site URL and product slug or ID.
+ * Format: `${baseUrl}/p/${cleanSlug}`
  * Safely handles missing slugs, leading slashes, and redundant route segments.
  */
 export function formatProductUrl(
@@ -321,24 +327,47 @@ export function formatProductUrl(
   }
 
   const cleanBase = baseUrl.trim().replace(/\/+$/, "");
-  // Strip redundant leading /product/ or /
-  const cleanSlug = trimmed.replace(/^\/?(product\/)?/, "").replace(/^\/+/, "");
+  // Strip redundant leading /product/ or /p/ or /
+  const cleanSlug = trimmed.replace(/^\/?(product|p)\//, "").replace(/^\/+/, "");
   if (!cleanSlug) return "";
 
-  return `${cleanBase}/product/${cleanSlug}`;
+  return `${cleanBase}/p/${cleanSlug}`;
 }
 
 /**
- * Constructs an absolute, publicly accessible product image URL.
+ * Constructs an absolute, short, publicly accessible product image URL on the same domain.
+ * Format: `${baseUrl}/i/${imageId || identifier || cleanPath}`
  * Rejects local file paths, temporary blobs, and base64 data URLs.
  * Cleans thumbnail resizing query params for a short, direct link.
- * If relative, prepends canonical base URL.
+ * If relative or R2 proxy, converts to short /i/ route on canonical baseUrl.
  */
 export function formatImageUrl(
   imageUrl?: string | null,
-  baseUrl: string = getCanonicalSiteUrl()
+  baseUrl: string = getCanonicalSiteUrl(),
+  imageId?: string | null,
+  slugOrId?: string | null
 ): string {
-  if (!imageUrl || typeof imageUrl !== "string") return "";
+  const cleanBase = baseUrl.trim().replace(/\/+$/, "");
+
+  // If explicit persistent imageId (e.g. UUID) is available, use highest-priority short URL
+  if (imageId && typeof imageId === "string" && imageId.trim()) {
+    const trimmedId = imageId.trim();
+    if (!trimmedId.includes("..") && !trimmedId.includes("\\")) {
+      return `${cleanBase}/i/${trimmedId}`;
+    }
+  }
+
+  if (!imageUrl || typeof imageUrl !== "string") {
+    // If no imageUrl but slugOrId is provided, fallback to product-derived short image
+    if (slugOrId && typeof slugOrId === "string" && slugOrId.trim()) {
+      const cleanSlug = slugOrId.trim().replace(/^\/?(product|p)\//, "").replace(/^\/+/, "");
+      if (cleanSlug && !cleanSlug.includes("..")) {
+        return `${cleanBase}/i/${cleanSlug}`;
+      }
+    }
+    return "";
+  }
+
   const trimmed = imageUrl.trim();
   if (!trimmed) return "";
 
@@ -355,23 +384,48 @@ export function formatImageUrl(
   let cleanUrl = trimmed;
   if (cleanUrl.includes("?")) {
     const [pathPart] = cleanUrl.split("?");
-    if (pathPart.includes("/api/images/") || pathPart.startsWith("/assets/")) {
-      cleanUrl = pathPart;
-    }
+    cleanUrl = pathPart;
   }
 
-  // If already absolute HTTP/HTTPS URL
-  if (cleanUrl.startsWith("http://") || cleanUrl.startsWith("https://")) {
+  // If already an absolute short /i/ URL on baseUrl
+  if (cleanUrl.startsWith(`${cleanBase}/i/`)) {
     return cleanUrl;
   }
 
-  // If relative path (e.g. /api/images/... or /assets/...), prepend baseUrl
-  if (cleanUrl.startsWith("/")) {
-    const cleanBase = baseUrl.trim().replace(/\/+$/, "");
+  // If already a relative short /i/ URL
+  if (cleanUrl.startsWith("/i/")) {
     return `${cleanBase}${cleanUrl}`;
   }
 
-  return "";
+  // If it's an R2 image proxy path (e.g. /api/images/products/... or https://style-edit.com/api/images/products/...)
+  if (cleanUrl.includes("/api/images/")) {
+    const storagePath = cleanUrl.split("/api/images/")[1];
+    if (storagePath) {
+      return `${cleanBase}/i/${storagePath.replace(/^\/+/, "")}`;
+    }
+  }
+
+  // If relative path (e.g. /jeans.jpg, /images/shirt.jpg, /assets/...)
+  if (cleanUrl.startsWith("/")) {
+    const relativePath = cleanUrl.replace(/^\/+/, "");
+    return `${cleanBase}/i/${relativePath}`;
+  }
+
+  // If simple filename without slash (e.g. "jeans.jpg")
+  if (!cleanUrl.startsWith("http://") && !cleanUrl.startsWith("https://")) {
+    return `${cleanBase}/i/${cleanUrl}`;
+  }
+
+  // If external absolute URL (e.g. Unsplash) and slug/productId is known, route through same-domain short link
+  if (slugOrId && typeof slugOrId === "string" && slugOrId.trim()) {
+    const cleanSlug = slugOrId.trim().replace(/^\/?(product|p)\//, "").replace(/^\/+/, "");
+    if (cleanSlug && !cleanSlug.includes("..")) {
+      return `${cleanBase}/i/${cleanSlug}`;
+    }
+  }
+
+  // Otherwise return cleanUrl
+  return cleanUrl;
 }
 
 /**
@@ -383,8 +437,8 @@ export function formatImageUrl(
  * Hello! I'd like to place an order from Style Edit.
  *
  * *1. Relaxed Fit Collar Down Shirt*
- * - Product: https://style-edit.com/product/relaxed-fit-collar-down-shirt
- * - Image: https://style-edit.com/shirt.jpg
+ * - Product: https://style-edit.com/p/relaxed-fit-collar-down-shirt
+ * - Image: https://style-edit.com/i/shirt-pink.jpg
  * - Size: L
  * - Colour: Pink
  * - Quantity: 1
@@ -419,7 +473,12 @@ export function generateWhatsAppOrderMessage(
   items.forEach((item, index) => {
     const itemPricing = calculateItemPricingInCart(item, items, offersMap);
     const productUrl = formatProductUrl(item.slug, baseUrl);
-    const imageUrl = formatImageUrl(item.image, baseUrl);
+    const imageUrl = formatImageUrl(
+      item.image,
+      baseUrl,
+      item.imageId,
+      item.slug
+    );
 
     lines.push(`*${index + 1}. ${item.name}*`);
 
@@ -501,12 +560,14 @@ export interface BuyNowInput {
     price: number;
     slug?: string;
     image?: string;
+    imageId?: string | null;
   };
   variantId?: string | null;
   size?: string | null;
   color?: string | null;
   quantity: number;
   activeOffer?: ProductQuantityOffer | null;
+  imageId?: string | null;
 }
 
 /**
@@ -517,7 +578,7 @@ export function generateBuyNowWhatsAppMessage(
   input: BuyNowInput,
   baseUrl: string = getCanonicalSiteUrl()
 ): string {
-  const { product, size, color, quantity, activeOffer } = input;
+  const { product, size, color, quantity, activeOffer, imageId } = input;
   const safeQty = Math.max(1, Math.floor(quantity || 1));
   const safeUnitPrice =
     Number.isFinite(product.price) && product.price > 0
@@ -527,7 +588,12 @@ export function generateBuyNowWhatsAppMessage(
   // Use the shared quantity-offer pricing engine
   const pricing = calculateItemPriceWithOffers(safeQty, safeUnitPrice, activeOffer);
   const productUrl = formatProductUrl(product.slug, baseUrl);
-  const imageUrl = formatImageUrl(product.image, baseUrl);
+  const imageUrl = formatImageUrl(
+    product.image,
+    baseUrl,
+    imageId || product.imageId,
+    product.slug
+  );
 
   const lines: string[] = [
     "Hello! I'd like to order from Style Edit.",
