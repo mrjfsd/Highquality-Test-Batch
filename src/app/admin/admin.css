@@ -6196,3 +6196,51 @@ button.bulk-dropdown-trigger:disabled,
 .bulk-upload-page.theme-dark .bulk-photo-edit-btn {
   color: #d4d4d8 !important;
 }
+
+/* Confirmation Dialog Loading & Spinner */
+.button-spinner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.spinner-svg {
+  animation: buttonSpin 0.75s linear infinite;
+  display: block;
+}
+
+@keyframes buttonSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.app-shell .button-danger.button-loading,
+button.button-danger.button-loading,
+.button-danger.button-loading,
+.app-shell .button-danger.button-loading:disabled,
+button.button-danger.button-loading:disabled,
+.button-danger.button-loading:disabled {
+  background-color: #8b2635 !important;
+  border-color: #8b2635 !important;
+  color: #ffffff !important;
+  opacity: 0.88 !important;
+  cursor: wait !important;
+  pointer-events: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+}
+
+.app-shell .button-danger.button-loading *,
+button.button-danger.button-loading *,
+.button-danger.button-loading * {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}

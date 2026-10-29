@@ -2942,6 +2942,7 @@ export function Catalogue({
   const [sortBy, setSortBy] = useState("Updated date");
   const [page, setPage] = useState(1);
   const [confirm, setConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const rowsPerPage = 25;
 
@@ -3018,23 +3019,44 @@ export function Catalogue({
   };
 
   const handleBulkDelete = async () => {
-    if (selected.length === 0) return;
+    if (isDeleting || selected.length === 0) return;
     try {
+      setIsDeleting(true);
       const res = await authFetch("/api/admin/products/bulk-delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ productIds: selected }),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || "Failed to delete garments");
+        throw new Error(data.error || "Failed to delete garments");
       }
-      onRefresh?.();
-      setSelected([]);
-      setConfirm(false);
-      showToast("Selected garments deleted.");
+      const deletedIds: string[] = Array.isArray(data.deletedIds) ? data.deletedIds : selected;
+      const failedList = Array.isArray(data.failed) ? data.failed : [];
+
+      if (deletedIds.length > 0) {
+        onRefresh?.();
+        setSelected((curr) => curr.filter((id) => !deletedIds.includes(id)));
+      }
+
+      if (failedList.length > 0) {
+        if (deletedIds.length > 0) {
+          showToast(`Deleted ${deletedIds.length} garments. ${failedList.length} failed.`);
+        } else {
+          throw new Error(data.error || `${failedList.length} garments failed to delete.`);
+        }
+      } else {
+        setConfirm(false);
+        showToast(
+          data.warning
+            ? `Selected garments deleted (${data.warning}).`
+            : "Selected garments deleted."
+        );
+      }
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : "Error deleting garments.");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -3242,7 +3264,9 @@ export function Catalogue({
           title="Delete selected clothes?"
           body={`${selected.length} garments will be permanently deleted from the database and their images cleaned up.`}
           action="Delete clothes"
-          onCancel={() => setConfirm(false)}
+          loading={isDeleting}
+          loadingText="Deleting..."
+          onCancel={() => !isDeleting && setConfirm(false)}
           onConfirm={handleBulkDelete}
         />
       )}
@@ -3262,6 +3286,7 @@ export function Editor({
   onProductSaved?: () => void;
 }) {
   const [loading, setLoading] = useState(false);
+  const [isDeletingProduct, setIsDeletingProduct] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [department, setDepartment] = useState("Women");
@@ -3866,18 +3891,30 @@ export function Editor({
           title={confirm}
           body="This garment and its image attachments will be permanently removed."
           action="Delete garment"
-          onCancel={() => setConfirm(null)}
+          loading={isDeletingProduct}
+          loadingText="Deleting..."
+          onCancel={() => !isDeletingProduct && setConfirm(null)}
           onConfirm={async () => {
-            if (productId) {
-              await authFetch("/api/admin/products/bulk-delete", {
+            if (!productId || isDeletingProduct) return;
+            try {
+              setIsDeletingProduct(true);
+              const res = await authFetch("/api/admin/products/bulk-delete", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ productIds: [productId] }),
               });
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok || (data.failed && data.failed.length > 0)) {
+                throw new Error(data.error || data.failed?.[0]?.error || "Failed to delete garment");
+              }
               onProductSaved?.();
               setConfirm(null);
               showToast("Garment deleted.");
               navigate?.("catalogue");
+            } catch (err: unknown) {
+              showToast(err instanceof Error ? err.message : "Error deleting garment.");
+            } finally {
+              setIsDeletingProduct(false);
             }
           }}
         />
@@ -4155,12 +4192,16 @@ export function ConfirmDialog({
   action,
   onCancel,
   onConfirm,
+  loading = false,
+  loadingText,
 }: {
   title: string;
   body: string;
   action: string;
   onCancel: () => void;
   onConfirm: () => void;
+  loading?: boolean;
+  loadingText?: string;
 }) {
   return (
     <div className="modal-backdrop" role="presentation">
@@ -4171,9 +4212,35 @@ export function ConfirmDialog({
         <h2>{title}</h2>
         <p>{body}</p>
         <div>
-          <Button onClick={onCancel}>Cancel</Button>
-          <Button variant="danger" onClick={onConfirm}>
-            {action}
+          <Button onClick={onCancel} disabled={loading}>Cancel</Button>
+          <Button
+            variant="danger"
+            onClick={onConfirm}
+            disabled={loading}
+            className={loading ? "button-loading" : ""}
+          >
+            {loading ? (
+              <>
+                <span className="button-spinner" aria-hidden="true">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    className="spinner-svg"
+                  >
+                    <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+                    <path d="M12 2a10 10 0 0 1 10 10" />
+                  </svg>
+                </span>
+                <span>{loadingText || "Deleting..."}</span>
+              </>
+            ) : (
+              action
+            )}
           </Button>
         </div>
       </div>
