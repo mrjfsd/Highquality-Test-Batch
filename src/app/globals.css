@@ -865,7 +865,7 @@
   background: var(--charcoal);
   border: 1px solid rgba(247, 243, 238, 0.16);
   overflow: hidden;
-  will-change: transform, opacity, filter, box-shadow;
+  will-change: transform, opacity;
   transform-origin: 50% 90%; /* Center pivot near bottom for natural card fan rotation */
   user-select: none;
   -webkit-user-drag: none;
@@ -4877,6 +4877,15 @@ html.animations-ready .reveal-heading.is-visible {
 .hero-fade-4 {
   animation: heroFadeInUp 750ms cubic-bezier(0.16, 1, 0.3, 1) 320ms both;
 }
+
+/* When GSAP has taken ownership of the hero entrance, suppress the CSS fallback animations */
+.hero[data-hero-motion] .hero-fade-1,
+.hero[data-hero-motion] .hero-fade-2,
+.hero[data-hero-motion] .hero-fade-3,
+.hero[data-hero-motion] .hero-fade-4 {
+  animation: none;
+}
+
 
 /* Department Cards Staggered Entrance */
 html.animations-ready .departments .reveal-item {

@@ -8,6 +8,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import HomeScrollAnimator from "@/components/HomeScrollAnimator";
 import HeroGarmentFan from "@/components/HeroGarmentFan";
+import HeroMotion from "@/components/HeroMotion";
 import { getPromoBannerConfig, PromoBannerConfig } from "@/lib/settings/site-settings";
 
 export const metadata: Metadata = {
@@ -261,9 +262,10 @@ function HeroBanner({ isBannerActive = true }: { isBannerActive?: boolean }) {
     <div id={HERO_SCROLL_ID} className="hero-scroll-outer" aria-label="Hero scroll section">
       <div className="hero-scroll-sticky">
         <section className="hero" aria-labelledby="hero-title">
+          <HeroMotion />
           <div className="hero-overlay" />
           <div className="hero-content">
-            <h1 id="hero-title" className="hero-fade-1">Your Style. Your Edit.</h1>
+            <h1 id="hero-title" className="hero-fade-1 hero-motion-h1">Your Style. Your Edit.</h1>
 
             {/* Interactive Seven-Card Circular Fan Carousel */}
             <HeroGarmentFan
@@ -271,12 +273,12 @@ function HeroBanner({ isBannerActive = true }: { isBannerActive?: boolean }) {
               scrollContainerId={HERO_SCROLL_ID}
             />
 
-            <p className="hero-fade-2 hero-description">
+            <p className="hero-fade-2 hero-motion-sub hero-description">
               Everyday style, thoughtfully chosen.
             </p>
             
             {/* Refined editorial hero buttons with sophisticated solid/outline pairing */}
-            <div className="hero-actions hero-fade-4">
+            <div className="hero-actions hero-fade-4 hero-motion-btns">
               <Link className="hero-btn hero-btn-primary" href="/shop/women" prefetch={true}>
                 <span>Shop Women</span>
                 <ArrowIcon />
