@@ -45,6 +45,56 @@ export const DEFAULT_NAVBAR_CONFIG: NavbarConfig = {
   showSaleLink: true,
 };
 
+import {
+  type HeroCardConfigItem,
+  DEFAULT_HERO_CARDS,
+} from "@/types/hero-cards";
+
+export { type HeroCardConfigItem, DEFAULT_HERO_CARDS };
+
+export function normalizeHeroCards(raw?: unknown): HeroCardConfigItem[] {
+  return DEFAULT_HERO_CARDS.map((def, idx) => {
+    let saved: Partial<HeroCardConfigItem> | null = null;
+    if (Array.isArray(raw)) {
+      saved =
+        raw.find((r) => r && (r.slotIndex === idx || r.id === def.id || r.id === `hero-${idx}`)) ||
+        null;
+    }
+
+    if (!saved || typeof saved !== "object") {
+      return { ...def };
+    }
+
+    const customImage =
+      (saved.customImage && typeof saved.customImage === "string" && saved.customImage.trim()) ||
+      (saved.isCustom && saved.image && saved.image !== def.defaultImage ? saved.image.trim() : null) ||
+      null;
+
+    const isCustom = Boolean(customImage);
+
+    return {
+      id: def.id,
+      slotIndex: idx,
+      displayOrder: idx,
+      defaultImage: def.defaultImage,
+      defaultTitle: def.defaultTitle,
+      defaultCategory: def.defaultCategory,
+      defaultAlt: def.defaultAlt,
+      customImage,
+      customTitle: saved.customTitle || (isCustom ? saved.title : null) || null,
+      customCategory: saved.customCategory || (isCustom ? saved.category : null) || null,
+      customAlt: saved.customAlt || (isCustom ? saved.alt : null) || null,
+      storagePath: isCustom ? saved.storagePath || null : null,
+      isCustom,
+      image: isCustom && customImage ? customImage : def.defaultImage,
+      title: isCustom && (saved.customTitle || saved.title) ? (saved.customTitle || saved.title)! : def.defaultTitle,
+      category: isCustom && (saved.customCategory || saved.category) ? (saved.customCategory || saved.category)! : def.defaultCategory,
+      alt: isCustom && (saved.customAlt || saved.alt) ? (saved.customAlt || saved.alt)! : def.defaultAlt,
+      updatedAt: saved.updatedAt,
+    };
+  });
+}
+
 function normalizeNavbarConfig(raw?: Partial<NavbarConfig> | null): NavbarConfig {
   if (!raw) return { ...DEFAULT_NAVBAR_CONFIG };
   return {
@@ -73,6 +123,7 @@ interface PersistedSettings {
   promo_banner?: PromoBannerConfig;
   catalogue_marquee?: CatalogueMarqueeConfig;
   navbar?: NavbarConfig;
+  hero_cards?: HeroCardConfigItem[];
 }
 
 function readFallbackSettings(): PersistedSettings {
@@ -214,6 +265,35 @@ async function queryNavbarConfig(): Promise<NavbarConfig> {
   return { ...DEFAULT_NAVBAR_CONFIG };
 }
 
+/**
+ * Low-level query: homepage hero cards config.
+ */
+async function queryHeroCardsConfig(): Promise<HeroCardConfigItem[]> {
+  try {
+    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const supabase = createSupabaseAdminClient();
+      const { data, error } = await supabase
+        .from("site_settings")
+        .select("value")
+        .eq("key", "hero_cards")
+        .maybeSingle();
+
+      if (!error && data?.value) {
+        return normalizeHeroCards(data.value);
+      }
+    }
+  } catch (err) {
+    console.warn("[site-settings] Supabase getHeroCardsConfig fallback:", err);
+  }
+
+  const fallback = readFallbackSettings();
+  if (fallback.hero_cards && Array.isArray(fallback.hero_cards) && fallback.hero_cards.length > 0) {
+    return normalizeHeroCards(fallback.hero_cards);
+  }
+
+  return [...DEFAULT_HERO_CARDS];
+}
+
 // ============================================================================
 // 1. Persistent Data Cache (unstable_cache)
 // 1 hour background revalidation (3600s), tagged with 'site-settings'
@@ -246,6 +326,15 @@ const getCachedNavbarConfig = unstable_cache(
   }
 );
 
+const getCachedHeroCardsConfig = unstable_cache(
+  async () => queryHeroCardsConfig(),
+  ["site-settings-hero-cards"],
+  {
+    revalidate: 3600,
+    tags: ["site-settings", "hero-cards"],
+  }
+);
+
 // ============================================================================
 // 2. Request-Scoped Memoization (React.cache)
 // Deduplicates fetches within a single server rendering pass
@@ -261,6 +350,13 @@ export const getCatalogueMarqueeConfig = cache(async (): Promise<CatalogueMarque
 
 export const getNavbarConfig = cache(async (): Promise<NavbarConfig> => {
   return getCachedNavbarConfig();
+});
+
+export const getHeroCardsConfig = cache(async (): Promise<HeroCardConfigItem[]> => {
+  if (process.env.NODE_ENV === "development") {
+    return queryHeroCardsConfig();
+  }
+  return getCachedHeroCardsConfig();
 });
 
 /**
@@ -397,4 +493,107 @@ export async function saveNavbarConfig(
   invalidateSettingsCache();
   return updated;
 }
+
+/**
+ * Saves the homepage hero cards configuration (max 7 cards).
+ */
+export async function saveHeroCardsConfig(
+  cards: HeroCardConfigItem[]
+): Promise<HeroCardConfigItem[]> {
+  const normalized = normalizeHeroCards(cards.slice(0, 7)).map((c, i) => ({
+    ...c,
+    displayOrder: i,
+    updatedAt: new Date().toISOString(),
+  }));
+
+  try {
+    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const supabase = createSupabaseAdminClient();
+      const { error } = await supabase.from("site_settings").upsert(
+        {
+          key: "hero_cards",
+          value: normalized,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "key" }
+      );
+      if (error) {
+        console.warn("[site-settings] Upsert hero_cards DB error:", error.message);
+      }
+    }
+  } catch (err) {
+    console.warn("[site-settings] DB saveHeroCardsConfig failed:", err);
+  }
+
+  // Always update local fallback for server restarts/redundancy
+  const currentFallback = readFallbackSettings();
+  currentFallback.hero_cards = normalized;
+  writeFallbackSettings(currentFallback);
+
+  invalidateSettingsCache();
+  return normalized;
+}
+
+/**
+ * Replaces a specific hero card slot with a custom image override.
+ */
+export async function replaceHeroCardSlot(
+  slotIndex: number,
+  override: {
+    image: string;
+    storagePath?: string | null;
+    title?: string;
+    category?: string;
+    alt?: string;
+  }
+): Promise<HeroCardConfigItem[]> {
+  const current = await getHeroCardsConfig();
+  if (slotIndex < 0 || slotIndex >= DEFAULT_HERO_CARDS.length) {
+    throw new Error(`Invalid slotIndex: ${slotIndex}. Must be 0 to ${DEFAULT_HERO_CARDS.length - 1}.`);
+  }
+
+  const def = DEFAULT_HERO_CARDS[slotIndex];
+  const updated = current.map((card, i) => {
+    if (i !== slotIndex) return card;
+    return {
+      ...card,
+      customImage: override.image.trim(),
+      customTitle: override.title?.trim() || card.title || def.defaultTitle,
+      customCategory: override.category?.trim() || card.category || def.defaultCategory,
+      customAlt: override.alt?.trim() || card.alt || def.defaultAlt,
+      storagePath: override.storagePath ? override.storagePath.trim() : null,
+      isCustom: true,
+      image: override.image.trim(),
+      title: override.title?.trim() || card.title || def.defaultTitle,
+      category: override.category?.trim() || card.category || def.defaultCategory,
+      alt: override.alt?.trim() || card.alt || def.defaultAlt,
+      updatedAt: new Date().toISOString(),
+    };
+  });
+
+  return saveHeroCardsConfig(updated);
+}
+
+/**
+ * Removes the custom override from a hero card slot, immediately restoring its default image.
+ */
+export async function removeHeroCardSlot(slotIndex: number): Promise<HeroCardConfigItem[]> {
+  const current = await getHeroCardsConfig();
+  if (slotIndex < 0 || slotIndex >= DEFAULT_HERO_CARDS.length) {
+    throw new Error(`Invalid slotIndex: ${slotIndex}. Must be 0 to ${DEFAULT_HERO_CARDS.length - 1}.`);
+  }
+
+  const def = DEFAULT_HERO_CARDS[slotIndex];
+  const updated = current.map((card, i) => {
+    if (i !== slotIndex) return card;
+    return {
+      ...def,
+      updatedAt: new Date().toISOString(),
+    };
+  });
+
+  return saveHeroCardsConfig(updated);
+}
+
+
 

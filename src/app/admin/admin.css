@@ -6244,3 +6244,180 @@ button.button-danger.button-loading *,
   color: #ffffff !important;
   stroke: #ffffff !important;
 }
+
+/* ==========================================================================
+   Homepage Hero Cards Management Screen (Minimal 7-Slot Grid)
+   ========================================================================== */
+
+.hero-cards-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.hero-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 16px;
+}
+
+.hero-card-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--admin-white, #ffffff);
+  border: 1px solid var(--admin-stone, #e8e4de);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.hero-card-tile:hover {
+  border-color: var(--admin-stone-dark, #ccc5b9);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.hero-card-tile.is-center {
+  border-color: #c9a96e;
+  box-shadow: 0 0 0 1px #c9a96e, 0 4px 14px rgba(201, 169, 110, 0.16);
+}
+
+.hero-card-tile-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background-color: var(--admin-bg, #fcfbf9);
+  border-bottom: 1px solid var(--admin-stone, #e8e4de);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--admin-muted, #78716c);
+}
+
+.hero-card-tile.is-center .hero-card-tile-header {
+  background-color: #faf5ec;
+  color: #8c6d2f;
+}
+
+.hero-slot-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.hero-slot-badge.is-default {
+  background-color: #f3f0ea;
+  color: #6e675f;
+  border: 1px solid #e2ddd5;
+}
+
+.hero-slot-badge.is-custom {
+  background-color: #edf7f0;
+  color: #196939;
+  border: 1px solid #c2e4cc;
+}
+
+.hero-card-thumb-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  background-color: #161514;
+  overflow: hidden;
+}
+
+.hero-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+}
+
+.hero-card-tile-body {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.hero-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--admin-charcoal, #1f1d1a);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hero-card-cat {
+  font-size: 12px;
+  color: var(--admin-muted, #78716c);
+}
+
+.hero-card-tile-footer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 10px 12px;
+  background-color: var(--admin-bg, #fcfbf9);
+  border-top: 1px solid var(--admin-stone, #e8e4de);
+}
+
+.hero-card-tile-footer button {
+  width: 100%;
+  justify-content: center;
+}
+
+/* Staged Replacement Modal / Frame */
+.hero-replace-dialog-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 16px 0 20px 0;
+}
+
+@media (max-width: 560px) {
+  .hero-replace-dialog-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.hero-replace-preview-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hero-replace-preview-box span {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--admin-muted, #78716c);
+}
+
+.hero-replace-preview-img {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  border-radius: 6px;
+  border: 1px solid var(--admin-stone-dark, #ccc5b9);
+  overflow: hidden;
+  background-color: #161514;
+}
+
+.hero-replace-preview-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+

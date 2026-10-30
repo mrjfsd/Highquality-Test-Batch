@@ -6,10 +6,11 @@ import { verifyAdminAuthorization } from "@/lib/supabase/auth";
 import { compressImageForUpload, uploadToR2WithProgress } from "@/lib/images/client-compression";
 import { getProductDescriptionTemplate, isKnownDescriptionTemplate } from "@/lib/products/description-templates";
 import { BannerManagementScreen } from "./banner-management";
+import { HeroCardsManagementScreen } from "./hero-cards-management";
 import { QuantityOffersScreen } from "./quantity-offers-management";
 import { BulkUploadScreen } from "./bulk-upload";
 
-export type Page = "overview" | "intake" | "bulk" | "catalogue" | "editor" | "offers" | "media" | "banner";
+export type Page = "overview" | "intake" | "bulk" | "catalogue" | "editor" | "offers" | "media" | "banner" | "hero-cards";
 export type ProductStatus = "Published" | "Draft" | "Review" | "Archived";
 
 export interface LiveProductImage {
@@ -220,6 +221,7 @@ export const nav: { id: Page; label: string; icon: string }[] = [
   { id: "editor", label: "Edit Garment", icon: "edit" },
   { id: "offers", label: "Quantity Offers", icon: "tag" },
   { id: "banner", label: "Banner", icon: "image" },
+  { id: "hero-cards", label: "Hero Cards", icon: "image" },
 ];
 
 export function Icon({ name, size = 18 }: { name: string; size?: number }) {
@@ -4331,6 +4333,7 @@ export default function App({
       offers: "/admin/offers",
       media: "/admin/media",
       banner: "/admin/banner",
+      "hero-cards": "/admin/hero-cards",
     };
     if (typeof window !== "undefined" && window.location.pathname !== routeMap[p]) {
       window.history.pushState(null, "", routeMap[p]);
@@ -4401,6 +4404,13 @@ export default function App({
     if (page === "banner")
       return (
         <BannerManagementScreen
+          showToast={showToast}
+          navigate={setPage}
+        />
+      );
+    if (page === "hero-cards")
+      return (
+        <HeroCardsManagementScreen
           showToast={showToast}
           navigate={setPage}
         />

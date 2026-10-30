@@ -254,33 +254,42 @@ function HomePromotionalBanner({ banner }: { banner?: PromoBannerConfig | null }
 }
 
 /* ── Section 3: Editorial Hero ── */
+const HERO_SCROLL_ID = "hero-scroll-outer";
+
 function HeroBanner({ isBannerActive = true }: { isBannerActive?: boolean }) {
   return (
-    <section className="hero" aria-labelledby="hero-title">
-      <div className="hero-overlay" />
-      <div className="hero-content">
-        <h1 id="hero-title" className="hero-fade-1">Your Style. Your Edit.</h1>
+    <div id={HERO_SCROLL_ID} className="hero-scroll-outer" aria-label="Hero scroll section">
+      <div className="hero-scroll-sticky">
+        <section className="hero" aria-labelledby="hero-title">
+          <div className="hero-overlay" />
+          <div className="hero-content">
+            <h1 id="hero-title" className="hero-fade-1">Your Style. Your Edit.</h1>
 
-        {/* Interactive Six-Card Circular Fan Carousel */}
-        <HeroGarmentFan isBannerActive={isBannerActive} />
+            {/* Interactive Seven-Card Circular Fan Carousel */}
+            <HeroGarmentFan
+              isBannerActive={isBannerActive}
+              scrollContainerId={HERO_SCROLL_ID}
+            />
 
-        <p className="hero-fade-2 hero-description">
-          Everyday style, thoughtfully chosen.
-        </p>
-        
-        {/* Refined editorial hero buttons with sophisticated solid/outline pairing */}
-        <div className="hero-actions hero-fade-4">
-          <Link className="hero-btn hero-btn-primary" href="/shop/women" prefetch={true}>
-            <span>Shop Women</span>
-            <ArrowIcon />
-          </Link>
-          <Link className="hero-btn hero-btn-secondary" href="/shop/men" prefetch={true}>
-            <span>Shop Men</span>
-            <ArrowIcon />
-          </Link>
-        </div>
+            <p className="hero-fade-2 hero-description">
+              Everyday style, thoughtfully chosen.
+            </p>
+            
+            {/* Refined editorial hero buttons with sophisticated solid/outline pairing */}
+            <div className="hero-actions hero-fade-4">
+              <Link className="hero-btn hero-btn-primary" href="/shop/women" prefetch={true}>
+                <span>Shop Women</span>
+                <ArrowIcon />
+              </Link>
+              <Link className="hero-btn hero-btn-secondary" href="/shop/men" prefetch={true}>
+                <span>Shop Men</span>
+                <ArrowIcon />
+              </Link>
+            </div>
+          </div>
+        </section>
       </div>
-    </section>
+    </div>
   );
 }
 

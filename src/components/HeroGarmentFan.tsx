@@ -1,16 +1,18 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { gsap } from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 
 export type GarmentCardItem = {
-  id: number;
+  id: number | string;
   title: string;
   category: string;
   image: string;
   alt: string;
 };
 
-// 10 authentic, distinct garment product cards from the repository
+// Exactly 7 authentic, distinct garment product cards matching repository & admin defaults
 export const HERO_GARMENTS: GarmentCardItem[] = [
   {
     id: 0,
@@ -61,36 +63,20 @@ export const HERO_GARMENTS: GarmentCardItem[] = [
     image: "/assets/dummy-products/kids/kids-jacket-side.jpg",
     alt: "Quilted mustard jacket profile view",
   },
-  {
-    id: 7,
-    title: "Structured Blazer",
-    category: "Women's Edit",
-    image: "/assets/dummy-products/women/women-blazer-side.jpg",
-    alt: "Structured linen blazer profile drape",
-  },
-  {
-    id: 8,
-    title: "Tactile Knit Detail",
-    category: "Men's Edit",
-    image: "/assets/dummy-products/men/men-knit-detail.jpg",
-    alt: "Tactile knit detail and collar weave",
-  },
-  {
-    id: 9,
-    title: "Classic Denim Jeans",
-    category: "Essential Denim",
-    image: "/assets/floating-jeans-mobile.webp",
-    alt: "Floating blue denim jeans",
-  },
 ];
-
-const N = HERO_GARMENTS.length; // 10 cards for wide, symmetrical fan
 
 export default function HeroGarmentFan({
   isBannerActive = true,
+  cards,
+  scrollContainerId,
 }: {
   isBannerActive?: boolean;
+  cards?: GarmentCardItem[];
+  scrollContainerId?: string;
 }) {
+  const activeCards = (cards && cards.length > 0 ? cards : HERO_GARMENTS).slice(0, 7);
+  const N = activeCards.length;
+
   // Continuous rotation progress (in card units: 0.0, 1.0, 2.5, etc.)
   const [progress, setProgress] = useState(0);
   const [isMobile, setIsMobile] = useState(false);
@@ -183,6 +169,40 @@ export default function HeroGarmentFan({
       }
     };
   }, []);
+
+  // GSAP ScrollTrigger scroll-driven rotation:
+  // Scrolling down advances the carousel forward through the cards,
+  // scrolling up reverses rotation, stopping mid-scroll halts the movement.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    gsap.registerPlugin(ScrollTrigger);
+
+    const triggerEl = scrollContainerId
+      ? document.getElementById(scrollContainerId)
+      : containerRef.current;
+
+    if (!triggerEl) return;
+
+    const isMobileViewport = window.innerWidth <= 768;
+
+    const st = ScrollTrigger.create({
+      trigger: triggerEl,
+      start: "top top",
+      end: isMobileViewport ? "bottom top" : "bottom bottom",
+      scrub: 0.6,
+      onUpdate: (self) => {
+        if (isDraggingRef.current) return;
+        targetProgressRef.current = self.progress * N;
+        startAnimation();
+      },
+    });
+
+    return () => {
+      st.kill();
+    };
+  }, [scrollContainerId, N, startAnimation]);
 
   // Step rotation controls for arrow buttons and keyboard
   const handlePrev = useCallback(() => {
@@ -345,10 +365,10 @@ export default function HeroGarmentFan({
 
     const absDiff = Math.abs(diff);
 
-    // Tangent Arc Geometry (reference implementation model):
+    // Tangent Arc Geometry matching NOVA reference (wide, symmetrical fan arc):
     // Radius of circular wheel and angle step per card
-    const R = isMobile ? 480 : isTablet ? 720 : 920;
-    const angleStepDeg = isMobile ? 6.2 : isTablet ? 7.0 : 7.8;
+    const R = isMobile ? 540 : isTablet ? 820 : 1080;
+    const angleStepDeg = isMobile ? 7.6 : isTablet ? 8.2 : 8.8;
     const thetaDeg = diff * angleStepDeg;
     const thetaRad = (thetaDeg * Math.PI) / 180;
 
@@ -359,26 +379,22 @@ export default function HeroGarmentFan({
 
     // 3D Perspective Rotation (Y-axis tilt):
     // Inward facing curvature + direction-aware drag tilt
-    const baseRotateY = -diff * (isMobile ? 2.5 : 3.2);
+    const baseRotateY = -diff * (isMobile ? 2.0 : 2.6);
     const dynamicTilt = dragTiltRef.current * Math.max(0.3, 1 - absDiff * 0.18);
     const totalRotateY = baseRotateY + dynamicTilt;
 
     const scaleStep = isMobile ? 0.065 : 0.075;
-    const scale = Math.max(0.62, (isMobile ? 1.05 : 1.08) - absDiff * scaleStep);
+    const scale = Math.max(0.64, (isMobile ? 1.04 : 1.08) - absDiff * scaleStep);
 
-    // Stacking order: center card has highest prominence (18), outer cards cascade down
-    const zIndex = Math.max(1, Math.round((6 - absDiff) * 3));
+    // Stacking order: center card has highest prominence (15), outer cards cascade down
+    const zIndex = Math.max(1, Math.round((5 - absDiff) * 3));
 
-    // Smooth progressive fade curve (matching reference image):
-    // - Active center card (absDiff = 0) is 1.0 (crisp, prominent, crisp focus).
-    // - Immediate adjacent cards (absDiff = 1) remain mostly visible (~0.95) with natural colors.
-    // - Side cards progressively soften (absDiff = 2 -> ~0.83, absDiff = 3 -> ~0.63, absDiff = 4 -> ~0.34).
-    // - Seamlessly fades into 0.0 before reaching the outer wrapping threshold so cards never pop or snap.
-    const maxVisibleRadius = isMobile ? 3.5 : isTablet ? 4.2 : 4.8;
+    // Smooth progressive fade curve matching reference image (1 center + 3 left + 3 right = 7 cards visible):
+    const maxVisibleRadius = 3.5;
     let opacity = 0;
     if (absDiff < maxVisibleRadius) {
       const normalizedDist = absDiff / maxVisibleRadius;
-      opacity = Math.pow(Math.cos((normalizedDist * Math.PI) / 2), 0.82);
+      opacity = Math.pow(Math.cos((normalizedDist * Math.PI) / 2), 0.78);
     }
 
     const brightness = Math.max(0.88, 1 - absDiff * 0.024);
@@ -389,17 +405,20 @@ export default function HeroGarmentFan({
       zIndex,
       opacity: opacity.toFixed(3),
       filter: `brightness(${brightness.toFixed(3)})`,
+      borderRadius: isMobile ? "14px" : "20px",
       cursor: isCenter ? "grab" : "pointer",
       pointerEvents: opacity < 0.12 ? ("none" as const) : ("auto" as const),
       boxShadow: isCenter
         ? "0 28px 56px -10px rgba(6, 17, 12, 0.96), 0 12px 28px rgba(0, 0, 0, 0.65), inset 0 1px 1.5px rgba(247, 243, 238, 0.34)"
         : "0 12px 28px -8px rgba(6, 17, 12, 0.72), inset 0 1px 1px rgba(247, 243, 238, 0.16)",
-      transition: "box-shadow 260ms ease, border-color 260ms ease",
+      transition: isDraggingRef.current
+        ? "none"
+        : "box-shadow 260ms ease, border-color 260ms ease",
     };
   };
 
   // Normalized active garment index for center prominence
-  const activeIndex = ((Math.round(progress) % N) + N) % N;
+  const activeIndex = N > 0 ? ((Math.round(progress) % N) + N) % N : 0;
 
   return (
     <div
@@ -407,7 +426,7 @@ export default function HeroGarmentFan({
       className="hero-fan-container"
       role="region"
       aria-roledescription="carousel"
-      aria-label="Hero garment interactive circular arc carousel"
+      aria-label="Hero garment interactive fan carousel"
       tabIndex={0}
       onKeyDown={handleKeyDown}
       onPointerDown={handlePointerDown}
@@ -415,9 +434,9 @@ export default function HeroGarmentFan({
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
     >
-      {/* The 10-Card Semicircular Overlapping Arc Stage */}
+      {/* Symmetrical Upward-Curving Fan Arc Stage (7 Cards) */}
       <div className="hero-fan-stage">
-        {HERO_GARMENTS.map((item, idx) => {
+        {activeCards.map((item, idx) => {
           const style = getCardStyle(idx);
           const isCenter = idx === activeIndex;
 

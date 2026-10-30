@@ -3,19 +3,21 @@ import {
   getPromoBannerConfig,
   getCatalogueMarqueeConfig,
   getNavbarConfig,
+  getHeroCardsConfig,
   DEFAULT_CATALOGUE_ADS,
 } from "@/lib/settings/site-settings";
 
 /**
  * GET /api/settings
- * Public endpoint delivering published storefront configuration (promotional banner, catalogue marquee ads, and navbar).
+ * Public endpoint delivering published storefront configuration (promotional banner, catalogue marquee ads, navbar, and hero cards).
  */
 export async function GET(request: NextRequest) {
   try {
-    const [promoBanner, catalogueConfig, navbar] = await Promise.all([
+    const [promoBanner, catalogueConfig, navbar, heroCards] = await Promise.all([
       getPromoBannerConfig(),
       getCatalogueMarqueeConfig(),
       getNavbarConfig(),
+      getHeroCardsConfig(),
     ]);
 
     // Active ads: non-empty trimmed strings
@@ -34,6 +36,7 @@ export async function GET(request: NextRequest) {
           updatedAt: catalogueConfig.updatedAt,
         },
         navbar,
+        heroCards,
       },
       {
         headers: {

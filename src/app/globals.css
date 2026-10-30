@@ -678,6 +678,59 @@
   }
 }
 
+/* ── Hero Scroll Container (GSAP ScrollTrigger Pin) ── */
+.hero-scroll-outer {
+  position: relative;
+  height: 300vh;
+}
+
+.hero-scroll-sticky {
+  position: sticky;
+  top: 0;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  z-index: 2;
+}
+
+.hero-scroll-sticky .hero {
+  height: 100vh;
+  min-height: 100vh;
+}
+
+@media (max-width: 768px) {
+  .hero-scroll-outer {
+    height: auto;
+  }
+
+  .hero-scroll-sticky {
+    position: static;
+    height: auto;
+    min-height: auto;
+    overflow: visible;
+  }
+
+  .hero-scroll-sticky .hero {
+    height: auto;
+    min-height: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-scroll-outer {
+    height: auto;
+  }
+  .hero-scroll-sticky {
+    position: static;
+    height: auto;
+    overflow: visible;
+  }
+  .hero-scroll-sticky .hero {
+    height: auto;
+    min-height: min(780px, calc(100vh - 120px));
+  }
+}
+
 /* ── Hero Section (Unified Editorial 3D Garment Capsule) ── */
 .hero {
   position: relative;

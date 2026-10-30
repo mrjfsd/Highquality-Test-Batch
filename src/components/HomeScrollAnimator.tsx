@@ -67,15 +67,35 @@ export default function HomeScrollAnimator() {
 
           // Hero Scroll Transition: Scale down slightly, move upward, round bottom corners
           if (heroEl) {
-            const heroMaxScroll = isMobile ? 260 : 420;
-            const heroProgress = Math.min(1, Math.max(0, scrollY / heroMaxScroll));
-            const heroScale = 1 - heroProgress * (isMobile ? 0.018 : 0.045);
-            const heroTranslateY = -heroProgress * (isMobile ? 12 : 26);
-            const heroRadius = heroProgress * (isMobile ? 20 : 36);
+            const heroOuter = document.getElementById("hero-scroll-outer");
+            if (isMobile) {
+              heroEl.style.setProperty("--hero-scale", "1");
+              heroEl.style.setProperty("--hero-translate-y", "0px");
+              heroEl.style.setProperty("--hero-border-radius", "0px");
+            } else if (heroOuter) {
+              const outerRect = heroOuter.getBoundingClientRect();
+              const heroScrollDist = heroOuter.offsetHeight - window.innerHeight;
+              if (heroScrollDist > 0) {
+                const rawProgress = -outerRect.top / heroScrollDist;
+                // Transition out gently during the final 15% of the hero scroll track into the next section
+                const exitProgress = Math.min(1, Math.max(0, (rawProgress - 0.85) / 0.15));
+                const heroScale = 1 - exitProgress * 0.045;
+                const heroRadius = exitProgress * 36;
+                heroEl.style.setProperty("--hero-scale", heroScale.toFixed(4));
+                heroEl.style.setProperty("--hero-translate-y", "0px");
+                heroEl.style.setProperty("--hero-border-radius", `${heroRadius.toFixed(1)}px`);
+              }
+            } else {
+              const heroMaxScroll = isMobile ? 260 : 420;
+              const heroProgress = Math.min(1, Math.max(0, scrollY / heroMaxScroll));
+              const heroScale = 1 - heroProgress * (isMobile ? 0.018 : 0.045);
+              const heroTranslateY = -heroProgress * (isMobile ? 12 : 26);
+              const heroRadius = heroProgress * (isMobile ? 20 : 36);
 
-            heroEl.style.setProperty("--hero-scale", heroScale.toFixed(4));
-            heroEl.style.setProperty("--hero-translate-y", `${heroTranslateY.toFixed(1)}px`);
-            heroEl.style.setProperty("--hero-border-radius", `${heroRadius.toFixed(1)}px`);
+              heroEl.style.setProperty("--hero-scale", heroScale.toFixed(4));
+              heroEl.style.setProperty("--hero-translate-y", `${heroTranslateY.toFixed(1)}px`);
+              heroEl.style.setProperty("--hero-border-radius", `${heroRadius.toFixed(1)}px`);
+            }
           }
 
           // Editorial 2-Pair Image Transition: Overlapping pair rises up as user scrolls
