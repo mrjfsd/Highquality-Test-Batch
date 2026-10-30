@@ -851,14 +851,16 @@
   height: 330px;
   overflow: visible;
   perspective: 1400px;
+  --fan-card-w: clamp(150px, min(11.7vw, 24vh), 225px);
 }
 
 .hero-fan-card {
   position: absolute;
   left: 50%;
   top: 10px;
-  width: 226px;
-  height: 295px;
+  width: var(--fan-card-w);
+  height: auto;
+  aspect-ratio: 3 / 4;
   border-radius: 18px;
   background: var(--charcoal);
   border: 1px solid rgba(247, 243, 238, 0.16);

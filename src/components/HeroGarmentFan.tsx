@@ -365,43 +365,64 @@ export default function HeroGarmentFan({
 
     const absDiff = Math.abs(diff);
 
-    // Tangent Arc Geometry matching NOVA reference (wide, symmetrical fan arc):
-    // Radius of circular wheel and angle step per card
-    const R = isMobile ? 540 : isTablet ? 820 : 1080;
-    const angleStepDeg = isMobile ? 7.6 : isTablet ? 8.2 : 8.8;
-    const thetaDeg = diff * angleStepDeg;
-    const thetaRad = (thetaDeg * Math.PI) / 180;
-
-    // Circle arc tangent coordinates:
-    const translateX = R * Math.sin(thetaRad);
-    const translateY = R * (1 - Math.cos(thetaRad));
-    const rotateZ = thetaDeg;
-
     // 3D Perspective Rotation (Y-axis tilt):
     // Inward facing curvature + direction-aware drag tilt
     const baseRotateY = -diff * (isMobile ? 2.0 : 2.6);
     const dynamicTilt = dragTiltRef.current * Math.max(0.3, 1 - absDiff * 0.18);
     const totalRotateY = baseRotateY + dynamicTilt;
 
-    const scaleStep = isMobile ? 0.065 : 0.075;
-    const scale = Math.max(0.64, (isMobile ? 1.04 : 1.08) - absDiff * scaleStep);
+    let transformString = "";
+    let scale = 1;
+    let opacity = 0;
+
+    const maxVisibleRadius = 3.5;
+
+    if (!isMobile && !isTablet) {
+      // Desktop polynomial curves expressed in card-widths matching NOVA reference
+      const a = absDiff;
+      const tx = Math.sign(diff) * (1.245 * a - 0.025 * Math.pow(a, 3));
+      const ty = 0.2 * Math.pow(a, 2) - 0.0067 * Math.pow(a, 4);
+      const rotateZ = diff * 8.8;
+
+      const scaleStep = 0.03;
+      scale = Math.max(0.64, 1.04 - absDiff * scaleStep);
+
+      if (absDiff < maxVisibleRadius) {
+        const normalizedDist = absDiff / maxVisibleRadius;
+        opacity = Math.pow(Math.cos((normalizedDist * Math.PI) / 2), 0.45);
+      }
+
+      transformString = `translateX(calc(-50% + ${tx.toFixed(4)} * var(--fan-card-w))) translateY(calc(${ty.toFixed(4)} * var(--fan-card-w))) rotateZ(${rotateZ.toFixed(2)}deg) rotateY(${totalRotateY.toFixed(2)}deg) scale(${scale.toFixed(3)})`;
+    } else {
+      // Tablet and Mobile circular-arc calculation (unchanged)
+      const R = isMobile ? 540 : 820;
+      const angleStepDeg = isMobile ? 7.6 : 8.2;
+      const thetaDeg = diff * angleStepDeg;
+      const thetaRad = (thetaDeg * Math.PI) / 180;
+
+      const translateX = R * Math.sin(thetaRad);
+      const translateY = R * (1 - Math.cos(thetaRad));
+      const rotateZ = thetaDeg;
+
+      const scaleStep = isMobile ? 0.065 : 0.075;
+      scale = Math.max(0.64, (isMobile ? 1.04 : 1.08) - absDiff * scaleStep);
+
+      if (absDiff < maxVisibleRadius) {
+        const normalizedDist = absDiff / maxVisibleRadius;
+        opacity = Math.pow(Math.cos((normalizedDist * Math.PI) / 2), 0.78);
+      }
+
+      transformString = `translateX(calc(-50% + ${translateX.toFixed(2)}px)) translateY(${translateY.toFixed(2)}px) rotateZ(${rotateZ.toFixed(2)}deg) rotateY(${totalRotateY.toFixed(2)}deg) scale(${scale.toFixed(3)})`;
+    }
 
     // Stacking order: center card has highest prominence (15), outer cards cascade down
     const zIndex = Math.max(1, Math.round((5 - absDiff) * 3));
-
-    // Smooth progressive fade curve matching reference image (1 center + 3 left + 3 right = 7 cards visible):
-    const maxVisibleRadius = 3.5;
-    let opacity = 0;
-    if (absDiff < maxVisibleRadius) {
-      const normalizedDist = absDiff / maxVisibleRadius;
-      opacity = Math.pow(Math.cos((normalizedDist * Math.PI) / 2), 0.78);
-    }
 
     const brightness = Math.max(0.88, 1 - absDiff * 0.024);
     const isCenter = absDiff < 0.35;
 
     return {
-      transform: `translateX(calc(-50% + ${translateX.toFixed(2)}px)) translateY(${translateY.toFixed(2)}px) rotateZ(${rotateZ.toFixed(2)}deg) rotateY(${totalRotateY.toFixed(2)}deg) scale(${scale.toFixed(3)})`,
+      transform: transformString,
       zIndex,
       opacity: opacity.toFixed(3),
       filter: `brightness(${brightness.toFixed(3)})`,
