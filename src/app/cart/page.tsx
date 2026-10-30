@@ -1,11 +1,17 @@
 "use client";
 
-import { useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useCart } from "@/context/CartContext";
-import { formatCartCurrency } from "@/lib/cart/cart-utils";
+import { formatCartCurrency, STORE_WHATSAPP_NUMBER } from "@/lib/cart/cart-utils";
 import { getOptimizedImageUrl } from "@/lib/images/responsive";
 import { WhatsAppIcon, ArrowRightIcon } from "@/components/Icons";
+import {
+  generateOrderReference,
+  executeWhatsAppPdfCheckout,
+  generateOrderPdfBlob,
+  downloadPdfBlob,
+} from "@/lib/cart/order-pdf";
 
 export default function CartPage() {
   const {
@@ -28,6 +34,107 @@ export default function CartPage() {
   } = useCart();
 
   const selectAllInputRef = useRef<HTMLInputElement>(null);
+  const [isProcessingOrder, setIsProcessingOrder] = useState(false);
+  const [isDownloadingPdfOnly, setIsDownloadingPdfOnly] = useState(false);
+  const [downloadNotice, setDownloadNotice] = useState<{
+    orderRef: string;
+    blob?: Blob;
+    waUrl?: string;
+    orderUrl?: string;
+  } | null>(null);
+  const [orderError, setOrderError] = useState<string | null>(null);
+
+  const handleWhatsAppCheckout = useCallback(async () => {
+    if (isProcessingOrder || isDownloadingPdfOnly || selectedCount === 0) return;
+
+    setIsProcessingOrder(true);
+    setOrderError(null);
+
+    try {
+      const orderRef = generateOrderReference();
+
+      const preparedItems = selectedItems.map((item) => ({
+        item,
+        pricing: getItemPricing(item, selectedItems),
+        productUrl: `/product/${item.slug}`,
+        imageUrl: item.image,
+      }));
+
+      const result = await executeWhatsAppPdfCheckout(
+        {
+          orderRef,
+          items: preparedItems,
+          selectedCount,
+          selectedTotalUnits,
+          totals: selectedTotals,
+        },
+        STORE_WHATSAPP_NUMBER
+      );
+
+      if (result.success) {
+        // Direct navigation fallback in case not already handled in checkout helper
+        if (!result.navigated && result.waUrl && typeof window !== "undefined") {
+          window.location.href = result.waUrl;
+        }
+      } else {
+        setOrderError(result.error || "Failed to create order or upload invoice. Please try again.");
+      }
+    } catch (err) {
+      console.error("[Cart] Checkout error:", err);
+      setOrderError("An unexpected error occurred while preparing your order.");
+    } finally {
+      setIsProcessingOrder(false);
+    }
+  }, [
+    isProcessingOrder,
+    isDownloadingPdfOnly,
+    selectedCount,
+    selectedItems,
+    selectedTotalUnits,
+    selectedTotals,
+    getItemPricing,
+  ]);
+
+  const handleDownloadPdfOnly = useCallback(async () => {
+    if (isDownloadingPdfOnly || isProcessingOrder || selectedCount === 0) return;
+
+    setIsDownloadingPdfOnly(true);
+    setOrderError(null);
+
+    try {
+      const orderRef = generateOrderReference();
+      const preparedItems = selectedItems.map((item) => ({
+        item,
+        pricing: getItemPricing(item, selectedItems),
+        productUrl: `/product/${item.slug}`,
+        imageUrl: item.image,
+      }));
+
+      const { blob } = await generateOrderPdfBlob({
+        orderRef,
+        items: preparedItems,
+        selectedCount,
+        selectedTotalUnits,
+        totals: selectedTotals,
+      });
+
+      downloadPdfBlob(blob, `order-${orderRef}.pdf`);
+      setDownloadNotice({ orderRef, blob });
+    } catch (err) {
+      console.error("[Cart] PDF download error:", err);
+      setOrderError("Failed to generate order PDF. Please try again.");
+    } finally {
+      setIsDownloadingPdfOnly(false);
+    }
+  }, [
+    isDownloadingPdfOnly,
+    isProcessingOrder,
+    selectedCount,
+    selectedItems,
+    selectedTotalUnits,
+    selectedTotals,
+    getItemPricing,
+  ]);
   const showSelectionControls = items.length > 1;
   const isAllSelected = items.length > 0 && selectedCount === items.length;
 
@@ -474,24 +581,33 @@ export default function CartPage() {
 
                 {/* Primary WhatsApp Order Action */}
                 {selectedCount > 0 ? (
-                  <a
-                    href={getWhatsAppOrderUrl()}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="cart-whatsapp-cta"
+                  <button
+                    type="button"
+                    onClick={handleWhatsAppCheckout}
+                    disabled={isProcessingOrder}
+                    className={`cart-whatsapp-cta ${isProcessingOrder ? "cart-whatsapp-cta--loading" : ""}`}
                     aria-label={
                       showSelectionControls
                         ? `Order ${selectedCount} selected items via WhatsApp`
                         : "Order via WhatsApp directly with Style Edit"
                     }
                   >
-                    <WhatsAppIcon size={20} />
-                    <span>
-                      {showSelectionControls
-                        ? `Order via WhatsApp (${selectedCount})`
-                        : "Order via WhatsApp"}
-                    </span>
-                  </a>
+                    {isProcessingOrder ? (
+                      <>
+                        <span className="cart-btn-spinner" aria-hidden="true" />
+                        <span>Creating Order & Invoice...</span>
+                      </>
+                    ) : (
+                      <>
+                        <WhatsAppIcon size={20} />
+                        <span>
+                          {showSelectionControls
+                            ? `Order via WhatsApp (${selectedCount})`
+                            : "Order via WhatsApp"}
+                        </span>
+                      </>
+                    )}
+                  </button>
                 ) : (
                   <button
                     type="button"
@@ -505,17 +621,85 @@ export default function CartPage() {
                   </button>
                 )}
 
-                {showSelectionControls && selectedCount === 0 && (
+                {/* Secondary Desktop / Manual Download PDF Action */}
+                {selectedCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleDownloadPdfOnly}
+                    disabled={isProcessingOrder || isDownloadingPdfOnly}
+                    className="cart-download-pdf-btn"
+                    title="Download order summary PDF with images directly to your device"
+                  >
+                    {isDownloadingPdfOnly ? (
+                      <>
+                        <span className="cart-btn-spinner cart-btn-spinner--subtle" aria-hidden="true" />
+                        <span>Preparing PDF...</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg
+                          width="15"
+                          height="15"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                          <polyline points="7 10 12 15 17 10" />
+                          <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                        <span>Download Order PDF</span>
+                      </>
+                    )}
+                  </button>
+                )}
+
+                {/* Clear Notice for Manual Download PDF Action */}
+                {downloadNotice && (
+                  <div className="cart-pdf-notice" role="status">
+                    <div className="cart-pdf-notice-body">
+                      <div className="cart-pdf-notice-badge">Order PDF Generated</div>
+                      <p className="cart-pdf-notice-text">
+                        Invoice PDF for order <strong>{downloadNotice.orderRef}</strong> has been downloaded to your device.
+                      </p>
+                    </div>
+                    <div className="cart-pdf-notice-actions">
+                      <div className="cart-pdf-notice-btn-group">
+                        {downloadNotice.blob && (
+                          <button
+                            type="button"
+                            onClick={() => downloadPdfBlob(downloadNotice.blob!, `order-${downloadNotice.orderRef}.pdf`)}
+                            className="cart-pdf-notice-action-btn"
+                          >
+                            Re-download PDF
+                          </button>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setDownloadNotice(null)}
+                        className="cart-pdf-notice-dismiss-btn"
+                        aria-label="Dismiss notice"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {orderError && (
                   <p className="cart-whatsapp-warning" role="alert">
-                    Please select at least one item to proceed with your WhatsApp order.
+                    {orderError}
                   </p>
                 )}
 
-                {selectedCount > 0 && (
-                  <p className="cart-whatsapp-disclaimer">
-                    {showSelectionControls
-                      ? `Clicking will open WhatsApp with your ${selectedCount} selected ${selectedCount === 1 ? "item" : "items"} and totals pre-filled for our store team to verify availability.`
-                      : "Clicking will open WhatsApp with your items and totals pre-filled for our store team to verify availability."}
+                {showSelectionControls && selectedCount === 0 && (
+                  <p className="cart-whatsapp-warning" role="alert">
+                    Please select at least one item to proceed with your WhatsApp order.
                   </p>
                 )}
 

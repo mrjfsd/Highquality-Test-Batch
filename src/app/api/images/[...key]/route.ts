@@ -120,6 +120,14 @@ export async function GET(
     });
   }
 
+  // Strict isolation: block access to order documents (PDF / JSON) via the general image proxy
+  if (objectKey.startsWith("orders/") || objectKey.startsWith("/orders/")) {
+    return new Response(JSON.stringify({ error: "Access to order documents is restricted." }), {
+      status: 403,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   const cacheControl = getCacheControlHeader(objectKey);
 
   // Parse query parameters

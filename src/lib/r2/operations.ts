@@ -6,7 +6,7 @@ import {
   ListObjectsV2Command,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { createR2Client, getR2BucketName } from "./client";
+import { createR2Client, getR2BucketName } from "./client.ts";
 
 /**
  * Generates a presigned PUT URL that the server can hand to the browser for
@@ -32,6 +32,32 @@ export async function generatePresignedUploadUrl(
   });
 
   return getSignedUrl(client, command, { expiresIn: 600 });
+}
+
+/**
+ * Uploads an object directly to the private R2 bucket from the server.
+ * Used for server-side order snapshots (order.json) and generated invoices (invoice.pdf).
+ *
+ * @param objectKey   The full key (path) the object will be stored at.
+ * @param body        The object body (Buffer, Uint8Array, or string).
+ * @param contentType The MIME content type.
+ */
+export async function putR2Object(
+  objectKey: string,
+  body: Uint8Array | Buffer | string,
+  contentType: string
+): Promise<void> {
+  const client = createR2Client();
+  const bucket = getR2BucketName();
+
+  await client.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: objectKey,
+      Body: body,
+      ContentType: contentType,
+    })
+  );
 }
 
 /**
