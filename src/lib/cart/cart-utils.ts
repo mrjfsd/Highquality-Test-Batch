@@ -289,23 +289,35 @@ export function sanitizeCartItems(raw: unknown): CartItem[] {
  *
 /**
  * Resolves the canonical base URL for the deployed storefront.
- * Checks environment configuration with fallback to runtime origin or default domain.
+ * Checks environment configuration with fallback to runtime origin, Vercel system variables, or active production deployment.
  */
 export function getCanonicalSiteUrl(): string {
   const envUrl =
     process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.SITE_URL ||
     process.env.NEXT_PUBLIC_APP_URL ||
     process.env.NEXT_PUBLIC_CANONICAL_URL;
 
   if (envUrl && typeof envUrl === "string" && envUrl.trim().length > 0) {
-    return envUrl.trim().replace(/\/+$/, "");
+    const trimmed = envUrl.trim().replace(/\/+$/, "");
+    return trimmed.startsWith("http") ? trimmed : `https://${trimmed}`;
   }
 
   if (typeof window !== "undefined" && window.location?.origin) {
     return window.location.origin.replace(/\/+$/, "");
   }
 
-  return "https://style-edit.com";
+  const vercelProjectUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  if (vercelProjectUrl && typeof vercelProjectUrl === "string" && vercelProjectUrl.trim().length > 0) {
+    return `https://${vercelProjectUrl.trim().replace(/\/+$/, "")}`;
+  }
+
+  const vercelUrl = process.env.VERCEL_URL;
+  if (vercelUrl && typeof vercelUrl === "string" && vercelUrl.trim().length > 0) {
+    return `https://${vercelUrl.trim().replace(/\/+$/, "")}`;
+  }
+
+  return "https://highquality-test-batch.vercel.app";
 }
 
 /**

@@ -808,6 +808,12 @@ export async function executeWhatsAppPdfCheckout(
 
     const { orderUrl, invoiceUrl, token } = await res.json();
 
+    // Ensure the order URL resolves to the verified deployment origin
+    const finalOrderUrl =
+      orderUrl && orderUrl.startsWith("http") && !orderUrl.includes("styleedit.in")
+        ? orderUrl
+        : `${typeof window !== "undefined" && window.location?.origin ? window.location.origin : getCanonicalSiteUrl()}/order/${token}`;
+
     // 4. Generate the direct wa.me URL containing the shareable order page link
     const waUrl = generatePdfWhatsAppUrl(
       {
@@ -815,7 +821,7 @@ export async function executeWhatsAppPdfCheckout(
         selectedCount: input.selectedCount,
         selectedTotalUnits: input.selectedTotalUnits,
         totals: input.totals,
-        orderUrl,
+        orderUrl: finalOrderUrl,
       },
       storePhone
     );
@@ -836,7 +842,7 @@ export async function executeWhatsAppPdfCheckout(
       success: true,
       orderRef,
       token,
-      orderUrl,
+      orderUrl: finalOrderUrl,
       invoiceUrl,
       blob,
       waUrl,
