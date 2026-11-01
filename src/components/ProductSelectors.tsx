@@ -475,7 +475,7 @@ export default function ProductSelectors({ product }: ProductSelectorsProps) {
           {pricingCalculation.hasOfferApplied ? (
             <div className="detail-offer-pricing-preview">
               <div>
-                <span style={{ fontSize: "11px", color: "var(--muted, #6B6760)", marginRight: "6px" }}>
+                <span style={{ fontSize: "11px", color: "rgba(247, 243, 238, 0.7)", marginRight: "6px" }}>
                   For {quantity} {quantity === 1 ? "item" : "items"}:
                 </span>
                 <span className="old-subtotal">{formatPrice(pricingCalculation.regularSubtotal)}</span>
