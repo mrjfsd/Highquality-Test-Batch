@@ -56,12 +56,21 @@ function BrandLockup({ onClick }: { onClick?: (e: React.MouseEvent<HTMLAnchorEle
   );
 }
 
-export default function Navbar() {
+interface NavbarProps {
+  initialShowSaleLink?: boolean;
+}
+
+export default function Navbar({ initialShowSaleLink = true }: NavbarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [showSaleLink, setShowSaleLink] = useState<boolean>(true);
+  const [showSaleLink, setShowSaleLink] = useState<boolean>(initialShowSaleLink);
   const { totalCount, isLoaded } = useCart();
   const pathname = usePathname();
   const isHome = pathname === "/";
+
+  // Synchronize state when initialShowSaleLink changes from server / props
+  useEffect(() => {
+    setShowSaleLink(initialShowSaleLink);
+  }, [initialShowSaleLink]);
 
   // Prevent background scrolling when mobile menu is open
   useEffect(() => {

@@ -740,6 +740,13 @@ export interface CheckoutPdfResult {
   waUrl?: string;
   navigated?: boolean;
   error?: string;
+  conflictItem?: {
+    name?: string;
+    size?: string | null;
+    color?: string | null;
+    requested?: number;
+    available?: number;
+  };
 }
 
 /**
@@ -765,12 +772,14 @@ export async function executeWhatsAppPdfCheckout(
     // 2. Prepare order payload for server-side R2 upload
     const orderDataPayload = {
       clientOrderRef: orderRef,
+      idempotencyKey: orderRef,
       selectedCount: input.selectedCount,
       selectedTotalUnits: input.selectedTotalUnits,
       totals: input.totals,
       items: input.items.map((entry) => ({
         id: entry.item.id,
         productId: entry.item.productId,
+        variantId: entry.item.variantId || null,
         name: entry.item.name,
         slug: entry.item.slug,
         image: entry.item.image,
@@ -794,8 +803,9 @@ export async function executeWhatsAppPdfCheckout(
     const formData = new FormData();
     formData.append("pdf", blob, `order-${orderRef}.pdf`);
     formData.append("orderData", JSON.stringify(orderDataPayload));
+    formData.append("idempotencyKey", orderRef);
 
-    // 3. Upload to server-side endpoint which stores invoice.pdf and order.json in R2
+    // 3. Upload to server-side endpoint which verifies inventory and stores invoice.pdf & order.json in R2
     const res = await fetch("/api/orders", {
       method: "POST",
       body: formData,
@@ -803,7 +813,12 @@ export async function executeWhatsAppPdfCheckout(
 
     if (!res.ok) {
       const errJson = await res.json().catch(() => ({}));
-      throw new Error(errJson.error || `Server upload failed with status ${res.status}`);
+      return {
+        success: false,
+        orderRef,
+        error: errJson.message || errJson.error || `Server order failed with status ${res.status}`,
+        conflictItem: errJson.item,
+      };
     }
 
     const { orderUrl, invoiceUrl, token } = await res.json();

@@ -145,7 +145,8 @@ export async function POST(request: NextRequest) {
     // Revalidate customer-facing homepage and settings endpoint so Vercel edge/ISR reflects updates immediately
     try {
       revalidateTag("site-settings", "max");
-      revalidatePath("/", "page");
+      revalidateTag("navbar", "max");
+      revalidatePath("/", "layout");
       revalidatePath("/api/settings");
     } catch (revalidateErr) {
       console.warn("[api/admin/settings] Revalidation notice:", revalidateErr);

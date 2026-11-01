@@ -15,6 +15,7 @@ import SectionHeading from "@/components/SectionHeading";
 import Icon from "@/components/Icon";
 import { ProductColorProvider } from "@/components/ProductColorContext";
 import { areColorsMatching } from "@/lib/products/colors";
+import ProductScrollReset from "@/components/ProductScrollReset";
 
 const dosis = Dosis({
   subsets: ["latin"],
@@ -92,6 +93,7 @@ export default async function ProductDetailPage({ params }: Props) {
 
   return (
     <main className={`detail ${dosis.className} ${dosis.variable}`}>
+      <ProductScrollReset />
       {/* Top navigation bar: Back button + Breadcrumb */}
       <div className="detail-top-nav">
         <Link

@@ -19,6 +19,7 @@ export interface CartItem {
   size?: string | null;
   color?: string | null;
   quantity: number;
+  stockQuantity?: number | null;
 }
 
 export interface AddToCartInput {
@@ -47,6 +48,7 @@ export interface AddToCartInput {
   size?: string | null;
   color?: string | null;
   quantity?: number;
+  stockQuantity?: number | null;
 }
 
 import type { ProductQuantityOffer, ItemPriceCalculation } from "./offers";
@@ -87,4 +89,9 @@ export interface CartContextValue {
   selectedTotals: CartTotalsBreakdown;
   selectedCount: number;
   selectedTotalUnits: number;
+  // Real-time inventory tracking & validation
+  validateCartInventory: () => Promise<void>;
+  isInventoryValidating: boolean;
+  hasInventoryConflict: boolean;
+  inventoryErrors: Record<string, string>;
 }

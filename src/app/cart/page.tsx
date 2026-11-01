@@ -31,6 +31,10 @@ export default function CartPage() {
     selectedTotals,
     selectedCount,
     selectedTotalUnits,
+    validateCartInventory,
+    hasInventoryConflict,
+    inventoryErrors,
+    isInventoryValidating,
   } = useCart();
 
   const selectAllInputRef = useRef<HTMLInputElement>(null);
@@ -44,13 +48,21 @@ export default function CartPage() {
   } | null>(null);
   const [orderError, setOrderError] = useState<string | null>(null);
 
+  // Validate live inventory when cart page mounts
+  useEffect(() => {
+    validateCartInventory();
+  }, [validateCartInventory]);
+
   const handleWhatsAppCheckout = useCallback(async () => {
-    if (isProcessingOrder || isDownloadingPdfOnly || selectedCount === 0) return;
+    if (isProcessingOrder || isDownloadingPdfOnly || selectedCount === 0 || hasInventoryConflict) return;
 
     setIsProcessingOrder(true);
     setOrderError(null);
 
     try {
+      // Re-verify inventory right before checkout
+      await validateCartInventory();
+
       const orderRef = generateOrderReference();
 
       const preparedItems = selectedItems.map((item) => ({
@@ -78,10 +90,13 @@ export default function CartPage() {
         }
       } else {
         setOrderError(result.error || "Failed to create order or upload invoice. Please try again.");
+        // Refresh inventory to update warning badges
+        await validateCartInventory();
       }
     } catch (err) {
       console.error("[Cart] Checkout error:", err);
       setOrderError("An unexpected error occurred while preparing your order.");
+      await validateCartInventory();
     } finally {
       setIsProcessingOrder(false);
     }
@@ -89,10 +104,12 @@ export default function CartPage() {
     isProcessingOrder,
     isDownloadingPdfOnly,
     selectedCount,
+    hasInventoryConflict,
     selectedItems,
     selectedTotalUnits,
     selectedTotals,
     getItemPricing,
+    validateCartInventory,
   ]);
 
   const handleDownloadPdfOnly = useCallback(async () => {
@@ -279,6 +296,11 @@ export default function CartPage() {
                     isSelected ? selectedItems : [item]
                   );
 
+                  const itemStock = typeof item.stockQuantity === "number" ? item.stockQuantity : undefined;
+                  const isItemOutOfStock = itemStock !== undefined && itemStock <= 0;
+                  const isItemExceeded = itemStock !== undefined && itemStock > 0 && item.quantity > itemStock;
+                  const hasStockIssue = isItemOutOfStock || isItemExceeded;
+
                   return (
                     <li
                       key={item.id}
@@ -288,7 +310,7 @@ export default function CartPage() {
                             ? "cart-item-card--selected"
                             : "cart-item-card--unselected"
                           : "cart-item-card--single"
-                      }`}
+                      } ${hasStockIssue ? "cart-item-card--stock-conflict" : ""}`}
                     >
                       {/* Selection Checkbox — Only rendered when 2 or more distinct lines exist */}
                       {showSelectionControls && (
@@ -358,6 +380,35 @@ export default function CartPage() {
                             </span>
                           </div>
 
+                          {/* Inventory Stock Warning / Conflict Indicators */}
+                          {isItemOutOfStock ? (
+                            <div className="cart-item-stock-warning cart-item-stock-warning--out" role="alert">
+                              <span className="stock-warning-badge">OUT OF STOCK</span>
+                              <span className="stock-warning-msg">This item is currently sold out.</span>
+                            </div>
+                          ) : isItemExceeded ? (
+                            <div className="cart-item-stock-warning cart-item-stock-warning--exceeded" role="alert">
+                              <span className="stock-warning-badge">INSUFFICIENT STOCK</span>
+                              <span className="stock-warning-msg">
+                                Only <strong>{itemStock}</strong> available (requested {item.quantity}).
+                              </span>
+                              <button
+                                type="button"
+                                className="stock-warning-adjust-btn"
+                                onClick={() => updateQuantity(item.id, itemStock!)}
+                                title={`Set quantity to available ${itemStock}`}
+                              >
+                                Set to {itemStock}
+                              </button>
+                            </div>
+                          ) : itemStock !== undefined && itemStock <= 3 ? (
+                            <div className="cart-item-stock-warning cart-item-stock-warning--low">
+                              <span className="stock-warning-low-msg">
+                                Only {itemStock} remaining in stock
+                              </span>
+                            </div>
+                          ) : null}
+
                           {/* Applicable Offer & Savings — Minimal unbordered presentation */}
                           {pricing.appliedOffer && pricing.discountAmount > 0 ? (
                             <div className="cart-item-offer-plain">
@@ -418,8 +469,9 @@ export default function CartPage() {
                                 type="button"
                                 className="cart-qty-btn"
                                 onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                                disabled={itemStock !== undefined && item.quantity >= itemStock}
                                 aria-label="Increase quantity"
-                                title="Increase quantity"
+                                title={itemStock !== undefined && item.quantity >= itemStock ? `Only ${itemStock} available in stock` : "Increase quantity"}
                               >
                                 <svg
                                   width="12"
@@ -579,23 +631,46 @@ export default function CartPage() {
                   </div>
                 </div>
 
+                {/* Stock conflict banner above WhatsApp checkout */}
+                {hasInventoryConflict && (
+                  <div className="cart-inventory-conflict-alert" role="alert">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="8" x2="12" y2="12" />
+                      <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                    <span>
+                      Some selected items exceed available inventory. Please adjust quantities before ordering.
+                    </span>
+                  </div>
+                )}
+
                 {/* Primary WhatsApp Order Action */}
                 {selectedCount > 0 ? (
                   <button
                     type="button"
                     onClick={handleWhatsAppCheckout}
-                    disabled={isProcessingOrder}
-                    className={`cart-whatsapp-cta ${isProcessingOrder ? "cart-whatsapp-cta--loading" : ""}`}
+                    disabled={isProcessingOrder || hasInventoryConflict}
+                    className={`cart-whatsapp-cta ${
+                      isProcessingOrder
+                        ? "cart-whatsapp-cta--loading"
+                        : hasInventoryConflict
+                        ? "cart-whatsapp-cta--disabled"
+                        : ""
+                    }`}
                     aria-label={
-                      showSelectionControls
+                      hasInventoryConflict
+                        ? "Order disabled: Please adjust quantities to match available stock"
+                        : showSelectionControls
                         ? `Order ${selectedCount} selected items via WhatsApp`
                         : "Order via WhatsApp directly with Style Edit"
                     }
+                    title={hasInventoryConflict ? "Please adjust item quantities to available stock" : undefined}
                   >
                     {isProcessingOrder ? (
                       <>
                         <span className="cart-btn-spinner" aria-hidden="true" />
-                        <span>Creating Order & Invoice...</span>
+                        <span>Processing order...</span>
                       </>
                     ) : (
                       <>

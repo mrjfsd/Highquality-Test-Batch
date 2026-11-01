@@ -9,7 +9,18 @@ import Link from "next/link";
 import HomeScrollAnimator from "@/components/HomeScrollAnimator";
 import HeroGarmentFan from "@/components/HeroGarmentFan";
 import HeroMotion from "@/components/HeroMotion";
-import { getPromoBannerConfig, PromoBannerConfig } from "@/lib/settings/site-settings";
+import {
+  getPromoBannerConfig,
+  PromoBannerConfig,
+  getHeroCardsConfig,
+  getHomepageFavouritesConfig,
+  getHomepageFormPerspectiveConfig,
+} from "@/lib/settings/site-settings";
+import type {
+  HeroCardConfigItem,
+  HomepageFavouriteItem,
+  HomepageFormPerspectiveItem,
+} from "@/types/homepage-images";
 
 export const metadata: Metadata = {
   title: "Style-Edit | Considered Everyday Fashion",
@@ -29,15 +40,15 @@ type ImageProps = {
 };
 
 const images = {
-  men: "https://images.unsplash.com/photo-1592409039573-5a135408dcc4?auto=format&fit=crop&w=900&q=86",
-  women: "https://images.unsplash.com/photo-1590399830217-8db7489f911e?auto=format&fit=crop&w=900&q=86",
+  men: "https://plus.unsplash.com/premium_photo-1727942420153-8573424d2a83?q=80&w=735&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=NHwxMjA3fDA%3D",
+  women: "https://images.unsplash.com/photo-1673610178158-1c4c5b7e4d98?q=80&w=627&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=NHwxMjA3fDA%3D",
   kids: "https://images.unsplash.com/photo-1758851552775-7353c60e4906?auto=format&fit=crop&w=900&q=86",
   productOne: "https://images.unsplash.com/photo-1676165303734-5c2b9dd394af?auto=format&fit=crop&w=800&q=85",
   productTwo: "https://images.unsplash.com/photo-1585685674190-5b11f080af33?auto=format&fit=crop&w=800&q=85",
   productThree: "https://images.unsplash.com/photo-1701844778607-3fe61e2f6e82?auto=format&fit=crop&w=800&q=85",
   productFour: "https://images.unsplash.com/photo-1706823934334-9fec8177bb4f?auto=format&fit=crop&w=800&q=85",
   editorial: "https://images.unsplash.com/photo-1697659991852-d700e2fd4098?auto=format&fit=crop&w=1400&q=88",
-  essentials: "https://images.unsplash.com/photo-1551488831-00ddcb6c6bd3?auto=format&fit=crop&w=1800&q=88",
+  essentials: "/assets/storefront-banner.jpg",
 };
 
 const departments = [
@@ -237,9 +248,9 @@ function HomePromotionalBanner({ banner }: { banner?: PromoBannerConfig | null }
               objectPosition: `${posX}% ${posY}%`,
               ...(zoom > 1
                 ? {
-                    transform: `scale(${zoom})`,
-                    transformOrigin: `${posX}% ${posY}%`,
-                  }
+                  transform: `scale(${zoom})`,
+                  transformOrigin: `${posX}% ${posY}%`,
+                }
                 : {}),
             }}
             loading="eager"
@@ -257,7 +268,13 @@ function HomePromotionalBanner({ banner }: { banner?: PromoBannerConfig | null }
 /* ── Section 3: Editorial Hero ── */
 const HERO_SCROLL_ID = "hero-scroll-outer";
 
-function HeroBanner({ isBannerActive = true }: { isBannerActive?: boolean }) {
+function HeroBanner({
+  isBannerActive = true,
+  heroCards,
+}: {
+  isBannerActive?: boolean;
+  heroCards?: HeroCardConfigItem[];
+}) {
   return (
     <div id={HERO_SCROLL_ID} className="hero-scroll-outer" aria-label="Hero scroll section">
       <div className="hero-scroll-sticky">
@@ -270,13 +287,14 @@ function HeroBanner({ isBannerActive = true }: { isBannerActive?: boolean }) {
             {/* Interactive Seven-Card Circular Fan Carousel */}
             <HeroGarmentFan
               isBannerActive={isBannerActive}
+              cards={heroCards}
               scrollContainerId={HERO_SCROLL_ID}
             />
 
             <p className="hero-fade-2 hero-motion-sub hero-description">
               Everyday style, thoughtfully chosen.
             </p>
-            
+
             {/* Refined editorial hero buttons with sophisticated solid/outline pairing */}
             <div className="hero-actions hero-fade-4 hero-motion-btns">
               <Link className="hero-btn hero-btn-primary" href="/shop/women" prefetch={true}>
@@ -363,7 +381,16 @@ function HomeProductCard({
   );
 }
 
-function FeaturedProducts() {
+function FeaturedProducts({ favourites }: { favourites?: HomepageFavouriteItem[] }) {
+  const products = sampleProducts.map((sp, idx) => {
+    const fav = favourites && favourites[idx] ? favourites[idx] : null;
+    return {
+      ...sp,
+      image: fav?.image || sp.image,
+      alt: fav?.alt || sp.alt,
+    };
+  });
+
   return (
     <section className="section favourites" id="favourites">
       <SectionHeading
@@ -373,7 +400,7 @@ function FeaturedProducts() {
         action={<TextLink href="/shop/women">View all</TextLink>}
       />
       <div className="product-grid">
-        {sampleProducts.map((product, index) => (
+        {products.map((product, index) => (
           <HomeProductCard product={product} index={index} key={product.name} />
         ))}
       </div>
@@ -382,7 +409,19 @@ function FeaturedProducts() {
 }
 
 /* ── Section 6: Editorial Scroll Showcase (2-Pair Scroll Transition) ── */
-function EditorialScrollShowcase() {
+function EditorialScrollShowcase({ items }: { items?: HomepageFormPerspectiveItem[] }) {
+  const imgSilhouette = items?.[0]?.image || "/assets/dummy-products/women/women-blazer-front.jpg";
+  const altSilhouette = items?.[0]?.alt || "Relaxed Linen Silhouette in natural stone";
+
+  const imgTexture = items?.[1]?.image || "/assets/dummy-products/men/men-knit-front.jpg";
+  const altTexture = items?.[1]?.alt || "Textured Everyday Knitwear in charcoal black";
+
+  const imgProfile = items?.[2]?.image || "/assets/dummy-products/women/women-blazer-side.jpg";
+  const altProfile = items?.[2]?.alt || "Relaxed Linen Blazer profile line";
+
+  const imgCraft = items?.[3]?.image || "/assets/dummy-products/men/men-knit-detail.jpg";
+  const altCraft = items?.[3]?.alt || "Considered Knitwear tactile rib detail";
+
   return (
     <section className="editorial-showcase" id="editorial" aria-label="Editorial Capsule">
       <div className="editorial-scroll-container">
@@ -412,8 +451,8 @@ function EditorialScrollShowcase() {
                 <div className="editorial-image-frame">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src="/assets/dummy-products/women/women-blazer-front.jpg"
-                    alt="Relaxed Linen Silhouette in natural stone"
+                    src={imgSilhouette}
+                    alt={altSilhouette}
                     className="editorial-image"
                     loading="lazy"
                     decoding="async"
@@ -440,8 +479,8 @@ function EditorialScrollShowcase() {
                 <div className="editorial-image-frame">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src="/assets/dummy-products/men/men-knit-front.jpg"
-                    alt="Textured Everyday Knitwear in charcoal black"
+                    src={imgTexture}
+                    alt={altTexture}
                     className="editorial-image"
                     loading="lazy"
                     decoding="async"
@@ -471,8 +510,8 @@ function EditorialScrollShowcase() {
                 <div className="editorial-image-frame">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src="/assets/dummy-products/women/women-blazer-side.jpg"
-                    alt="Relaxed Linen Blazer profile line"
+                    src={imgProfile}
+                    alt={altProfile}
                     className="editorial-image"
                     loading="lazy"
                     decoding="async"
@@ -499,8 +538,8 @@ function EditorialScrollShowcase() {
                 <div className="editorial-image-frame">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src="/assets/dummy-products/men/men-knit-detail.jpg"
-                    alt="Considered Knitwear tactile rib detail"
+                    src={imgCraft}
+                    alt={altCraft}
                     className="editorial-image"
                     loading="lazy"
                     decoding="async"
@@ -532,7 +571,7 @@ function CuratedCollection() {
       <div className="essentials-banner reveal-item">
         <SmartImage
           src={images.essentials}
-          alt="A carefully curated rail of timeless everyday clothing"
+          alt="STYLE EDIT store showcase in Mysuru — Everyday Essentials"
           className="essentials-image"
           sizes={RESPONSIVE_SIZES.fullBanner}
           width={1200}
@@ -568,17 +607,22 @@ function BrandStatement() {
 }
 
 export default async function HomePage() {
-  const banner = await getPromoBannerConfig();
+  const [banner, heroCards, favourites, formPerspective] = await Promise.all([
+    getPromoBannerConfig(),
+    getHeroCardsConfig(),
+    getHomepageFavouritesConfig(),
+    getHomepageFormPerspectiveConfig(),
+  ]);
   const isBannerActive = banner ? banner.enabled !== false : true;
 
   return (
     <main className="site-shell">
       <HomeScrollAnimator />
       <HomePromotionalBanner banner={banner} />
-      <HeroBanner isBannerActive={isBannerActive} />
+      <HeroBanner isBannerActive={isBannerActive} heroCards={heroCards} />
       <ShopByDepartment />
-      <FeaturedProducts />
-      <EditorialScrollShowcase />
+      <FeaturedProducts favourites={favourites} />
+      <EditorialScrollShowcase items={formPerspective} />
       <CuratedCollection />
       <BrandStatement />
     </main>

@@ -6245,6 +6245,28 @@ button.button-danger.button-loading *,
   stroke: #ffffff !important;
 }
 
+.app-shell .button-primary.button-loading,
+button.button-primary.button-loading,
+.button-primary.button-loading,
+.app-shell .button-primary.button-loading:disabled,
+button.button-primary.button-loading:disabled,
+.button-primary.button-loading:disabled {
+  opacity: 0.88 !important;
+  cursor: wait !important;
+  pointer-events: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+}
+
+.app-shell .button-primary.button-loading *,
+button.button-primary.button-loading *,
+.button-primary.button-loading * {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
 /* ==========================================================================
    Homepage Hero Cards Management Screen (Minimal 7-Slot Grid)
    ========================================================================== */
@@ -6419,5 +6441,129 @@ button.button-danger.button-loading *,
   object-fit: cover;
   display: block;
 }
+
+/* ==========================================================================
+   Homepage Image Management (15-Slot Multi-Section Admin)
+   ========================================================================== */
+
+.homepage-admin-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.homepage-jump-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 16px;
+  background-color: var(--admin-white, #ffffff);
+  border: 1px solid var(--admin-stone, #e8e4de);
+  border-radius: 8px;
+}
+
+.homepage-jump-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background-color: var(--admin-bg, #fcfbf9);
+  border: 1px solid var(--admin-stone, #e8e4de);
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--admin-charcoal, #1f1d1a);
+  cursor: pointer;
+  transition: all 160ms ease;
+}
+
+.homepage-jump-btn:hover {
+  background-color: #f2ece1;
+  border-color: #c9a96e;
+  color: #1a1816;
+}
+
+.homepage-jump-btn .jump-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background-color: #1f1d1a;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.homepage-jump-btn .jump-count {
+  font-size: 11px;
+  color: var(--admin-muted, #78716c);
+}
+
+.homepage-sections-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+}
+
+.homepage-section-block {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  background-color: var(--admin-white, #ffffff);
+  border: 1px solid var(--admin-stone, #e8e4de);
+  border-radius: 10px;
+  padding: 24px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+}
+
+.homepage-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 1px solid var(--admin-stone, #e8e4de);
+  padding-bottom: 16px;
+}
+
+.homepage-section-tag {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8c6d2f;
+  margin-bottom: 4px;
+}
+
+.homepage-section-title {
+  margin: 0 0 6px 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--admin-charcoal, #1f1d1a);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.homepage-count-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  background-color: #f3f0ea;
+  border: 1px solid #e2ddd5;
+  border-radius: 999px;
+  color: #575047;
+  letter-spacing: 0.02em;
+}
+
+.homepage-section-desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--admin-muted, #78716c);
+  max-width: 680px;
+  line-height: 1.5;
+}
+
 
 

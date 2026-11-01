@@ -4,20 +4,24 @@ import {
   getCatalogueMarqueeConfig,
   getNavbarConfig,
   getHeroCardsConfig,
+  getHomepageFavouritesConfig,
+  getHomepageFormPerspectiveConfig,
   DEFAULT_CATALOGUE_ADS,
 } from "@/lib/settings/site-settings";
 
 /**
  * GET /api/settings
- * Public endpoint delivering published storefront configuration (promotional banner, catalogue marquee ads, navbar, and hero cards).
+ * Public endpoint delivering published storefront configuration (promotional banner, catalogue marquee ads, navbar, and homepage images).
  */
 export async function GET(request: NextRequest) {
   try {
-    const [promoBanner, catalogueConfig, navbar, heroCards] = await Promise.all([
+    const [promoBanner, catalogueConfig, navbar, heroCards, favourites, formPerspective] = await Promise.all([
       getPromoBannerConfig(),
       getCatalogueMarqueeConfig(),
       getNavbarConfig(),
       getHeroCardsConfig(),
+      getHomepageFavouritesConfig(),
+      getHomepageFormPerspectiveConfig(),
     ]);
 
     // Active ads: non-empty trimmed strings
@@ -37,6 +41,8 @@ export async function GET(request: NextRequest) {
         },
         navbar,
         heroCards,
+        favourites,
+        formPerspective,
       },
       {
         headers: {

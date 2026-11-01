@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import StorefrontChrome from "@/components/StorefrontChrome";
+import { getNavbarConfig } from "@/lib/settings/site-settings";
 
 export const metadata: Metadata = {
   title: "Style-Edit | Considered Everyday Fashion",
@@ -18,15 +19,19 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const navbarConfig = await getNavbarConfig();
+
   return (
     <html lang="en">
       <body style={{ margin: 0, background: "#06110C", color: "#F7F3EE" }}>
-        <StorefrontChrome>{children}</StorefrontChrome>
+        <StorefrontChrome initialShowSaleLink={navbarConfig.showSaleLink}>
+          {children}
+        </StorefrontChrome>
       </body>
     </html>
   );

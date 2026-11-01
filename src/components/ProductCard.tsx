@@ -84,8 +84,13 @@ const ProductCard = React.memo(function ProductCard({
   // Determine available variants and sizes
   const availableVariants = useMemo(() => {
     if (!Array.isArray(product.variants) || product.variants.length === 0) return [];
-    return product.variants.filter((v) => v.is_available);
+    return product.variants.filter((v) => v.is_available && (v.stock_quantity === undefined || v.stock_quantity > 0));
   }, [product.variants]);
+
+  const isOutOfStock = useMemo(() => {
+    if (!Array.isArray(product.variants) || product.variants.length === 0) return false;
+    return availableVariants.length === 0;
+  }, [product.variants, availableVariants]);
 
   const availableSizes = useMemo(() => {
     const set = new Set<string>();
@@ -140,6 +145,11 @@ const ProductCard = React.memo(function ProductCard({
 
   const triggerAddToCart = (size?: string | null, variantId?: string | null, color?: string | null) => {
     const resolvedColorImage = color ? resolveProductColorImage(product, color) : null;
+    const match = availableVariants.find(
+      (v) => (variantId && v.id === variantId) || (size && v.size.toLowerCase() === size.toLowerCase())
+    );
+    const stockQty = match?.stock_quantity;
+
     addItem({
       product: {
         id: product.id,
@@ -154,6 +164,7 @@ const ProductCard = React.memo(function ProductCard({
       size: size || null,
       color: color || null,
       quantity: 1,
+      stockQuantity: stockQty,
     });
     setShowSizeSelector(false);
   };
@@ -240,7 +251,11 @@ const ProductCard = React.memo(function ProductCard({
           tabIndex={0}
           prefetch={true}
         >
-          {hasDiscount ? (
+          {isOutOfStock ? (
+            <span className="sale-tag out-of-stock-tag" aria-label="Out of Stock">
+              <span className="sale-tag-text">OUT OF STOCK</span>
+            </span>
+          ) : hasDiscount ? (
             <span className="sale-tag sale-tag--on-sale" aria-label="On Sale">
               <span className="sale-tag-text">ON SALE</span>
             </span>
@@ -412,15 +427,20 @@ const ProductCard = React.memo(function ProductCard({
 
           <button
             type="button"
-            className={`product-card-add-btn ${isInCart ? "in-cart" : ""}`}
-            onClick={handleQuickAddClick}
+            className={`product-card-add-btn ${isInCart ? "in-cart" : ""} ${isOutOfStock ? "product-card-add-btn--disabled" : ""}`}
+            onClick={isOutOfStock ? undefined : handleQuickAddClick}
+            disabled={isOutOfStock}
             aria-label={
-              isInCart
+              isOutOfStock
+                ? `${product.name} is out of stock`
+                : isInCart
                 ? `Remove ${product.name} from cart`
                 : `Add ${product.name} to cart`
             }
             title={
-              isInCart
+              isOutOfStock
+                ? "Out of stock"
+                : isInCart
                 ? "In cart — click to remove"
                 : availableSizes.length > 1
                 ? "Choose size to add"

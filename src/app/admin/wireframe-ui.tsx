@@ -6,11 +6,11 @@ import { verifyAdminAuthorization } from "@/lib/supabase/auth";
 import { compressImageForUpload, uploadToR2WithProgress } from "@/lib/images/client-compression";
 import { getProductDescriptionTemplate, isKnownDescriptionTemplate } from "@/lib/products/description-templates";
 import { BannerManagementScreen } from "./banner-management";
-import { HeroCardsManagementScreen } from "./hero-cards-management";
+import { HomepageManagementScreen } from "./homepage-management";
 import { QuantityOffersScreen } from "./quantity-offers-management";
 import { BulkUploadScreen } from "./bulk-upload";
 
-export type Page = "overview" | "intake" | "bulk" | "catalogue" | "editor" | "offers" | "media" | "banner" | "hero-cards";
+export type Page = "overview" | "intake" | "bulk" | "catalogue" | "editor" | "offers" | "media" | "banner" | "homepage" | "hero-cards";
 export type ProductStatus = "Published" | "Draft" | "Review" | "Archived";
 
 export interface LiveProductImage {
@@ -221,7 +221,7 @@ export const nav: { id: Page; label: string; icon: string }[] = [
   { id: "editor", label: "Edit Garment", icon: "edit" },
   { id: "offers", label: "Quantity Offers", icon: "tag" },
   { id: "banner", label: "Banner", icon: "image" },
-  { id: "hero-cards", label: "Hero Cards", icon: "image" },
+  { id: "homepage", label: "Homepage", icon: "image" },
 ];
 
 export function Icon({ name, size = 18 }: { name: string; size?: number }) {
@@ -940,6 +940,7 @@ export function Intake({
   const [restoredBannerVisible, setRestoredBannerVisible] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isSavingDrafts, setIsSavingDrafts] = useState(false);
+  const [isDeletingPhotos, setIsDeletingPhotos] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, { name?: string; price?: string; discountPercent?: string }>>({});
 
   useEffect(() => {
@@ -1176,33 +1177,80 @@ export function Intake({
   };
 
   const deleteSelectedPhotos = async () => {
-    const photosToDelete = session.photos.filter((p) => selectedPhotos.includes(p.id));
-    const storageKeysToDelete = photosToDelete
-      .map((p) => p.storagePath)
-      .filter((k): k is string => Boolean(k));
+    if (isDeletingPhotos || selectedPhotos.length === 0) return;
+    setIsDeletingPhotos(true);
 
-    if (storageKeysToDelete.length > 0) {
-      try {
-        await authFetch("/api/admin/images/cleanup", {
+    try {
+      const photosToDelete = session.photos.filter((p) => selectedPhotos.includes(p.id));
+      const storageKeysToDelete = photosToDelete
+        .map((p) => p.storagePath)
+        .filter((k): k is string => Boolean(k));
+
+      if (storageKeysToDelete.length > 0) {
+        const res = await authFetch("/api/admin/images/cleanup", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ keys: storageKeysToDelete }),
         });
-      } catch (err) {
-        console.warn("Cleanup error for unassigned photos:", err);
-      }
-    }
 
-    const updatedPhotos = session.photos.filter((p) => !selectedPhotos.includes(p.id));
-    const updatedSession: IntakeSession = {
-      ...session,
-      updatedAt: new Date().toISOString(),
-      photos: updatedPhotos,
-    };
-    persistSession(updatedSession);
-    setSelectedPhotos([]);
-    setConfirm(null);
-    showToast("Selected photos removed.");
+        if (!res.ok) {
+          let errorMsg = "Failed to clean up photos from storage.";
+          try {
+            const data = await res.json();
+            if (data?.error) errorMsg = data.error;
+          } catch {
+            // fallback
+          }
+          showToast(errorMsg);
+          // Keep dialog open and preserve affected selections for retry
+          setIsDeletingPhotos(false);
+          return;
+        }
+
+        const data = await res.json().catch(() => null);
+        if (data && data.deletedCount !== undefined && data.deletedCount < storageKeysToDelete.length) {
+          showToast(
+            `Warning: Only ${data.deletedCount} of ${storageKeysToDelete.length} files were cleaned from storage.`
+          );
+        }
+      }
+
+      // Successful deletion:
+      // Remove successfully deleted photos from the session
+      const updatedPhotos = session.photos.filter((p) => !selectedPhotos.includes(p.id));
+
+      // Also ensure any garment groups that referenced these photos have their photoIds updated
+      // while preserving remaining image ordering and primary-image selection
+      const updatedGroups = session.groups.map((group) => {
+        const remainingPhotoIds = group.photoIds.filter((id) => !selectedPhotos.includes(id));
+        let newPrimaryId = group.primaryPhotoId;
+        if (newPrimaryId && selectedPhotos.includes(newPrimaryId)) {
+          newPrimaryId = remainingPhotoIds[0] || undefined;
+        }
+        return {
+          ...group,
+          photoIds: remainingPhotoIds,
+          primaryPhotoId: newPrimaryId,
+        };
+      });
+
+      const updatedSession: IntakeSession = {
+        ...session,
+        updatedAt: new Date().toISOString(),
+        photos: updatedPhotos,
+        groups: updatedGroups,
+      };
+      persistSession(updatedSession);
+      setSelectedPhotos([]);
+      setConfirm(null);
+      showToast("Selected photos removed.");
+    } catch (err: any) {
+      console.error("[deleteSelectedPhotos] Error:", err);
+      showToast(err?.message || "An unexpected error occurred while deleting photos.");
+      // Dialog remains open, selection preserved for retry
+    } finally {
+      setIsDeletingPhotos(false);
+    }
   };
 
   const updatePhotoColor = (photoId: string, color: string) => {
@@ -1602,6 +1650,8 @@ export function Intake({
   };
 
   const publishReadyGarments = async () => {
+    if (isPublishing) return;
+
     const readyGroups = session.groups.filter(
       (g) => g.name.trim().length > 0 && parseFloat(g.price) > 0 && g.photoIds.length > 0
     );
@@ -1616,140 +1666,152 @@ export function Intake({
     let publishedCount = 0;
     const successfulGroupIds = new Set<string>();
     const updatedGroups = [...session.groups];
+    let lastError = "";
 
-    for (const group of readyGroups) {
-      const groupPhotos = session.photos.filter(
-        (p) => group.photoIds.includes(p.id) && p.storagePath
-      );
+    try {
+      for (const group of readyGroups) {
+        const groupPhotos = session.photos.filter(
+          (p) => group.photoIds.includes(p.id) && p.storagePath
+        );
 
-      const imagesPayload = groupPhotos.map((p, idx) => ({
-        storage_path: p.storagePath!,
-        alt_text: `${group.name} image ${idx + 1}`,
-        display_order: idx,
-        is_primary: group.primaryPhotoId ? p.id === group.primaryPhotoId : idx === 0,
-        mime_type: p.mimeType,
-        file_size_bytes: p.size,
-      color: p.color && p.color.trim() !== "" ? p.color.trim() : null,
-      }));
+        const imagesPayload = groupPhotos.map((p, idx) => ({
+          storage_path: p.storagePath!,
+          alt_text: `${group.name} image ${idx + 1}`,
+          display_order: idx,
+          is_primary: group.primaryPhotoId ? p.id === group.primaryPhotoId : idx === 0,
+          mime_type: p.mimeType,
+          file_size_bytes: p.size,
+          color: p.color && p.color.trim() !== "" ? p.color.trim() : null,
+        }));
 
-      const variantsPayload = group.variants.map((v) => ({
-        size: v.size?.trim() || "One Size",
-        color: v.color?.trim() || "Standard",
-        sku: v.sku?.trim() || null,
-        stock_quantity: parseInt(v.qty, 10) || 1,
-        is_available: v.is_available !== false,
-      }));
+        const variantsPayload = group.variants.map((v) => ({
+          size: v.size?.trim() || "One Size",
+          color: v.color?.trim() || "Standard",
+          sku: v.sku?.trim() || null,
+          stock_quantity: parseInt(v.qty, 10) || 1,
+          is_available: v.is_available !== false,
+        }));
 
-      try {
-        let res: Response;
-        const priceNum = parseFloat(group.price) || 0;
-        const isForSale = Boolean(group.forSale);
-        let finalDiscountPercent: number | null = null;
-        let finalSalePrice: number | null = null;
-        if (isForSale && group.discountPercent) {
-          finalDiscountPercent = Number(group.discountPercent);
-          finalSalePrice = Math.round(priceNum * ((100 - finalDiscountPercent) / 100) * 100) / 100;
-        }
+        try {
+          let res: Response;
+          const priceNum = parseFloat(group.price) || 0;
+          const isForSale = Boolean(group.forSale);
+          let finalDiscountPercent: number | null = null;
+          let finalSalePrice: number | null = null;
+          if (isForSale && group.discountPercent) {
+            finalDiscountPercent = Number(group.discountPercent);
+            finalSalePrice = Math.round(priceNum * ((100 - finalDiscountPercent) / 100) * 100) / 100;
+          }
 
-        const payload = {
-          name: group.name.trim(),
-          description: group.description?.trim() || null,
-          department: group.department.toLowerCase(),
-          category: group.category.trim(),
-          price: priceNum,
-          sale_price: finalSalePrice,
-          discount_percent: finalDiscountPercent,
-          fabric: group.fabric?.trim() || null,
-          fit: group.fit?.trim() || null,
-          status: "published",
-          variants: variantsPayload,
-          images: imagesPayload,
-        };
+          const payload = {
+            name: group.name.trim(),
+            description: group.description?.trim() || null,
+            department: group.department.toLowerCase(),
+            category: group.category.trim(),
+            price: priceNum,
+            sale_price: finalSalePrice,
+            discount_percent: finalDiscountPercent,
+            fabric: group.fabric?.trim() || null,
+            fit: group.fit?.trim() || null,
+            status: "published",
+            variants: variantsPayload,
+            images: imagesPayload,
+          };
 
-        if (group.savedProductId) {
-          res = await authFetch(`/api/admin/products/${group.savedProductId}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-        } else {
-          res = await authFetch("/api/admin/products", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-        }
+          if (group.savedProductId) {
+            res = await authFetch(`/api/admin/products/${group.savedProductId}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            });
+          } else {
+            res = await authFetch("/api/admin/products", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            });
+          }
 
-        if (res.ok) {
-          const json = await res.json();
-          group.savedProductId = json.product?.id || group.savedProductId;
-          group.status = "Published";
-          delete group.error;
-          successfulGroupIds.add(group.id);
-          publishedCount++;
-        } else {
-          const errData = await res.json().catch(() => ({}));
-          const errMsg = errData.error || `Publish failed (HTTP ${res.status})`;
+          if (res.ok) {
+            const json = await res.json();
+            group.savedProductId = json.product?.id || group.savedProductId;
+            group.status = "Published";
+            delete group.error;
+            successfulGroupIds.add(group.id);
+            publishedCount++;
+          } else {
+            const errData = await res.json().catch(() => ({}));
+            const errMsg = errData.error || `Publish failed (HTTP ${res.status})`;
+            lastError = errMsg;
+            const idx = updatedGroups.findIndex((g) => g.id === group.id);
+            if (idx >= 0) {
+              updatedGroups[idx] = { ...updatedGroups[idx], error: errMsg };
+            }
+          }
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : "Network error publishing garment";
+          lastError = errMsg;
+          console.error(`Error publishing ${group.name}:`, err);
           const idx = updatedGroups.findIndex((g) => g.id === group.id);
           if (idx >= 0) {
             updatedGroups[idx] = { ...updatedGroups[idx], error: errMsg };
           }
         }
-      } catch (err) {
-        const errMsg = err instanceof Error ? err.message : "Network error publishing garment";
-        console.error(`Error publishing ${group.name}:`, err);
-        const idx = updatedGroups.findIndex((g) => g.id === group.id);
-        if (idx >= 0) {
-          updatedGroups[idx] = { ...updatedGroups[idx], error: errMsg };
-        }
       }
-    }
 
-    const publishedPhotoIds = new Set(
-      session.groups
-        .filter((g) => successfulGroupIds.has(g.id))
-        .flatMap((g) => g.photoIds)
-    );
-
-    const remainingGroups = updatedGroups.filter((g) => !successfulGroupIds.has(g.id));
-    const remainingPhotos = session.photos.filter((p) => !publishedPhotoIds.has(p.id));
-
-    if (remainingGroups.length === 0) {
-      const nextBatchId = getNextBatchId(session.batchId);
-      const cleanSession: IntakeSession = {
-        batchId: nextBatchId,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        photos: remainingPhotos,
-        groups: [],
-      };
-      persistSession(cleanSession);
-      setRestoredBannerVisible(false);
-      if (typeof window !== "undefined") {
-        try {
-          localStorage.removeItem(INTAKE_STORAGE_KEY);
-          localStorage.removeItem(INTAKE_REVIEW_KEY);
-        } catch {
-          // ignore
-        }
-      }
-      showToast(`${publishedCount} garment(s) published successfully. Intake batch completed.`);
-    } else {
-      const partialSession: IntakeSession = {
-        ...session,
-        updatedAt: new Date().toISOString(),
-        photos: remainingPhotos,
-        groups: remainingGroups,
-      };
-      persistSession(partialSession);
-      showToast(
-        `${publishedCount} published, ${readyGroups.length - publishedCount} failed. Failed items remain in intake.`
+      const publishedPhotoIds = new Set(
+        session.groups
+          .filter((g) => successfulGroupIds.has(g.id))
+          .flatMap((g) => g.photoIds)
       );
-    }
 
-    setIsPublishing(false);
-    setConfirm(null);
-    onProductCreated?.();
+      const remainingGroups = updatedGroups.filter((g) => !successfulGroupIds.has(g.id));
+      const remainingPhotos = session.photos.filter((p) => !publishedPhotoIds.has(p.id));
+
+      if (remainingGroups.length === 0) {
+        const nextBatchId = getNextBatchId(session.batchId);
+        const cleanSession: IntakeSession = {
+          batchId: nextBatchId,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          photos: remainingPhotos,
+          groups: [],
+        };
+        persistSession(cleanSession);
+        setRestoredBannerVisible(false);
+        if (typeof window !== "undefined") {
+          try {
+            localStorage.removeItem(INTAKE_STORAGE_KEY);
+            localStorage.removeItem(INTAKE_REVIEW_KEY);
+          } catch {
+            // ignore
+          }
+        }
+        showToast(`${publishedCount} garment(s) published successfully. Intake batch completed.`);
+      } else {
+        const partialSession: IntakeSession = {
+          ...session,
+          updatedAt: new Date().toISOString(),
+          photos: remainingPhotos,
+          groups: remainingGroups,
+        };
+        persistSession(partialSession);
+        if (publishedCount > 0) {
+          showToast(
+            `${publishedCount} published, ${readyGroups.length - publishedCount} failed. Failed items remain in intake for retry.`
+          );
+        } else {
+          showToast(`Publishing failed: ${lastError || "Could not publish garments. Please check details and retry."}`);
+        }
+      }
+    } catch (err: any) {
+      console.error("[publishReadyGarments] Unexpected error:", err);
+      showToast(err?.message || "An unexpected error occurred while publishing.");
+    } finally {
+      setIsPublishing(false);
+      setConfirm(null);
+      onProductCreated?.();
+    }
   };
 
   const unassignedPhotos = session.photos.filter((p) => !p.assignedGroup);
@@ -2591,8 +2653,25 @@ export function Intake({
                 disabled={isPublishing}
                 onClick={() => setConfirm("Publish ready garments?")}
                 aria-label="Publish Ready Garments"
-                className="review-publish-btn"
+                className={`review-publish-btn ${isPublishing ? "button-loading" : ""}`}
               >
+                {isPublishing && (
+                  <span className="button-spinner" aria-hidden="true" style={{ marginRight: 6 }}>
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      className="spinner-svg"
+                    >
+                      <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+                      <path d="M12 2a10 10 0 0 1 10 10" />
+                    </svg>
+                  </span>
+                )}
                 <span className="desktop-btn-text">
                   {isPublishing ? "Publishing..." : "Publish Ready Garments"}
                 </span>
@@ -2614,7 +2693,14 @@ export function Intake({
               : "This cannot be undone. Selected unassigned photos will be deleted."
           }
           action={confirm.startsWith("Publish") ? "Publish garments" : "Delete photos"}
-          onCancel={() => setConfirm(null)}
+          actionVariant={confirm.startsWith("Publish") ? "primary" : "danger"}
+          loading={confirm.startsWith("Publish") ? isPublishing : isDeletingPhotos}
+          loadingText={confirm.startsWith("Publish") ? "Publishing..." : "Deleting..."}
+          onCancel={() => {
+            if (!isDeletingPhotos && !isPublishing) {
+              setConfirm(null);
+            }
+          }}
           onConfirm={() => {
             if (confirm.startsWith("Publish")) {
               publishReadyGarments();
@@ -4196,10 +4282,12 @@ export function ConfirmDialog({
   onConfirm,
   loading = false,
   loadingText,
+  actionVariant = "danger",
 }: {
   title: string;
   body: string;
   action: string;
+  actionVariant?: "primary" | "danger";
   onCancel: () => void;
   onConfirm: () => void;
   loading?: boolean;
@@ -4216,7 +4304,7 @@ export function ConfirmDialog({
         <div>
           <Button onClick={onCancel} disabled={loading}>Cancel</Button>
           <Button
-            variant="danger"
+            variant={actionVariant}
             onClick={onConfirm}
             disabled={loading}
             className={loading ? "button-loading" : ""}
@@ -4333,7 +4421,8 @@ export default function App({
       offers: "/admin/offers",
       media: "/admin/media",
       banner: "/admin/banner",
-      "hero-cards": "/admin/hero-cards",
+      homepage: "/admin/homepage",
+      "hero-cards": "/admin/homepage",
     };
     if (typeof window !== "undefined" && window.location.pathname !== routeMap[p]) {
       window.history.pushState(null, "", routeMap[p]);
@@ -4408,9 +4497,9 @@ export default function App({
           navigate={setPage}
         />
       );
-    if (page === "hero-cards")
+    if (page === "homepage" || page === "hero-cards")
       return (
-        <HeroCardsManagementScreen
+        <HomepageManagementScreen
           showToast={showToast}
           navigate={setPage}
         />

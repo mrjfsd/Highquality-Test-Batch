@@ -8,6 +8,7 @@ export type StorefrontVariantOption = {
   size: string;
   color: string;
   is_available: boolean;
+  stock_quantity?: number;
 };
 
 export type ProductGalleryImage = {

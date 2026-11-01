@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, type ChangeEvent, type PointerEvent } from "react";
 import { authFetch, PageHeader, Button, Icon, type Page } from "./wireframe-ui";
 import { compressImageForUpload, uploadToR2WithProgress } from "@/lib/images/client-compression";
+import { invalidateClientStorefrontSettingsCache } from "@/lib/settings/client-settings";
 
 const ALLOWED_MIME_TYPES = new Set([
   "image/jpeg",
@@ -156,6 +157,7 @@ export function BannerManagementScreen({ showToast }: BannerManagementScreenProp
       });
 
       if (res.ok) {
+        invalidateClientStorefrontSettingsCache();
         showToast(
           newVal
             ? "Sale link is now visible in navbar"

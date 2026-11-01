@@ -88,16 +88,23 @@ export function mapDbProductToStorefront(p: {
   }
   const colors = Array.from(colorsSet);
 
-  // Map client-safe variant options (omitting sensitive sku and stock_quantity)
+  // Map variant options with authoritative stock quantities
   const variants = Array.isArray(p.product_variants)
-    ? p.product_variants.map((v) => ({
-        id: v.id,
-        size: (v.size || "").trim(),
-        color: (v.color || "").trim(),
-        is_available:
-          Boolean(v.is_available) &&
-          (typeof v.stock_quantity === "number" ? v.stock_quantity > 0 : true),
-      }))
+    ? p.product_variants.map((v) => {
+        const stockQty =
+          typeof v.stock_quantity === "number"
+            ? Math.max(0, v.stock_quantity)
+            : v.is_available
+            ? 999
+            : 0;
+        return {
+          id: v.id,
+          size: (v.size || "").trim(),
+          color: (v.color || "").trim(),
+          is_available: Boolean(v.is_available) && stockQty > 0,
+          stock_quantity: stockQty,
+        };
+      })
     : [];
 
   return {

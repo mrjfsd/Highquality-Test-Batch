@@ -248,6 +248,13 @@ export function sanitizeCartItems(raw: unknown): CartItem[] {
         ? maybeItem.id
         : buildCartItemId(productId, variantId, size, color);
 
+    const stockQuantity =
+      typeof maybeItem.stockQuantity === "number" && Number.isFinite(maybeItem.stockQuantity)
+        ? Math.max(0, Math.floor(maybeItem.stockQuantity))
+        : maybeItem.stockQuantity === null
+        ? null
+        : undefined;
+
     validItems.push({
       id,
       productId,
@@ -260,6 +267,7 @@ export function sanitizeCartItems(raw: unknown): CartItem[] {
       size,
       color,
       quantity,
+      stockQuantity,
     });
   }
 

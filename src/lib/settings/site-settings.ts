@@ -48,9 +48,20 @@ export const DEFAULT_NAVBAR_CONFIG: NavbarConfig = {
 import {
   type HeroCardConfigItem,
   DEFAULT_HERO_CARDS,
-} from "@/types/hero-cards";
+  type HomepageFavouriteItem,
+  DEFAULT_HOMEPAGE_FAVOURITES,
+  type HomepageFormPerspectiveItem,
+  DEFAULT_HOMEPAGE_FORM_PERSPECTIVE,
+} from "@/types/homepage-images";
 
-export { type HeroCardConfigItem, DEFAULT_HERO_CARDS };
+export {
+  type HeroCardConfigItem,
+  DEFAULT_HERO_CARDS,
+  type HomepageFavouriteItem,
+  DEFAULT_HOMEPAGE_FAVOURITES,
+  type HomepageFormPerspectiveItem,
+  DEFAULT_HOMEPAGE_FORM_PERSPECTIVE,
+};
 
 export function normalizeHeroCards(raw?: unknown): HeroCardConfigItem[] {
   return DEFAULT_HERO_CARDS.map((def, idx) => {
@@ -95,6 +106,85 @@ export function normalizeHeroCards(raw?: unknown): HeroCardConfigItem[] {
   });
 }
 
+export function normalizeHomepageFavourites(raw?: unknown): HomepageFavouriteItem[] {
+  return DEFAULT_HOMEPAGE_FAVOURITES.map((def, idx) => {
+    let saved: Partial<HomepageFavouriteItem> | null = null;
+    if (Array.isArray(raw)) {
+      saved =
+        raw.find((r) => r && (r.slotIndex === idx || r.id === def.id || r.id === `fav-${idx}`)) ||
+        null;
+    }
+
+    if (!saved || typeof saved !== "object") {
+      return { ...def };
+    }
+
+    const customImage =
+      (saved.customImage && typeof saved.customImage === "string" && saved.customImage.trim()) ||
+      (saved.isCustom && saved.image && saved.image !== def.defaultImage ? saved.image.trim() : null) ||
+      null;
+
+    const isCustom = Boolean(customImage);
+
+    return {
+      id: def.id,
+      slotIndex: idx,
+      title: def.title,
+      price: def.price,
+      href: def.href,
+      defaultImage: def.defaultImage,
+      defaultAlt: def.defaultAlt,
+      customImage,
+      storagePath: isCustom ? saved.storagePath || null : null,
+      isCustom,
+      image: isCustom && customImage ? customImage : def.defaultImage,
+      alt: isCustom && saved.alt ? saved.alt : def.defaultAlt,
+      updatedAt: saved.updatedAt,
+    };
+  });
+}
+
+export function normalizeHomepageFormPerspective(raw?: unknown): HomepageFormPerspectiveItem[] {
+  return DEFAULT_HOMEPAGE_FORM_PERSPECTIVE.map((def, idx) => {
+    let saved: Partial<HomepageFormPerspectiveItem> | null = null;
+    if (Array.isArray(raw)) {
+      saved =
+        raw.find((r) => r && (r.slotIndex === idx || r.id === def.id || r.id === `fp-${idx}`)) ||
+        null;
+    }
+
+    if (!saved || typeof saved !== "object") {
+      return { ...def };
+    }
+
+    const customImage =
+      (saved.customImage && typeof saved.customImage === "string" && saved.customImage.trim()) ||
+      (saved.isCustom && saved.image && saved.image !== def.defaultImage ? saved.image.trim() : null) ||
+      null;
+
+    const isCustom = Boolean(customImage);
+
+    return {
+      id: def.id,
+      slotIndex: idx,
+      position: def.position,
+      title: def.title,
+      subtitle: def.subtitle,
+      tagNum: def.tagNum,
+      tagLabel: def.tagLabel,
+      href: def.href,
+      defaultImage: def.defaultImage,
+      defaultAlt: def.defaultAlt,
+      customImage,
+      storagePath: isCustom ? saved.storagePath || null : null,
+      isCustom,
+      image: isCustom && customImage ? customImage : def.defaultImage,
+      alt: isCustom && saved.alt ? saved.alt : def.defaultAlt,
+      updatedAt: saved.updatedAt,
+    };
+  });
+}
+
 function normalizeNavbarConfig(raw?: Partial<NavbarConfig> | null): NavbarConfig {
   if (!raw) return { ...DEFAULT_NAVBAR_CONFIG };
   return {
@@ -124,6 +214,8 @@ interface PersistedSettings {
   catalogue_marquee?: CatalogueMarqueeConfig;
   navbar?: NavbarConfig;
   hero_cards?: HeroCardConfigItem[];
+  homepage_favourites?: HomepageFavouriteItem[];
+  homepage_form_perspective?: HomepageFormPerspectiveItem[];
 }
 
 function readFallbackSettings(): PersistedSettings {
@@ -152,6 +244,11 @@ function writeFallbackSettings(settings: PersistedSettings): void {
 function invalidateSettingsCache(): void {
   try {
     revalidateTag("site-settings", "max");
+    revalidateTag("navbar", "max");
+    revalidateTag("hero-cards", "max");
+    revalidateTag("homepage", "max");
+    revalidateTag("homepage-favourites", "max");
+    revalidateTag("homepage-form-perspective", "max");
   } catch {
     // Ignored outside of request context
   }
@@ -294,6 +391,64 @@ async function queryHeroCardsConfig(): Promise<HeroCardConfigItem[]> {
   return [...DEFAULT_HERO_CARDS];
 }
 
+/**
+ * Low-level query: homepage favourites config (4 slots).
+ */
+async function queryHomepageFavouritesConfig(): Promise<HomepageFavouriteItem[]> {
+  try {
+    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const supabase = createSupabaseAdminClient();
+      const { data, error } = await supabase
+        .from("site_settings")
+        .select("value")
+        .eq("key", "homepage_favourites")
+        .maybeSingle();
+
+      if (!error && data?.value) {
+        return normalizeHomepageFavourites(data.value);
+      }
+    }
+  } catch (err) {
+    console.warn("[site-settings] Supabase getHomepageFavouritesConfig fallback:", err);
+  }
+
+  const fallback = readFallbackSettings();
+  if (fallback.homepage_favourites && Array.isArray(fallback.homepage_favourites) && fallback.homepage_favourites.length > 0) {
+    return normalizeHomepageFavourites(fallback.homepage_favourites);
+  }
+
+  return [...DEFAULT_HOMEPAGE_FAVOURITES];
+}
+
+/**
+ * Low-level query: homepage form & perspective config (4 slots).
+ */
+async function queryHomepageFormPerspectiveConfig(): Promise<HomepageFormPerspectiveItem[]> {
+  try {
+    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const supabase = createSupabaseAdminClient();
+      const { data, error } = await supabase
+        .from("site_settings")
+        .select("value")
+        .eq("key", "homepage_form_perspective")
+        .maybeSingle();
+
+      if (!error && data?.value) {
+        return normalizeHomepageFormPerspective(data.value);
+      }
+    }
+  } catch (err) {
+    console.warn("[site-settings] Supabase getHomepageFormPerspectiveConfig fallback:", err);
+  }
+
+  const fallback = readFallbackSettings();
+  if (fallback.homepage_form_perspective && Array.isArray(fallback.homepage_form_perspective) && fallback.homepage_form_perspective.length > 0) {
+    return normalizeHomepageFormPerspective(fallback.homepage_form_perspective);
+  }
+
+  return [...DEFAULT_HOMEPAGE_FORM_PERSPECTIVE];
+}
+
 // ============================================================================
 // 1. Persistent Data Cache (unstable_cache)
 // 1 hour background revalidation (3600s), tagged with 'site-settings'
@@ -331,7 +486,25 @@ const getCachedHeroCardsConfig = unstable_cache(
   ["site-settings-hero-cards"],
   {
     revalidate: 3600,
-    tags: ["site-settings", "hero-cards"],
+    tags: ["site-settings", "hero-cards", "homepage"],
+  }
+);
+
+const getCachedHomepageFavouritesConfig = unstable_cache(
+  async () => queryHomepageFavouritesConfig(),
+  ["site-settings-homepage-favourites"],
+  {
+    revalidate: 3600,
+    tags: ["site-settings", "homepage", "homepage-favourites"],
+  }
+);
+
+const getCachedHomepageFormPerspectiveConfig = unstable_cache(
+  async () => queryHomepageFormPerspectiveConfig(),
+  ["site-settings-homepage-form-perspective"],
+  {
+    revalidate: 3600,
+    tags: ["site-settings", "homepage", "homepage-form-perspective"],
   }
 );
 
@@ -349,6 +522,9 @@ export const getCatalogueMarqueeConfig = cache(async (): Promise<CatalogueMarque
 });
 
 export const getNavbarConfig = cache(async (): Promise<NavbarConfig> => {
+  if (process.env.NODE_ENV === "development") {
+    return queryNavbarConfig();
+  }
   return getCachedNavbarConfig();
 });
 
@@ -357,6 +533,20 @@ export const getHeroCardsConfig = cache(async (): Promise<HeroCardConfigItem[]> 
     return queryHeroCardsConfig();
   }
   return getCachedHeroCardsConfig();
+});
+
+export const getHomepageFavouritesConfig = cache(async (): Promise<HomepageFavouriteItem[]> => {
+  if (process.env.NODE_ENV === "development") {
+    return queryHomepageFavouritesConfig();
+  }
+  return getCachedHomepageFavouritesConfig();
+});
+
+export const getHomepageFormPerspectiveConfig = cache(async (): Promise<HomepageFormPerspectiveItem[]> => {
+  if (process.env.NODE_ENV === "development") {
+    return queryHomepageFormPerspectiveConfig();
+  }
+  return getCachedHomepageFormPerspectiveConfig();
 });
 
 /**
@@ -593,6 +783,190 @@ export async function removeHeroCardSlot(slotIndex: number): Promise<HeroCardCon
   });
 
   return saveHeroCardsConfig(updated);
+}
+
+/**
+ * Saves the homepage favourites configuration (4 cards).
+ */
+export async function saveHomepageFavouritesConfig(
+  favourites: HomepageFavouriteItem[]
+): Promise<HomepageFavouriteItem[]> {
+  const normalized = normalizeHomepageFavourites(favourites.slice(0, 4)).map((c, i) => ({
+    ...c,
+    slotIndex: i,
+    updatedAt: new Date().toISOString(),
+  }));
+
+  try {
+    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const supabase = createSupabaseAdminClient();
+      const { error } = await supabase.from("site_settings").upsert(
+        {
+          key: "homepage_favourites",
+          value: normalized,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "key" }
+      );
+      if (error) {
+        console.warn("[site-settings] Upsert homepage_favourites DB error:", error.message);
+      }
+    }
+  } catch (err) {
+    console.warn("[site-settings] DB saveHomepageFavouritesConfig failed:", err);
+  }
+
+  // Always update local fallback for server restarts/redundancy
+  const currentFallback = readFallbackSettings();
+  currentFallback.homepage_favourites = normalized;
+  writeFallbackSettings(currentFallback);
+
+  invalidateSettingsCache();
+  return normalized;
+}
+
+/**
+ * Replaces a specific favourite card slot image with a custom image override.
+ */
+export async function replaceHomepageFavouriteSlot(
+  slotIndex: number,
+  override: {
+    image: string;
+    storagePath?: string | null;
+  }
+): Promise<HomepageFavouriteItem[]> {
+  const current = await getHomepageFavouritesConfig();
+  if (slotIndex < 0 || slotIndex >= DEFAULT_HOMEPAGE_FAVOURITES.length) {
+    throw new Error(`Invalid slotIndex: ${slotIndex}. Must be 0 to ${DEFAULT_HOMEPAGE_FAVOURITES.length - 1}.`);
+  }
+
+  const def = DEFAULT_HOMEPAGE_FAVOURITES[slotIndex];
+  const updated = current.map((item, i) => {
+    if (i !== slotIndex) return item;
+    return {
+      ...item,
+      customImage: override.image.trim(),
+      storagePath: override.storagePath ? override.storagePath.trim() : null,
+      isCustom: true,
+      image: override.image.trim(),
+      updatedAt: new Date().toISOString(),
+    };
+  });
+
+  return saveHomepageFavouritesConfig(updated);
+}
+
+/**
+ * Removes the custom override from a favourite slot, immediately restoring its default image.
+ */
+export async function removeHomepageFavouriteSlot(slotIndex: number): Promise<HomepageFavouriteItem[]> {
+  const current = await getHomepageFavouritesConfig();
+  if (slotIndex < 0 || slotIndex >= DEFAULT_HOMEPAGE_FAVOURITES.length) {
+    throw new Error(`Invalid slotIndex: ${slotIndex}. Must be 0 to ${DEFAULT_HOMEPAGE_FAVOURITES.length - 1}.`);
+  }
+
+  const def = DEFAULT_HOMEPAGE_FAVOURITES[slotIndex];
+  const updated = current.map((item, i) => {
+    if (i !== slotIndex) return item;
+    return {
+      ...def,
+      updatedAt: new Date().toISOString(),
+    };
+  });
+
+  return saveHomepageFavouritesConfig(updated);
+}
+
+/**
+ * Saves the homepage form & perspective configuration (4 images).
+ */
+export async function saveHomepageFormPerspectiveConfig(
+  items: HomepageFormPerspectiveItem[]
+): Promise<HomepageFormPerspectiveItem[]> {
+  const normalized = normalizeHomepageFormPerspective(items.slice(0, 4)).map((c, i) => ({
+    ...c,
+    slotIndex: i,
+    updatedAt: new Date().toISOString(),
+  }));
+
+  try {
+    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const supabase = createSupabaseAdminClient();
+      const { error } = await supabase.from("site_settings").upsert(
+        {
+          key: "homepage_form_perspective",
+          value: normalized,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "key" }
+      );
+      if (error) {
+        console.warn("[site-settings] Upsert homepage_form_perspective DB error:", error.message);
+      }
+    }
+  } catch (err) {
+    console.warn("[site-settings] DB saveHomepageFormPerspectiveConfig failed:", err);
+  }
+
+  // Always update local fallback for server restarts/redundancy
+  const currentFallback = readFallbackSettings();
+  currentFallback.homepage_form_perspective = normalized;
+  writeFallbackSettings(currentFallback);
+
+  invalidateSettingsCache();
+  return normalized;
+}
+
+/**
+ * Replaces a specific form & perspective slot image with a custom image override.
+ */
+export async function replaceHomepageFormPerspectiveSlot(
+  slotIndex: number,
+  override: {
+    image: string;
+    storagePath?: string | null;
+  }
+): Promise<HomepageFormPerspectiveItem[]> {
+  const current = await getHomepageFormPerspectiveConfig();
+  if (slotIndex < 0 || slotIndex >= DEFAULT_HOMEPAGE_FORM_PERSPECTIVE.length) {
+    throw new Error(`Invalid slotIndex: ${slotIndex}. Must be 0 to ${DEFAULT_HOMEPAGE_FORM_PERSPECTIVE.length - 1}.`);
+  }
+
+  const def = DEFAULT_HOMEPAGE_FORM_PERSPECTIVE[slotIndex];
+  const updated = current.map((item, i) => {
+    if (i !== slotIndex) return item;
+    return {
+      ...item,
+      customImage: override.image.trim(),
+      storagePath: override.storagePath ? override.storagePath.trim() : null,
+      isCustom: true,
+      image: override.image.trim(),
+      updatedAt: new Date().toISOString(),
+    };
+  });
+
+  return saveHomepageFormPerspectiveConfig(updated);
+}
+
+/**
+ * Removes the custom override from a form & perspective slot, immediately restoring its default image.
+ */
+export async function removeHomepageFormPerspectiveSlot(slotIndex: number): Promise<HomepageFormPerspectiveItem[]> {
+  const current = await getHomepageFormPerspectiveConfig();
+  if (slotIndex < 0 || slotIndex >= DEFAULT_HOMEPAGE_FORM_PERSPECTIVE.length) {
+    throw new Error(`Invalid slotIndex: ${slotIndex}. Must be 0 to ${DEFAULT_HOMEPAGE_FORM_PERSPECTIVE.length - 1}.`);
+  }
+
+  const def = DEFAULT_HOMEPAGE_FORM_PERSPECTIVE[slotIndex];
+  const updated = current.map((item, i) => {
+    if (i !== slotIndex) return item;
+    return {
+      ...def,
+      updatedAt: new Date().toISOString(),
+    };
+  });
+
+  return saveHomepageFormPerspectiveConfig(updated);
 }
 
 

@@ -36,6 +36,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [offersMap, setOffersMap] = useState<Record<string, ProductQuantityOffer[]>>({});
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isInventoryValidating, setIsInventoryValidating] = useState(false);
+  const [inventoryErrors, setInventoryErrors] = useState<Record<string, string>>({});
 
   // Synchronize selection state to localStorage
   const persistSelected = useCallback((newSelected: string[]) => {
@@ -121,10 +123,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     fetchOffers();
 
-    // Re-check offers when tab becomes visible again
+    // Re-check offers and inventory when tab becomes visible again
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         fetchOffers();
+        validateCartInventory();
       }
     };
 
@@ -230,23 +233,116 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     };
   }, [isLoaded, persistItems]);
 
+  // Live inventory validation against server
+  const validateCartInventory = useCallback(async () => {
+    try {
+      const stored = localStorage.getItem(CART_STORAGE_KEY);
+      const currentItems: CartItem[] = stored ? sanitizeCartItems(JSON.parse(stored)) : items;
+      if (currentItems.length === 0) {
+        setInventoryErrors({});
+        return;
+      }
+
+      const variantIds = Array.from(
+        new Set(
+          currentItems
+            .map((i) => i.variantId)
+            .filter((id): id is string => Boolean(id && String(id).trim() !== ""))
+        )
+      );
+
+      if (variantIds.length === 0) return;
+
+      setIsInventoryValidating(true);
+      const res = await fetch(`/api/inventory?ids=${encodeURIComponent(variantIds.join(","))}`, {
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const stockMap: Record<string, { stock_quantity: number; is_available: boolean }> =
+          data.variants || {};
+
+        const errors: Record<string, string> = {};
+        let hadChanges = false;
+
+        const refreshed = currentItems.map((item) => {
+          if (item.variantId && stockMap[item.variantId]) {
+            const serverStock = stockMap[item.variantId].stock_quantity;
+            if (item.stockQuantity !== serverStock) {
+              hadChanges = true;
+            }
+            if (serverStock <= 0) {
+              errors[item.id] = "Out of stock";
+            } else if (item.quantity > serverStock) {
+              errors[item.id] = `Only ${serverStock} available`;
+            }
+            return {
+              ...item,
+              stockQuantity: serverStock,
+            };
+          }
+          return item;
+        });
+
+        setInventoryErrors(errors);
+
+        if (hadChanges) {
+          setItems(refreshed);
+          persistItems(refreshed);
+        }
+      }
+    } catch (err) {
+      console.warn("[CartContext] Live inventory check failed:", err);
+    } finally {
+      setIsInventoryValidating(false);
+    }
+  }, [items, persistItems]);
+
+  // Initial inventory validation once loaded
+  useEffect(() => {
+    if (isLoaded && items.length > 0) {
+      validateCartInventory();
+    }
+  }, [isLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const addItem = useCallback(
     (input: AddToCartInput): { success: boolean; itemId: string } => {
-      const { product, variantId, size, color, quantity = 1 } = input;
-      const addQty = Math.max(1, Math.floor(quantity));
+      const { product, variantId, size, color, quantity = 1, stockQuantity } = input;
       const targetId = buildCartItemId(product.id, variantId, size, color);
+
+      // Block adding when stock is known to be 0
+      if (typeof stockQuantity === "number" && stockQuantity <= 0) {
+        return { success: false, itemId: targetId };
+      }
+
+      const addQty = Math.max(1, Math.floor(quantity));
 
       setItems((prevItems) => {
         const existingIndex = prevItems.findIndex((item) => item.id === targetId);
         let updated: CartItem[];
 
         if (existingIndex > -1) {
-          // Merge matching product and variant: increase existing quantity
+          // Merge matching product and variant: increase existing quantity but cap at available stock
           updated = prevItems.map((item, index) => {
             if (index === existingIndex) {
+              const knownStock =
+                typeof stockQuantity === "number"
+                  ? stockQuantity
+                  : typeof item.stockQuantity === "number"
+                  ? item.stockQuantity
+                  : null;
+              const newTotal = item.quantity + addQty;
+              const finalQty =
+                knownStock !== null && knownStock > 0
+                  ? Math.min(newTotal, knownStock)
+                  : newTotal;
+
               return {
                 ...item,
-                quantity: item.quantity + addQty,
+                quantity: finalQty,
+                stockQuantity: knownStock,
               };
             }
             return item;
@@ -268,6 +364,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             product.imageId ||
             null;
 
+          const knownStock = typeof stockQuantity === "number" ? stockQuantity : null;
+          const initialQty =
+            knownStock !== null && knownStock > 0
+              ? Math.min(addQty, knownStock)
+              : addQty;
+
           const newItem: CartItem = {
             id: targetId,
             productId: String(product.id),
@@ -279,7 +381,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             variantId: variantId || null,
             size: size || null,
             color: color || null,
-            quantity: addQty,
+            quantity: initialQty,
+            stockQuantity: knownStock,
           };
           updated = [...prevItems, newItem];
         }
@@ -354,9 +457,16 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
         const updated = prevItems.map((item) => {
           if (item.id === itemId) {
+            let finalQty = validQty;
+            // Prevent increasing beyond available stock
+            if (typeof item.stockQuantity === "number" && item.stockQuantity >= 0) {
+              if (validQty > item.stockQuantity) {
+                finalQty = item.stockQuantity;
+              }
+            }
             return {
               ...item,
-              quantity: validQty,
+              quantity: Math.max(1, finalQty),
             };
           }
           return item;
@@ -471,7 +581,16 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     [selectedItems, offersMap]
   );
 
-  const value = useMemo<CartContextValue>(
+  const hasInventoryConflict = useMemo(() => {
+    return selectedItems.some((item) => {
+      if (typeof item.stockQuantity === "number") {
+        return item.stockQuantity <= 0 || item.quantity > item.stockQuantity;
+      }
+      return Boolean(inventoryErrors[item.id]);
+    });
+  }, [selectedItems, inventoryErrors]);
+
+  const value: CartContextValue = useMemo(
     () => ({
       items,
       totalCount,
@@ -496,6 +615,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       selectedTotals,
       selectedCount,
       selectedTotalUnits,
+      validateCartInventory,
+      isInventoryValidating,
+      hasInventoryConflict,
+      inventoryErrors,
     }),
     [
       items,
@@ -519,6 +642,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       selectedTotals,
       selectedCount,
       selectedTotalUnits,
+      validateCartInventory,
+      isInventoryValidating,
+      hasInventoryConflict,
+      inventoryErrors,
     ]
   );
 
@@ -559,6 +686,10 @@ const defaultCartValue: CartContextValue = {
   selectedTotals: defaultCartTotals,
   selectedCount: 0,
   selectedTotalUnits: 0,
+  validateCartInventory: async () => {},
+  isInventoryValidating: false,
+  hasInventoryConflict: false,
+  inventoryErrors: {},
 };
 
 export function useCart(): CartContextValue {

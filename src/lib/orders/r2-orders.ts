@@ -8,6 +8,7 @@ import {
 export interface OrderSnapshotItem {
   id: string;
   productId: string;
+  variantId?: string | null;
   name: string;
   slug: string;
   image: string;

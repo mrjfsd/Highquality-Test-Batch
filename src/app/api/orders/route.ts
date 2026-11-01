@@ -7,6 +7,7 @@ import {
   type OrderSnapshot,
   type OrderSnapshotItem,
 } from "@/lib/orders/r2-orders";
+import { deductInventoryForOrder } from "@/lib/inventory/deduction";
 
 // Security Limits
 const MAX_PDF_SIZE_BYTES = 15 * 1024 * 1024; // 15 MB
@@ -71,6 +72,7 @@ export async function POST(request: NextRequest) {
         finalTotal?: number;
       };
       clientOrderRef?: string;
+      idempotencyKey?: string;
     };
 
     try {
@@ -81,6 +83,11 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    const idempotencyKey =
+      (formData.get("idempotencyKey") as string | null) ||
+      parsedOrderData.idempotencyKey ||
+      null;
 
     if (!Array.isArray(parsedOrderData.items) || parsedOrderData.items.length === 0) {
       return NextResponse.json(
@@ -112,6 +119,7 @@ export async function POST(request: NextRequest) {
       sanitizedItems.push({
         id: String(rawItem.id || `item_${sanitizedItems.length + 1}`).trim(),
         productId: String(rawItem.productId || "").trim(),
+        variantId: rawItem.variantId ? String(rawItem.variantId).trim() : null,
         name,
         slug,
         image: image || "/assets/floating-garment-mobile.webp",
@@ -146,6 +154,58 @@ export async function POST(request: NextRequest) {
     };
 
     const baseUrl = getOrderBaseUrl(request);
+
+    // ── ATOMIC BACKEND INVENTORY DEDUCTION & IDEMPOTENCY ENFORCEMENT ──
+    // Validates against latest authoritative Supabase inventory with row-level locks
+    const deductionResult = await deductInventoryForOrder({
+      orderRef,
+      idempotencyKey,
+      token,
+      items: sanitizedItems.map((i) => ({
+        variantId: i.variantId,
+        productId: i.productId,
+        name: i.name,
+        size: i.size,
+        color: i.color,
+        quantity: i.quantity,
+      })),
+      totals,
+    });
+
+    if (!deductionResult.success) {
+      console.warn("[POST /api/orders] Stock deduction rejected:", deductionResult);
+      return NextResponse.json(
+        {
+          error: deductionResult.error || "INSUFFICIENT_STOCK",
+          message: deductionResult.message || "Insufficient stock for requested items.",
+          item: deductionResult.item,
+        },
+        { status: 409 }
+      );
+    }
+
+    // Handle already processed idempotency requests safely without duplicating records or stock deductions
+    if (deductionResult.alreadyProcessed) {
+      const finalToken = deductionResult.token || token;
+      const finalOrderRef = deductionResult.orderRef || orderRef;
+      return NextResponse.json(
+        {
+          success: true,
+          alreadyProcessed: true,
+          orderRef: finalOrderRef,
+          token: finalToken,
+          orderUrl: `${baseUrl}/order/${finalToken}`,
+          invoiceUrl: `/api/orders/${finalToken}/invoice`,
+        },
+        {
+          status: 200,
+          headers: {
+            "Cache-Control": "private, no-cache, no-store, must-revalidate",
+          },
+        }
+      );
+    }
+
     const orderUrl = `${baseUrl}/order/${token}`;
     const invoiceDownloadUrl = `/api/orders/${token}/invoice`;
 
