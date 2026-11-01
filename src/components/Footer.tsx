@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   PhoneIcon,
   MailIcon,
@@ -12,13 +13,33 @@ import {
 
 export default function Footer() {
   const currentYear = 2026;
+  const pathname = usePathname();
+
+  const handleBrandClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (pathname === "/") {
+      e.preventDefault();
+      const prefersReducedMotion =
+        typeof window !== "undefined" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      window.scrollTo({
+        top: 0,
+        behavior: prefersReducedMotion ? "auto" : "smooth",
+      });
+    }
+  };
 
   return (
     <footer className="footer" id="footer">
       <div className="footer-top">
         {/* Brand Column */}
         <div className="footer-brand">
-          <Link className="footer-brand-lockup" href="/" aria-label="Style-Edit home">
+          <Link
+            className="footer-brand-lockup"
+            href="/"
+            aria-label="Style-Edit home"
+            onClick={handleBrandClick}
+            prefetch={true}
+          >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/Brandlogo.webp"

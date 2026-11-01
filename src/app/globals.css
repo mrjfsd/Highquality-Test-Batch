@@ -211,6 +211,7 @@
   align-items: center;
   gap: 12px;
   text-decoration: none;
+  cursor: pointer;
   transition: opacity 180ms ease;
 }
 
@@ -2018,6 +2019,7 @@
   align-items: center;
   gap: 14px;
   text-decoration: none;
+  cursor: pointer;
   transition: opacity 180ms ease;
 }
 

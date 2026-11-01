@@ -7,6 +7,15 @@ export const metadata: Metadata = {
   description:
     "Curated everyday fashion, chosen in Mysuru. Shop Men, Women, and Kids collections with considered design and versatile pieces.",
   keywords: "clothing, fashion, women, men, kids, minimal style, essentials, mysuru",
+  icons: {
+    icon: [
+      { url: "/icon.png", type: "image/png", sizes: "32x32" },
+      { url: "/favicon.ico", sizes: "any" },
+    ],
+    apple: [
+      { url: "/apple-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+  },
 };
 
 export default function RootLayout({

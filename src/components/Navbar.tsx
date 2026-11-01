@@ -15,9 +15,33 @@ import {
 import { getClientStorefrontSettings } from "@/lib/settings/client-settings";
 import { useCart } from "@/context/CartContext";
 
-function BrandLockup() {
+function BrandLockup({ onClick }: { onClick?: (e: React.MouseEvent<HTMLAnchorElement>) => void }) {
+  const pathname = usePathname();
+
+  const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (onClick) {
+      onClick(e);
+    }
+    if (pathname === "/") {
+      e.preventDefault();
+      const prefersReducedMotion =
+        typeof window !== "undefined" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      window.scrollTo({
+        top: 0,
+        behavior: prefersReducedMotion ? "auto" : "smooth",
+      });
+    }
+  };
+
   return (
-    <Link className="nav-brand-lockup" href="/" aria-label="Style-Edit home">
+    <Link
+      className="nav-brand-lockup"
+      href="/"
+      aria-label="Style-Edit home"
+      onClick={handleClick}
+      prefetch={true}
+    >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src="/Brandlogo.webp"
@@ -162,7 +186,7 @@ export default function Navbar() {
           />
           <aside className="mobile-nav-drawer" aria-label="Mobile navigation">
             <div className="mobile-nav-header">
-              <BrandLockup />
+              <BrandLockup onClick={closeMenu} />
               <button
                 className="icon-button close-menu-btn"
                 type="button"
