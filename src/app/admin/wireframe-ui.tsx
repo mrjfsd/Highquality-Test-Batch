@@ -939,6 +939,7 @@ export function Intake({
   const [confirm, setConfirm] = useState<string | null>(null);
   const [restoredBannerVisible, setRestoredBannerVisible] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [isDeletingPhotos, setIsDeletingPhotos] = useState(false);
   const [isSavingDrafts, setIsSavingDrafts] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, { name?: string; price?: string; discountPercent?: string }>>({});
 
@@ -1176,33 +1177,43 @@ export function Intake({
   };
 
   const deleteSelectedPhotos = async () => {
-    const photosToDelete = session.photos.filter((p) => selectedPhotos.includes(p.id));
-    const storageKeysToDelete = photosToDelete
-      .map((p) => p.storagePath)
-      .filter((k): k is string => Boolean(k));
+    if (isDeletingPhotos || selectedPhotos.length === 0) return;
+    setIsDeletingPhotos(true);
+    try {
+      const photosToDelete = session.photos.filter((p) => selectedPhotos.includes(p.id));
+      const storageKeysToDelete = photosToDelete
+        .map((p) => p.storagePath)
+        .filter((k): k is string => Boolean(k));
 
-    if (storageKeysToDelete.length > 0) {
-      try {
-        await authFetch("/api/admin/images/cleanup", {
+      if (storageKeysToDelete.length > 0) {
+        const res = await authFetch("/api/admin/images/cleanup", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ keys: storageKeysToDelete }),
         });
-      } catch (err) {
-        console.warn("Cleanup error for unassigned photos:", err);
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || `Failed to delete photos (HTTP ${res.status})`);
+        }
       }
-    }
 
-    const updatedPhotos = session.photos.filter((p) => !selectedPhotos.includes(p.id));
-    const updatedSession: IntakeSession = {
-      ...session,
-      updatedAt: new Date().toISOString(),
-      photos: updatedPhotos,
-    };
-    persistSession(updatedSession);
-    setSelectedPhotos([]);
-    setConfirm(null);
-    showToast("Selected photos removed.");
+      const updatedPhotos = session.photos.filter((p) => !selectedPhotos.includes(p.id));
+      const updatedSession: IntakeSession = {
+        ...session,
+        updatedAt: new Date().toISOString(),
+        photos: updatedPhotos,
+      };
+      persistSession(updatedSession);
+      setSelectedPhotos([]);
+      setConfirm(null);
+      showToast("Selected photos removed.");
+    } catch (err: unknown) {
+      console.error("Error deleting photos:", err);
+      const errMsg = err instanceof Error ? err.message : "Error deleting photos. Please try again.";
+      showToast(errMsg);
+    } finally {
+      setIsDeletingPhotos(false);
+    }
   };
 
   const updatePhotoColor = (photoId: string, color: string) => {
@@ -1602,6 +1613,7 @@ export function Intake({
   };
 
   const publishReadyGarments = async () => {
+    if (isPublishing) return;
     const readyGroups = session.groups.filter(
       (g) => g.name.trim().length > 0 && parseFloat(g.price) > 0 && g.photoIds.length > 0
     );
@@ -1613,143 +1625,146 @@ export function Intake({
     }
 
     setIsPublishing(true);
-    let publishedCount = 0;
-    const successfulGroupIds = new Set<string>();
-    const updatedGroups = [...session.groups];
+    try {
+      let publishedCount = 0;
+      const successfulGroupIds = new Set<string>();
+      const updatedGroups = [...session.groups];
 
-    for (const group of readyGroups) {
-      const groupPhotos = session.photos.filter(
-        (p) => group.photoIds.includes(p.id) && p.storagePath
-      );
+      for (const group of readyGroups) {
+        const groupPhotos = session.photos.filter(
+          (p) => group.photoIds.includes(p.id) && p.storagePath
+        );
 
-      const imagesPayload = groupPhotos.map((p, idx) => ({
-        storage_path: p.storagePath!,
-        alt_text: `${group.name} image ${idx + 1}`,
-        display_order: idx,
-        is_primary: group.primaryPhotoId ? p.id === group.primaryPhotoId : idx === 0,
-        mime_type: p.mimeType,
-        file_size_bytes: p.size,
-      color: p.color && p.color.trim() !== "" ? p.color.trim() : null,
-      }));
+        const imagesPayload = groupPhotos.map((p, idx) => ({
+          storage_path: p.storagePath!,
+          alt_text: `${group.name} image ${idx + 1}`,
+          display_order: idx,
+          is_primary: group.primaryPhotoId ? p.id === group.primaryPhotoId : idx === 0,
+          mime_type: p.mimeType,
+          file_size_bytes: p.size,
+          color: p.color && p.color.trim() !== "" ? p.color.trim() : null,
+        }));
 
-      const variantsPayload = group.variants.map((v) => ({
-        size: v.size?.trim() || "One Size",
-        color: v.color?.trim() || "Standard",
-        sku: v.sku?.trim() || null,
-        stock_quantity: parseInt(v.qty, 10) || 1,
-        is_available: v.is_available !== false,
-      }));
+        const variantsPayload = group.variants.map((v) => ({
+          size: v.size?.trim() || "One Size",
+          color: v.color?.trim() || "Standard",
+          sku: v.sku?.trim() || null,
+          stock_quantity: parseInt(v.qty, 10) || 1,
+          is_available: v.is_available !== false,
+        }));
 
-      try {
-        let res: Response;
-        const priceNum = parseFloat(group.price) || 0;
-        const isForSale = Boolean(group.forSale);
-        let finalDiscountPercent: number | null = null;
-        let finalSalePrice: number | null = null;
-        if (isForSale && group.discountPercent) {
-          finalDiscountPercent = Number(group.discountPercent);
-          finalSalePrice = Math.round(priceNum * ((100 - finalDiscountPercent) / 100) * 100) / 100;
-        }
+        try {
+          let res: Response;
+          const priceNum = parseFloat(group.price) || 0;
+          const isForSale = Boolean(group.forSale);
+          let finalDiscountPercent: number | null = null;
+          let finalSalePrice: number | null = null;
+          if (isForSale && group.discountPercent) {
+            finalDiscountPercent = Number(group.discountPercent);
+            finalSalePrice = Math.round(priceNum * ((100 - finalDiscountPercent) / 100) * 100) / 100;
+          }
 
-        const payload = {
-          name: group.name.trim(),
-          description: group.description?.trim() || null,
-          department: group.department.toLowerCase(),
-          category: group.category.trim(),
-          price: priceNum,
-          sale_price: finalSalePrice,
-          discount_percent: finalDiscountPercent,
-          fabric: group.fabric?.trim() || null,
-          fit: group.fit?.trim() || null,
-          status: "published",
-          variants: variantsPayload,
-          images: imagesPayload,
-        };
+          const payload = {
+            name: group.name.trim(),
+            description: group.description?.trim() || null,
+            department: group.department.toLowerCase(),
+            category: group.category.trim(),
+            price: priceNum,
+            sale_price: finalSalePrice,
+            discount_percent: finalDiscountPercent,
+            fabric: group.fabric?.trim() || null,
+            fit: group.fit?.trim() || null,
+            status: "published",
+            variants: variantsPayload,
+            images: imagesPayload,
+          };
 
-        if (group.savedProductId) {
-          res = await authFetch(`/api/admin/products/${group.savedProductId}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-        } else {
-          res = await authFetch("/api/admin/products", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-        }
+          if (group.savedProductId) {
+            res = await authFetch(`/api/admin/products/${group.savedProductId}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            });
+          } else {
+            res = await authFetch("/api/admin/products", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            });
+          }
 
-        if (res.ok) {
-          const json = await res.json();
-          group.savedProductId = json.product?.id || group.savedProductId;
-          group.status = "Published";
-          delete group.error;
-          successfulGroupIds.add(group.id);
-          publishedCount++;
-        } else {
-          const errData = await res.json().catch(() => ({}));
-          const errMsg = errData.error || `Publish failed (HTTP ${res.status})`;
+          if (res.ok) {
+            const json = await res.json();
+            group.savedProductId = json.product?.id || group.savedProductId;
+            group.status = "Published";
+            delete group.error;
+            successfulGroupIds.add(group.id);
+            publishedCount++;
+          } else {
+            const errData = await res.json().catch(() => ({}));
+            const errMsg = errData.error || `Publish failed (HTTP ${res.status})`;
+            const idx = updatedGroups.findIndex((g) => g.id === group.id);
+            if (idx >= 0) {
+              updatedGroups[idx] = { ...updatedGroups[idx], error: errMsg };
+            }
+          }
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : "Network error publishing garment";
+          console.error(`Error publishing ${group.name}:`, err);
           const idx = updatedGroups.findIndex((g) => g.id === group.id);
           if (idx >= 0) {
             updatedGroups[idx] = { ...updatedGroups[idx], error: errMsg };
           }
         }
-      } catch (err) {
-        const errMsg = err instanceof Error ? err.message : "Network error publishing garment";
-        console.error(`Error publishing ${group.name}:`, err);
-        const idx = updatedGroups.findIndex((g) => g.id === group.id);
-        if (idx >= 0) {
-          updatedGroups[idx] = { ...updatedGroups[idx], error: errMsg };
-        }
       }
-    }
 
-    const publishedPhotoIds = new Set(
-      session.groups
-        .filter((g) => successfulGroupIds.has(g.id))
-        .flatMap((g) => g.photoIds)
-    );
-
-    const remainingGroups = updatedGroups.filter((g) => !successfulGroupIds.has(g.id));
-    const remainingPhotos = session.photos.filter((p) => !publishedPhotoIds.has(p.id));
-
-    if (remainingGroups.length === 0) {
-      const nextBatchId = getNextBatchId(session.batchId);
-      const cleanSession: IntakeSession = {
-        batchId: nextBatchId,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        photos: remainingPhotos,
-        groups: [],
-      };
-      persistSession(cleanSession);
-      setRestoredBannerVisible(false);
-      if (typeof window !== "undefined") {
-        try {
-          localStorage.removeItem(INTAKE_STORAGE_KEY);
-          localStorage.removeItem(INTAKE_REVIEW_KEY);
-        } catch {
-          // ignore
-        }
-      }
-      showToast(`${publishedCount} garment(s) published successfully. Intake batch completed.`);
-    } else {
-      const partialSession: IntakeSession = {
-        ...session,
-        updatedAt: new Date().toISOString(),
-        photos: remainingPhotos,
-        groups: remainingGroups,
-      };
-      persistSession(partialSession);
-      showToast(
-        `${publishedCount} published, ${readyGroups.length - publishedCount} failed. Failed items remain in intake.`
+      const publishedPhotoIds = new Set(
+        session.groups
+          .filter((g) => successfulGroupIds.has(g.id))
+          .flatMap((g) => g.photoIds)
       );
-    }
 
-    setIsPublishing(false);
-    setConfirm(null);
-    onProductCreated?.();
+      const remainingGroups = updatedGroups.filter((g) => !successfulGroupIds.has(g.id));
+      const remainingPhotos = session.photos.filter((p) => !publishedPhotoIds.has(p.id));
+
+      if (remainingGroups.length === 0) {
+        const nextBatchId = getNextBatchId(session.batchId);
+        const cleanSession: IntakeSession = {
+          batchId: nextBatchId,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          photos: remainingPhotos,
+          groups: [],
+        };
+        persistSession(cleanSession);
+        setRestoredBannerVisible(false);
+        if (typeof window !== "undefined") {
+          try {
+            localStorage.removeItem(INTAKE_STORAGE_KEY);
+            localStorage.removeItem(INTAKE_REVIEW_KEY);
+          } catch {
+            // ignore
+          }
+        }
+        showToast(`${publishedCount} garment(s) published successfully. Intake batch completed.`);
+      } else {
+        const partialSession: IntakeSession = {
+          ...session,
+          updatedAt: new Date().toISOString(),
+          photos: remainingPhotos,
+          groups: remainingGroups,
+        };
+        persistSession(partialSession);
+        showToast(
+          `${publishedCount} published, ${readyGroups.length - publishedCount} failed. Failed items remain in intake.`
+        );
+      }
+
+      setConfirm(null);
+      onProductCreated?.();
+    } finally {
+      setIsPublishing(false);
+    }
   };
 
   const unassignedPhotos = session.photos.filter((p) => !p.assignedGroup);
@@ -1788,13 +1803,41 @@ export function Intake({
           {session.groups.length > 0 && (
             <Button
               variant="primary"
+              disabled={isPublishing}
+              className={isPublishing && tab === "review" ? "button-loading" : ""}
               onClick={() => {
+                if (isPublishing) return;
                 if (tab === "unassigned") setTab("groups");
                 else if (tab === "groups") handleNextToReview();
                 else setConfirm("Publish ready garments?");
               }}
             >
-              {tab === "review" ? "Publish Ready Garments" : tab === "groups" ? "Next →" : "Continue to Details →"}
+              {isPublishing && tab === "review" ? (
+                <>
+                  <span className="button-spinner" aria-hidden="true">
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      className="spinner-svg"
+                    >
+                      <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+                      <path d="M12 2a10 10 0 0 1 10 10" />
+                    </svg>
+                  </span>
+                  <span>Publishing...</span>
+                </>
+              ) : tab === "review" ? (
+                "Publish Ready Garments"
+              ) : tab === "groups" ? (
+                "Next →"
+              ) : (
+                "Continue to Details →"
+              )}
             </Button>
           )}
         </div>      </div>
@@ -1998,6 +2041,7 @@ export function Intake({
                 <Button
                   variant="danger"
                   icon="trash"
+                  disabled={isDeletingPhotos}
                   onClick={() => setConfirm("Delete selected photos?")}
                 >
                   Delete Selected
@@ -2591,14 +2635,34 @@ export function Intake({
                 disabled={isPublishing}
                 onClick={() => setConfirm("Publish ready garments?")}
                 aria-label="Publish Ready Garments"
-                className="review-publish-btn"
+                className={`review-publish-btn ${isPublishing ? "button-loading" : ""}`}
               >
-                <span className="desktop-btn-text">
-                  {isPublishing ? "Publishing..." : "Publish Ready Garments"}
-                </span>
-                <span className="mobile-btn-text">
-                  {isPublishing ? "Publishing..." : "Publish ready"}
-                </span>
+                {isPublishing ? (
+                  <>
+                    <span className="button-spinner" aria-hidden="true">
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        className="spinner-svg"
+                      >
+                        <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+                        <path d="M12 2a10 10 0 0 1 10 10" />
+                      </svg>
+                    </span>
+                    <span className="desktop-btn-text">Publishing...</span>
+                    <span className="mobile-btn-text">Publishing...</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="desktop-btn-text">Publish Ready Garments</span>
+                    <span className="mobile-btn-text">Publish ready</span>
+                  </>
+                )}
               </Button>
             </div>
           )}
@@ -2614,7 +2678,14 @@ export function Intake({
               : "This cannot be undone. Selected unassigned photos will be deleted."
           }
           action={confirm.startsWith("Publish") ? "Publish garments" : "Delete photos"}
-          onCancel={() => setConfirm(null)}
+          variant={confirm.startsWith("Publish") ? "primary" : "danger"}
+          loading={confirm.startsWith("Publish") ? isPublishing : isDeletingPhotos}
+          loadingText={confirm.startsWith("Publish") ? "Publishing..." : "Deleting..."}
+          onCancel={() => {
+            if (!isPublishing && !isDeletingPhotos) {
+              setConfirm(null);
+            }
+          }}
           onConfirm={() => {
             if (confirm.startsWith("Publish")) {
               publishReadyGarments();
@@ -4196,6 +4267,7 @@ export function ConfirmDialog({
   onConfirm,
   loading = false,
   loadingText,
+  variant = "danger",
 }: {
   title: string;
   body: string;
@@ -4204,6 +4276,7 @@ export function ConfirmDialog({
   onConfirm: () => void;
   loading?: boolean;
   loadingText?: string;
+  variant?: "danger" | "primary" | "secondary";
 }) {
   return (
     <div className="modal-backdrop" role="presentation">
@@ -4216,7 +4289,7 @@ export function ConfirmDialog({
         <div>
           <Button onClick={onCancel} disabled={loading}>Cancel</Button>
           <Button
-            variant="danger"
+            variant={variant}
             onClick={onConfirm}
             disabled={loading}
             className={loading ? "button-loading" : ""}

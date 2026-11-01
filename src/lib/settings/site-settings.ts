@@ -42,7 +42,7 @@ export const DEFAULT_CATALOGUE_ADS: [string, string, string] = [
 ];
 
 export const DEFAULT_NAVBAR_CONFIG: NavbarConfig = {
-  showSaleLink: true,
+  showSaleLink: false,
 };
 
 import {
@@ -98,7 +98,10 @@ export function normalizeHeroCards(raw?: unknown): HeroCardConfigItem[] {
 function normalizeNavbarConfig(raw?: Partial<NavbarConfig> | null): NavbarConfig {
   if (!raw) return { ...DEFAULT_NAVBAR_CONFIG };
   return {
-    showSaleLink: raw.showSaleLink !== false,
+    showSaleLink:
+      typeof raw.showSaleLink === "boolean"
+        ? raw.showSaleLink
+        : DEFAULT_NAVBAR_CONFIG.showSaleLink,
     updatedAt: raw.updatedAt,
   };
 }

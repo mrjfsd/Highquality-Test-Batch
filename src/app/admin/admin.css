@@ -6245,6 +6245,31 @@ button.button-danger.button-loading *,
   stroke: #ffffff !important;
 }
 
+.app-shell .button-primary.button-loading,
+button.button-primary.button-loading,
+.button-primary.button-loading,
+.app-shell .button-primary.button-loading:disabled,
+button.button-primary.button-loading:disabled,
+.button-primary.button-loading:disabled {
+  background-color: var(--admin-burgundy) !important;
+  border-color: var(--admin-burgundy) !important;
+  color: #ffffff !important;
+  opacity: 0.88 !important;
+  cursor: wait !important;
+  pointer-events: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+}
+
+.app-shell .button-primary.button-loading *,
+button.button-primary.button-loading *,
+.button-primary.button-loading * {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
 /* ==========================================================================
    Homepage Hero Cards Management Screen (Minimal 7-Slot Grid)
    ========================================================================== */

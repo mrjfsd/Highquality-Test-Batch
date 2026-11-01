@@ -56,9 +56,18 @@ function BrandLockup({ onClick }: { onClick?: (e: React.MouseEvent<HTMLAnchorEle
   );
 }
 
-export default function Navbar() {
+interface NavbarProps {
+  initialShowSaleLink?: boolean;
+}
+
+export default function Navbar({ initialShowSaleLink }: NavbarProps = {}) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [showSaleLink, setShowSaleLink] = useState<boolean>(true);
+  const [showSaleLink, setShowSaleLink] = useState<boolean>(() => {
+    if (typeof initialShowSaleLink === "boolean") {
+      return initialShowSaleLink;
+    }
+    return false; // Safe initial state: never optimistically enabled
+  });
   const { totalCount, isLoaded } = useCart();
   const pathname = usePathname();
   const isHome = pathname === "/";

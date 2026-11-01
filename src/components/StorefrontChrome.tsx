@@ -7,7 +7,18 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { CartProvider } from "@/context/CartContext";
 
-function StorefrontChromeInner({ children }: { children: React.ReactNode }) {
+interface StorefrontChromeProps {
+  children: React.ReactNode;
+  initialShowSaleLink?: boolean;
+}
+
+function StorefrontChromeInner({
+  children,
+  initialShowSaleLink,
+}: {
+  children: React.ReactNode;
+  initialShowSaleLink?: boolean;
+}) {
   const pathname = usePathname();
   const isAdmin = pathname.startsWith("/admin");
 
@@ -19,18 +30,23 @@ function StorefrontChromeInner({ children }: { children: React.ReactNode }) {
   return (
     <>
       <AnnouncementBanner />
-      <Navbar />
+      <Navbar initialShowSaleLink={initialShowSaleLink} />
       {children}
       <Footer />
     </>
   );
 }
 
-export default function StorefrontChrome({ children }: { children: React.ReactNode }) {
+export default function StorefrontChrome({
+  children,
+  initialShowSaleLink,
+}: StorefrontChromeProps) {
   return (
     <CartProvider>
       <Suspense fallback={<>{children}</>}>
-        <StorefrontChromeInner>{children}</StorefrontChromeInner>
+        <StorefrontChromeInner initialShowSaleLink={initialShowSaleLink}>
+          {children}
+        </StorefrontChromeInner>
       </Suspense>
     </CartProvider>
   );
