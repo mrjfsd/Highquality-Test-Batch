@@ -68,6 +68,7 @@ export const HERO_GARMENTS: GarmentCardItem[] = [
   },
 ];
 
+
 export default function HeroGarmentFan({
   isBannerActive = true,
   cards,
@@ -95,9 +96,10 @@ export default function HeroGarmentFan({
   const dragTiltTargetRef = useRef(0);
   const rafId = useRef<number | null>(null);
 
-  // Deck deal intro tracking: starts at 0 (stacked pile) on server and first client render
+  // Deck deal intro tracking: starts at 0 (stacked pile) on every mount
   const introRef = useRef(0);
   const introDoneRef = useRef(false);
+  const introTweenRef = useRef<gsap.core.Tween | null>(null);
 
   // Pointer tracking refs
   const pointerStartX = useRef<number | null>(null);
@@ -177,227 +179,184 @@ export default function HeroGarmentFan({
     };
   }, []);
 
-  // Deck deal intro animation: runs synchronously before paint on mount via useIsomorphicLayoutEffect
+  // Unified GSAP lifecycle: Deck deal intro and ScrollTrigger scroll rotation inside gsap.context()
   useIsomorphicLayoutEffect(() => {
     if (typeof window === "undefined") return;
 
-    // If page is already scrolled down or user prefers reduced motion, skip intro and show fan immediately
-    if (
-      (window.scrollY || window.pageYOffset || 0) > 0 ||
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
-      introRef.current = 1;
-      introDoneRef.current = true;
-
-      // Distribute card transforms immediately in DOM before first paint
-      const container = containerRef.current;
-      if (container) {
-        const cardEls = container.querySelectorAll<HTMLElement>(".hero-fan-card");
-        const totalCards = cardEls.length;
-        const maxVisibleRadius = 3.5;
-        const width = window.innerWidth;
-        const mobile = width <= 640;
-        const tablet = width > 640 && width <= 1024;
-
-        for (let i = 0; i < totalCards; i++) {
-          const el = cardEls[i];
-          if (!el) continue;
-
-          let diff = (i - progressRef.current) % totalCards;
-          while (diff > totalCards / 2) diff -= totalCards;
-          while (diff < -totalCards / 2) diff += totalCards;
-
-          const absDiff = Math.abs(diff);
-
-          if (!mobile && !tablet) {
-            const a = absDiff;
-            const fanTx = Math.sign(diff) * (1.245 * a - 0.025 * Math.pow(a, 3));
-            const fanTy = 0.2 * Math.pow(a, 2) - 0.0067 * Math.pow(a, 4);
-            const fanRotateZ = diff * 8.8;
-            const baseRotateY = -diff * 2.6;
-            const scale = Math.max(0.64, 1.04 - absDiff * 0.03);
-
-            let normalOpacity = 0;
-            if (absDiff < maxVisibleRadius) {
-              const normalizedDist = absDiff / maxVisibleRadius;
-              normalOpacity = Math.pow(Math.cos((normalizedDist * Math.PI) / 2), 0.45);
-            }
-
-            el.style.transform = `translateX(calc(-50% + ${fanTx.toFixed(4)} * var(--fan-card-w))) translateY(calc(${fanTy.toFixed(4)} * var(--fan-card-w))) rotateZ(${fanRotateZ.toFixed(2)}deg) rotateY(${baseRotateY.toFixed(2)}deg) scale(${scale.toFixed(3)})`;
-            el.style.opacity = normalOpacity.toFixed(3);
-          } else {
-            const R = mobile ? 540 : 820;
-            const angleStepDeg = mobile ? 7.6 : 8.2;
-            const thetaDeg = diff * angleStepDeg;
-            const thetaRad = (thetaDeg * Math.PI) / 180;
-
-            const fanTx = R * Math.sin(thetaRad);
-            const fanTy = R * (1 - Math.cos(thetaRad));
-            const fanRotateZ = thetaDeg;
-            const baseRotateY = -diff * (mobile ? 2.0 : 2.6);
-            const scale = Math.max(0.64, (mobile ? 1.04 : 1.08) - absDiff * (mobile ? 0.065 : 0.075));
-
-            let normalOpacity = 0;
-            if (absDiff < maxVisibleRadius) {
-              const normalizedDist = absDiff / maxVisibleRadius;
-              normalOpacity = Math.pow(Math.cos((normalizedDist * Math.PI) / 2), 0.78);
-            }
-
-            el.style.transform = `translateX(calc(-50% + ${fanTx.toFixed(2)}px)) translateY(${fanTy.toFixed(2)}px) rotateZ(${fanRotateZ.toFixed(2)}deg) rotateY(${baseRotateY.toFixed(2)}deg) scale(${scale.toFixed(3)})`;
-            el.style.opacity = normalOpacity.toFixed(3);
-          }
-        }
-      }
-      return;
-    }
+    gsap.registerPlugin(ScrollTrigger);
 
     const container = containerRef.current;
     if (!container) return;
 
+    const triggerEl =
+      (scrollContainerId ? document.getElementById(scrollContainerId) : null) || container;
+    const isReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    // For users who prefer reduced motion, skip intro and show spread fan immediately
+    if (isReducedMotion) {
+      introRef.current = 1;
+      introDoneRef.current = true;
+      return;
+    }
+
+    // When mounting or returning to the homepage, ensure window is at top
+    if (window.scrollY > 0 && !window.location.hash) {
+      window.scrollTo(0, 0);
+    }
+
     introRef.current = 0;
     introDoneRef.current = false;
+    progressRef.current = 0;
+    targetProgressRef.current = 0;
 
-    // Failsafe 1: timeout ~2200ms guarantees introDoneRef is set
-    const failsafeTimer = setTimeout(() => {
-      introDoneRef.current = true;
-    }, 2200);
+    let ctx: gsap.Context | null = null;
 
-    // Failsafe 2: tab visibilitychange to hidden also sets introDone
-    const onVisibilityChange = () => {
-      if (document.hidden) {
-        introDoneRef.current = true;
-      }
-    };
-    document.addEventListener("visibilitychange", onVisibilityChange);
+    ctx = gsap.context(() => {
+      const isMobileViewport = window.innerWidth <= 768;
 
-    // Cache card elements once on mount to avoid allocating NodeLists or arrays per frame
-    const cardEls = Array.from(container.querySelectorAll<HTMLElement>(".hero-fan-card"));
-    const totalCards = cardEls.length;
-    const maxVisibleRadius = 3.5;
-
-    const proxy = { val: 0 };
-    const tween = gsap.to(proxy, {
-      val: 1,
-      duration: 1.4,
-      delay: 0.25,
-      ease: "power3.inOut",
-      onUpdate() {
-        const intro = proxy.val;
-        introRef.current = intro;
-
-        // Direct DOM arithmetic update: no React state or new objects per frame
-        const width = window.innerWidth;
-        const mobile = width <= 640;
-        const tablet = width > 640 && width <= 1024;
-
-        for (let i = 0; i < totalCards; i++) {
-          const el = cardEls[i];
-          if (!el) continue;
-
-          let diff = (i - progressRef.current) % totalCards;
-          while (diff > totalCards / 2) diff -= totalCards;
-          while (diff < -totalCards / 2) diff += totalCards;
-
-          const absDiff = Math.abs(diff);
-          const cardProgress = Math.max(0, Math.min(1, (intro - 0.05 * absDiff) / 0.85));
-          const stackRotateZ = diff * 1.5;
-
-          if (!mobile && !tablet) {
-            // Desktop polynomial curves matching approved resting fan
-            const a = absDiff;
-            const fanTx = Math.sign(diff) * (1.245 * a - 0.025 * Math.pow(a, 3));
-            const fanTy = 0.2 * Math.pow(a, 2) - 0.0067 * Math.pow(a, 4);
-            const fanRotateZ = diff * 8.8;
-            const baseRotateY = -diff * 2.6;
-            const scale = Math.max(0.64, 1.04 - absDiff * 0.03);
-
-            const tx = fanTx * cardProgress;
-            const ty = fanTy * cardProgress;
-            const rotZ = stackRotateZ + (fanRotateZ - stackRotateZ) * cardProgress;
-
-            let normalOpacity = 0;
-            if (absDiff < maxVisibleRadius) {
-              const normalizedDist = absDiff / maxVisibleRadius;
-              normalOpacity = Math.pow(Math.cos((normalizedDist * Math.PI) / 2), 0.45);
+      // 1. ScrollTrigger for continuous wheel-like rotation on scroll
+      ScrollTrigger.create({
+        trigger: triggerEl,
+        start: "top top",
+        end: isMobileViewport ? "bottom top" : "bottom bottom",
+        scrub: 0.6,
+        onUpdate: (self) => {
+          // If user begins scrolling while intro is running, cancel intro and follow scroll immediately
+          if (!introDoneRef.current) {
+            // Only interrupt intro if user has actually scrolled into the section
+            if (self.progress > 0.01) {
+              introDoneRef.current = true;
+              introRef.current = 1;
+              if (introTweenRef.current) {
+                introTweenRef.current.kill();
+                introTweenRef.current = null;
+              }
+            } else {
+              // At scroll top, let intro spread run undisturbed
+              return;
             }
-            const opacity = 1 + (normalOpacity - 1) * cardProgress;
-
-            el.style.transform = `translateX(calc(-50% + ${tx.toFixed(4)} * var(--fan-card-w))) translateY(calc(${ty.toFixed(4)} * var(--fan-card-w))) rotateZ(${rotZ.toFixed(2)}deg) rotateY(${baseRotateY.toFixed(2)}deg) scale(${scale.toFixed(3)})`;
-            el.style.opacity = opacity.toFixed(3);
-          } else {
-            // Tablet and Mobile
-            const R = mobile ? 540 : 820;
-            const angleStepDeg = mobile ? 7.6 : 8.2;
-            const thetaDeg = diff * angleStepDeg;
-            const thetaRad = (thetaDeg * Math.PI) / 180;
-
-            const fanTx = R * Math.sin(thetaRad);
-            const fanTy = R * (1 - Math.cos(thetaRad));
-            const fanRotateZ = thetaDeg;
-            const baseRotateY = -diff * (mobile ? 2.0 : 2.6);
-            const scale = Math.max(0.64, (mobile ? 1.04 : 1.08) - absDiff * (mobile ? 0.065 : 0.075));
-
-            const tx = fanTx * cardProgress;
-            const ty = fanTy * cardProgress;
-            const rotZ = stackRotateZ + (fanRotateZ - stackRotateZ) * cardProgress;
-
-            let normalOpacity = 0;
-            if (absDiff < maxVisibleRadius) {
-              const normalizedDist = absDiff / maxVisibleRadius;
-              normalOpacity = Math.pow(Math.cos((normalizedDist * Math.PI) / 2), 0.78);
-            }
-            const opacity = 1 + (normalOpacity - 1) * cardProgress;
-
-            el.style.transform = `translateX(calc(-50% + ${tx.toFixed(2)}px)) translateY(${ty.toFixed(2)}px) rotateZ(${rotZ.toFixed(2)}deg) rotateY(${baseRotateY.toFixed(2)}deg) scale(${scale.toFixed(3)})`;
-            el.style.opacity = opacity.toFixed(3);
           }
-        }
-      },
-      onComplete() {
-        introDoneRef.current = true;
-        // Align React state with the finished intro
-        startAnimation();
-      },
-    });
+          if (isDraggingRef.current) return;
+          targetProgressRef.current = self.progress * N;
+          startAnimation();
+        },
+      });
 
-    return () => {
-      tween.kill();
-      clearTimeout(failsafeTimer);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
+      // 2. Deck deal intro: animate cards from stacked pile (Screenshot 1) to spread fan (Screenshot 2)
+      const proxy = { val: 0 };
+      const cardEls = Array.from(container.querySelectorAll<HTMLElement>(".hero-fan-card"));
+      const totalCards = cardEls.length;
+      const maxVisibleRadius = 3.5;
+
+      introTweenRef.current = gsap.to(proxy, {
+        val: 1,
+        duration: 1.4,
+        delay: 0.25,
+        ease: "power3.inOut",
+        onUpdate() {
+          if (introDoneRef.current && proxy.val < 1) return;
+          const intro = proxy.val;
+          introRef.current = intro;
+
+          const width = window.innerWidth;
+          const mobile = width <= 640;
+          const tablet = width > 640 && width <= 1024;
+
+          for (let i = 0; i < totalCards; i++) {
+            const el = cardEls[i];
+            if (!el) continue;
+
+            let diff = (i - progressRef.current) % totalCards;
+            while (diff > totalCards / 2) diff -= totalCards;
+            while (diff < -totalCards / 2) diff += totalCards;
+
+            const absDiff = Math.abs(diff);
+            const cardProgress = Math.max(0, Math.min(1, (intro - 0.05 * absDiff) / 0.85));
+            const stackRotateZ = diff * 1.5;
+
+            if (!mobile && !tablet) {
+              const a = absDiff;
+              const fanTx = Math.sign(diff) * (1.245 * a - 0.025 * Math.pow(a, 3));
+              const fanTy = 0.2 * Math.pow(a, 2) - 0.0067 * Math.pow(a, 4);
+              const fanRotateZ = diff * 8.8;
+              const baseRotateY = -diff * 2.6;
+              const scale = Math.max(0.64, 1.04 - absDiff * 0.03);
+
+              const tx = fanTx * cardProgress;
+              const ty = fanTy * cardProgress;
+              const rotZ = stackRotateZ + (fanRotateZ - stackRotateZ) * cardProgress;
+
+              let normalOpacity = 0;
+              if (absDiff < maxVisibleRadius) {
+                const normalizedDist = absDiff / maxVisibleRadius;
+                normalOpacity = Math.pow(Math.cos((normalizedDist * Math.PI) / 2), 0.45);
+              }
+              const opacity = 1 + (normalOpacity - 1) * cardProgress;
+
+              el.style.transform = `translateX(calc(-50% + ${tx.toFixed(4)} * var(--fan-card-w))) translateY(calc(${ty.toFixed(4)} * var(--fan-card-w))) rotateZ(${rotZ.toFixed(2)}deg) rotateY(${baseRotateY.toFixed(2)}deg) scale(${scale.toFixed(3)})`;
+              el.style.opacity = opacity.toFixed(3);
+            } else {
+              const R = mobile ? 540 : 820;
+              const angleStepDeg = mobile ? 7.6 : 8.2;
+              const thetaDeg = diff * angleStepDeg;
+              const thetaRad = (thetaDeg * Math.PI) / 180;
+
+              const fanTx = R * Math.sin(thetaRad);
+              const fanTy = R * (1 - Math.cos(thetaRad));
+              const fanRotateZ = thetaDeg;
+              const baseRotateY = -diff * (mobile ? 2.0 : 2.6);
+              const scale = Math.max(0.64, (mobile ? 1.04 : 1.08) - absDiff * (mobile ? 0.065 : 0.075));
+
+              const tx = fanTx * cardProgress;
+              const ty = fanTy * cardProgress;
+              const rotZ = stackRotateZ + (fanRotateZ - stackRotateZ) * cardProgress;
+
+              let normalOpacity = 0;
+              if (absDiff < maxVisibleRadius) {
+                const normalizedDist = absDiff / maxVisibleRadius;
+                normalOpacity = Math.pow(Math.cos((normalizedDist * Math.PI) / 2), 0.78);
+              }
+              const opacity = 1 + (normalOpacity - 1) * cardProgress;
+
+              el.style.transform = `translateX(calc(-50% + ${tx.toFixed(2)}px)) translateY(${ty.toFixed(2)}px) rotateZ(${rotZ.toFixed(2)}deg) rotateY(${baseRotateY.toFixed(2)}deg) scale(${scale.toFixed(3)})`;
+              el.style.opacity = opacity.toFixed(3);
+            }
+          }
+        },
+        onComplete() {
+          introDoneRef.current = true;
+          introRef.current = 1;
+          introTweenRef.current = null;
+          startAnimation();
+        },
+      });
+
+      // Recalculate ScrollTrigger measurements accurately for this fresh page mount
+      ScrollTrigger.refresh();
+    }, containerRef);
+
+    // Refresh ScrollTrigger when layout and hero cards settle
+    const refreshTimer = setTimeout(() => {
+      ScrollTrigger.refresh();
+    }, 120);
+
+    const onImageOrWindowLoad = () => {
+      ScrollTrigger.refresh();
     };
-  }, [startAnimation]);
-
-  // GSAP ScrollTrigger scroll-driven rotation:
-  // Scrolling down advances the carousel forward through the cards,
-  // scrolling up reverses rotation, stopping mid-scroll halts the movement.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-
-    gsap.registerPlugin(ScrollTrigger);
-
-    const triggerEl = scrollContainerId
-      ? document.getElementById(scrollContainerId)
-      : containerRef.current;
-
-    if (!triggerEl) return;
-
-    const isMobileViewport = window.innerWidth <= 768;
-
-    const st = ScrollTrigger.create({
-      trigger: triggerEl,
-      start: "top top",
-      end: isMobileViewport ? "bottom top" : "bottom bottom",
-      scrub: 0.6,
-      onUpdate: (self) => {
-        if (!introDoneRef.current || isDraggingRef.current) return;
-        targetProgressRef.current = self.progress * N;
-        startAnimation();
-      },
-    });
+    window.addEventListener("load", onImageOrWindowLoad);
 
     return () => {
-      st.kill();
+      clearTimeout(refreshTimer);
+      window.removeEventListener("load", onImageOrWindowLoad);
+      if (introTweenRef.current) {
+        introTweenRef.current.kill();
+        introTweenRef.current = null;
+      }
+      if (rafId.current !== null) {
+        cancelAnimationFrame(rafId.current);
+        rafId.current = null;
+      }
+      ctx?.revert();
     };
   }, [scrollContainerId, N, startAnimation]);
 

@@ -939,8 +939,8 @@ export function Intake({
   const [confirm, setConfirm] = useState<string | null>(null);
   const [restoredBannerVisible, setRestoredBannerVisible] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
-  const [isSavingDrafts, setIsSavingDrafts] = useState(false);
   const [isDeletingPhotos, setIsDeletingPhotos] = useState(false);
+  const [isSavingDrafts, setIsSavingDrafts] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, { name?: string; price?: string; discountPercent?: string }>>({});
 
   useEffect(() => {
@@ -1850,13 +1850,41 @@ export function Intake({
           {session.groups.length > 0 && (
             <Button
               variant="primary"
+              disabled={isPublishing}
+              className={isPublishing && tab === "review" ? "button-loading" : ""}
               onClick={() => {
+                if (isPublishing) return;
                 if (tab === "unassigned") setTab("groups");
                 else if (tab === "groups") handleNextToReview();
                 else setConfirm("Publish ready garments?");
               }}
             >
-              {tab === "review" ? "Publish Ready Garments" : tab === "groups" ? "Next →" : "Continue to Details →"}
+              {isPublishing && tab === "review" ? (
+                <>
+                  <span className="button-spinner" aria-hidden="true">
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      className="spinner-svg"
+                    >
+                      <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+                      <path d="M12 2a10 10 0 0 1 10 10" />
+                    </svg>
+                  </span>
+                  <span>Publishing...</span>
+                </>
+              ) : tab === "review" ? (
+                "Publish Ready Garments"
+              ) : tab === "groups" ? (
+                "Next →"
+              ) : (
+                "Continue to Details →"
+              )}
             </Button>
           )}
         </div>      </div>
@@ -2060,6 +2088,7 @@ export function Intake({
                 <Button
                   variant="danger"
                   icon="trash"
+                  disabled={isDeletingPhotos}
                   onClick={() => setConfirm("Delete selected photos?")}
                 >
                   Delete Selected
@@ -4292,6 +4321,7 @@ export function ConfirmDialog({
   onConfirm: () => void;
   loading?: boolean;
   loadingText?: string;
+  variant?: "danger" | "primary" | "secondary";
 }) {
   return (
     <div className="modal-backdrop" role="presentation">

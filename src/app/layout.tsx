@@ -24,12 +24,18 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const navbarConfig = await getNavbarConfig();
+  let initialShowSaleLink = true;
+  try {
+    const navbarConfig = await getNavbarConfig();
+    initialShowSaleLink = navbarConfig?.showSaleLink !== false;
+  } catch (err) {
+    console.warn("[RootLayout] Could not load navbar config:", err);
+  }
 
   return (
     <html lang="en">
       <body style={{ margin: 0, background: "#06110C", color: "#F7F3EE" }}>
-        <StorefrontChrome initialShowSaleLink={navbarConfig.showSaleLink}>
+        <StorefrontChrome initialShowSaleLink={initialShowSaleLink}>
           {children}
         </StorefrontChrome>
       </body>
