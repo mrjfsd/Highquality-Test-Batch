@@ -8,8 +8,8 @@ export default function ProductDetailLoading() {
           style={{
             width: 76,
             height: 34,
-            background: "var(--white, #171717)",
-            border: "1px solid var(--line, rgba(247, 243, 238, 0.1))",
+            background: "var(--white, #FFFFFF)",
+            border: "1px solid var(--line, rgba(36, 35, 33, 0.08))",
             borderRadius: 8,
           }}
         />
@@ -18,7 +18,7 @@ export default function ProductDetailLoading() {
           style={{
             width: 180,
             height: 16,
-            background: "var(--line, rgba(247, 243, 238, 0.1))",
+            background: "var(--line, rgba(36, 35, 33, 0.08))",
             borderRadius: 4,
           }}
         />
@@ -34,8 +34,8 @@ export default function ProductDetailLoading() {
               width: "100%",
               maxWidth: 460,
               aspectRatio: "3 / 4",
-              background: "var(--card-bg, #171717)",
-              border: "1px solid var(--line, rgba(247, 243, 238, 0.1))",
+              background: "var(--card-bg, #EAE6DE)",
+              border: "1px solid var(--line, rgba(36, 35, 33, 0.08))",
               borderRadius: 12,
             }}
           />

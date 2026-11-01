@@ -34,7 +34,7 @@ export default async function RootLayout({
 
   return (
     <html lang="en">
-      <body style={{ margin: 0, background: "#06110C", color: "#F7F3EE" }}>
+      <body style={{ margin: 0, background: "#F5F2EC", color: "#242321" }}>
         <StorefrontChrome initialShowSaleLink={initialShowSaleLink}>
           {children}
         </StorefrontChrome>

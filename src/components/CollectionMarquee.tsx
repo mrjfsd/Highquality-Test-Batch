@@ -60,7 +60,7 @@ export default function CollectionMarquee({ initialMessages }: CollectionMarquee
       role="region"
       aria-label="Promotional offers marquee"
       style={{
-        backgroundColor: "var(--crimson, #A31C1B)",
+        backgroundColor: "var(--burgundy, #762B3B)",
         color: "#ffffff",
         width: "100%",
         overflow: "hidden",
