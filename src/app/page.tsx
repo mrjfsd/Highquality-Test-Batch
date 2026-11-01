@@ -30,7 +30,7 @@ type ImageProps = {
 
 const images = {
   men: "https://images.unsplash.com/photo-1667843623373-05d11fb0409a?q=80&w=686&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=NHwxMjA3fDA%3D?auto=format&fit=crop&w=900&q=86",
-  women: "https://images.unsplash.com/photo-1739496565665-f205ea3d46f9?q=80&w=687&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=NHwxMjA3fDA%3D?auto=format&fit=crop&w=900&q=86",
+  women: "https://images.unsplash.com/photo-1590399830217-8db7489f911e?auto=format&fit=crop&w=900&q=86",
   kids: "https://images.unsplash.com/photo-1758851552775-7353c60e4906?auto=format&fit=crop&w=900&q=86",
   productOne: "https://images.unsplash.com/photo-1676165303734-5c2b9dd394af?auto=format&fit=crop&w=800&q=85",
   productTwo: "https://plus.unsplash.com/premium_photo-1671656349240-c2dac4acfc2d?q=80&w=687&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=NHwxMjA3fDA%3D?auto=format&fit=crop&w=800&q=85",
