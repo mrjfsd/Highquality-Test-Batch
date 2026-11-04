@@ -361,21 +361,23 @@ function HomeProductCard({
   product,
   index = 0,
 }: {
-  product: (typeof sampleProducts)[number];
+  product: {
+    image: string;
+    alt: string;
+  };
   index?: number;
 }) {
   return (
-    <article className={`product-card reveal-item stagger-${(index % 4) + 1}`}>
-      <Link className="product-image-wrap" href={product.href} aria-label={product.name} prefetch={true}>
-        <SmartImage src={product.image} alt={product.alt} className="product-image" sizes={RESPONSIVE_SIZES.favouriteCard} width={320} height={416} />
-        <span className="product-tag">THE EDIT</span>
-      </Link>
-      <div className="product-meta">
-        <div>
-          <h3>{product.name}</h3>
-          <p className="sample-label">Illustrative price</p>
-        </div>
-        <p className="price">{product.price}</p>
+    <article className={`favourite-card reveal-item stagger-${(index % 4) + 1}`}>
+      <div className="product-image-wrap">
+        <SmartImage
+          src={product.image}
+          alt={product.alt}
+          className="product-image"
+          sizes={RESPONSIVE_SIZES.favouriteCard}
+          width={320}
+          height={416}
+        />
       </div>
     </article>
   );
@@ -385,7 +387,6 @@ function FeaturedProducts({ favourites }: { favourites?: HomepageFavouriteItem[]
   const products = sampleProducts.map((sp, idx) => {
     const fav = favourites && favourites[idx] ? favourites[idx] : null;
     return {
-      ...sp,
       image: fav?.image || sp.image,
       alt: fav?.alt || sp.alt,
     };
@@ -397,11 +398,10 @@ function FeaturedProducts({ favourites }: { favourites?: HomepageFavouriteItem[]
         eyebrow="STYLE-EDIT PICKS"
         title="The Current Favourites"
         description="Pieces worth making room for."
-        action={<TextLink href="/shop/women">View all</TextLink>}
       />
       <div className="product-grid">
         {products.map((product, index) => (
-          <HomeProductCard product={product} index={index} key={product.name} />
+          <HomeProductCard product={product} index={index} key={index} />
         ))}
       </div>
     </section>
@@ -434,20 +434,12 @@ function EditorialScrollShowcase({ items }: { items?: HomepageFormPerspectiveIte
                 Two perspectives. Everyday versatility. Scroll to reveal the shift in detail.
               </p>
             </div>
-            <div className="editorial-header-action">
-              <TextLink href="/shop/women">Explore the Collection</TextLink>
-            </div>
           </div>
 
           <div className="editorial-stage">
             {/* Pair 1: Base Front Silhouette */}
             <div className="editorial-pair editorial-pair--base" aria-hidden="false">
-              <Link
-                href="/shop/women"
-                className="editorial-card"
-                aria-label="Women's collection — Relaxed Linen Blazer"
-                prefetch={true}
-              >
+              <div className="editorial-card">
                 <div className="editorial-image-frame">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
@@ -459,23 +451,10 @@ function EditorialScrollShowcase({ items }: { items?: HomepageFormPerspectiveIte
                     width={896}
                     height={1200}
                   />
-                  <div className="editorial-card-tag">
-                    <span className="editorial-tag-num">01</span>
-                    <span className="editorial-tag-label">SILHOUETTE</span>
-                  </div>
                 </div>
-                <div className="editorial-card-info">
-                  <h4>The Tailored Blazer</h4>
-                  <p>Women · Relaxed Cut</p>
-                </div>
-              </Link>
+              </div>
 
-              <Link
-                href="/shop/men"
-                className="editorial-card"
-                aria-label="Men's collection — Textured Knitwear"
-                prefetch={true}
-              >
+              <div className="editorial-card">
                 <div className="editorial-image-frame">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
@@ -487,26 +466,13 @@ function EditorialScrollShowcase({ items }: { items?: HomepageFormPerspectiveIte
                     width={896}
                     height={1200}
                   />
-                  <div className="editorial-card-tag">
-                    <span className="editorial-tag-num">02</span>
-                    <span className="editorial-tag-label">TEXTURE</span>
-                  </div>
                 </div>
-                <div className="editorial-card-info">
-                  <h4>The Considered Knit</h4>
-                  <p>Men · Heavyweight Weave</p>
-                </div>
-              </Link>
+              </div>
             </div>
 
             {/* Pair 2: Transition / Profile & Craft (rises up as user scrolls) */}
             <div className="editorial-pair editorial-pair--overlay" aria-hidden="false">
-              <Link
-                href="/shop/women"
-                className="editorial-card"
-                aria-label="Women's collection — Blazer Profile View"
-                prefetch={true}
-              >
+              <div className="editorial-card">
                 <div className="editorial-image-frame">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
@@ -518,23 +484,10 @@ function EditorialScrollShowcase({ items }: { items?: HomepageFormPerspectiveIte
                     width={896}
                     height={1200}
                   />
-                  <div className="editorial-card-tag">
-                    <span className="editorial-tag-num">01</span>
-                    <span className="editorial-tag-label">PROFILE</span>
-                  </div>
                 </div>
-                <div className="editorial-card-info">
-                  <h4>Profile & Line</h4>
-                  <p>Structured shoulder drape</p>
-                </div>
-              </Link>
+              </div>
 
-              <Link
-                href="/shop/men"
-                className="editorial-card"
-                aria-label="Men's collection — Knit Detail View"
-                prefetch={true}
-              >
+              <div className="editorial-card">
                 <div className="editorial-image-frame">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
@@ -546,16 +499,8 @@ function EditorialScrollShowcase({ items }: { items?: HomepageFormPerspectiveIte
                     width={896}
                     height={1200}
                   />
-                  <div className="editorial-card-tag">
-                    <span className="editorial-tag-num">02</span>
-                    <span className="editorial-tag-label">CRAFT</span>
-                  </div>
                 </div>
-                <div className="editorial-card-info">
-                  <h4>Tactile Depth</h4>
-                  <p>Ribbed collar & seam craft</p>
-                </div>
-              </Link>
+              </div>
             </div>
           </div>
         </div>

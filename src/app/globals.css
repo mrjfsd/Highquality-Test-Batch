@@ -1408,7 +1408,28 @@
   font-weight: 500;
 }
 
-/* ── The Current Favourites ── */
+/* ── The Current Favourites (Clean Display Panels) ── */
+.favourite-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  position: relative;
+  cursor: default;
+  height: 100%;
+}
+
+.favourite-card .product-image-wrap {
+  cursor: default;
+}
+
+.favourite-card .product-image {
+  cursor: default;
+  transform: none !important;
+}
+
+.favourite-card:hover .product-image {
+  transform: none !important;
+}
 .favourites {
   border-top: 1px solid rgba(247, 243, 238, 0.08);
 }
@@ -1884,24 +1905,28 @@
 
 .essentials-banner {
   position: relative;
-  min-height: 570px;
+  min-height: 560px;
   overflow: hidden;
   color: var(--white);
-}
-
-.essentials-image,
-.essentials-overlay {
-  position: absolute;
-  inset: 0;
-  height: 100%;
-  object-fit: cover;
+  border-radius: 12px;
 }
 
 .essentials-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
   object-position: center 25%;
+  display: block;
 }
 
 .essentials-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
   background: linear-gradient(90deg, rgba(6, 17, 12, 0.88) 0%, rgba(6, 17, 12, 0.72) 36%, rgba(23, 23, 23, 0.35) 65%, rgba(6, 17, 12, 0.2) 100%);
 }
 
@@ -4171,6 +4196,27 @@
     padding-inline: 6vw;
   }
 
+  .essentials {
+    padding: 110px 0;
+  }
+
+  .essentials-banner,
+  .essentials-copy {
+    min-height: 520px;
+  }
+
+  .essentials-image {
+    object-position: 52% 25%;
+  }
+
+  .essentials-overlay {
+    background: linear-gradient(90deg, rgba(6, 17, 12, 0.90) 0%, rgba(6, 17, 12, 0.75) 42%, rgba(23, 23, 23, 0.38) 68%, rgba(6, 17, 12, 0.22) 100%);
+  }
+
+  .essentials-copy {
+    padding: 50px;
+  }
+
   .footer-top {
     grid-template-columns: 1.4fr 1fr 1fr;
     gap: 36px;
@@ -4527,34 +4573,45 @@
 
   .essentials {
     width: 100%;
-    padding: 90px 18px;
+    padding: 70px 16px;
+  }
+
+  .essentials-banner {
+    min-height: 480px;
+    border-radius: 10px;
   }
 
   .essentials-banner,
   .essentials-copy {
-    min-height: 600px;
+    min-height: 480px;
   }
 
   .essentials-image {
-    object-position: 50% 15%;
+    object-fit: cover;
+    object-position: 58% 22%;
+    width: 100%;
+    height: 53%;
+    display: block;
   }
 
   .essentials-overlay {
-    background: linear-gradient(0deg, rgba(6, 17, 12, 0.92) 0%, rgba(6, 17, 12, 0.75) 50%, rgba(6, 17, 12, 0.35) 75%, rgba(6, 17, 12, 0.15) 100%);
+    background: linear-gradient(0deg, rgba(6, 17, 12, 0.95) 0%, rgba(6, 17, 12, 0.82) 46%, rgba(6, 17, 12, 0.36) 72%, rgba(6, 17, 12, 0.12) 100%);
   }
 
   .essentials-copy {
     justify-content: flex-end;
-    padding: 38px 26px 54px;
+    padding: 32px 22px 38px;
   }
 
   .essentials-copy h2 {
-    font-size: 54px;
+    font-size: clamp(34px, 8.5vw, 48px);
+    line-height: 1.05;
+    letter-spacing: -0.035em;
   }
 
   .essentials-side-note {
-    top: 22px;
-    right: 18px;
+    top: 20px;
+    right: 16px;
     bottom: auto;
   }
 
@@ -4718,6 +4775,30 @@
 
   .section-action .text-link svg {
     display: none;
+  }
+
+  .essentials {
+    padding: 56px 12px;
+  }
+
+  .essentials-banner,
+  .essentials-copy {
+    min-height: 450px;
+  }
+
+  .essentials-copy {
+    padding: 24px 16px 32px;
+  }
+
+  .essentials-copy h2 {
+    font-size: clamp(30px, 8.2vw, 38px);
+  }
+
+  .essentials-side-note {
+    top: 16px;
+    right: 12px;
+    font-size: 8px;
+    letter-spacing: 0.18em;
   }
 }
 
@@ -5004,11 +5085,11 @@ html.animations-ready .departments .reveal-item.stagger-3 {
   background: var(--charcoal);
   border: 1px solid rgba(247, 243, 238, 0.08);
   overflow: hidden;
-  transition: border-color 220ms ease;
+  cursor: default;
 }
 
 .editorial-card:hover {
-  border-color: rgba(247, 243, 238, 0.22);
+  border-color: rgba(247, 243, 238, 0.08);
 }
 
 .editorial-image-frame {
@@ -5029,7 +5110,7 @@ html.animations-ready .departments .reveal-item.stagger-3 {
 }
 
 .editorial-card:hover .editorial-image {
-  transform: scale(1.035);
+  transform: none;
 }
 
 .editorial-card-tag {
