@@ -780,7 +780,16 @@ export default function DepartmentListingContent({
 
       {/* 4-COLUMN PRODUCT GRID (Full width, fixed position behind overlay) */}
       <section className="product-area" aria-label="Product collection">
-        {filteredProducts.length > 0 ? (
+        {products.length === 0 ? (
+          <div className="collection-empty-state">
+            <p className="empty-title">
+              New styles are coming soon.
+            </p>
+            <p className="empty-description">
+              We are preparing new pieces for the {department} collection. Check back soon.
+            </p>
+          </div>
+        ) : filteredProducts.length > 0 ? (
           <div className="collection-product-grid collection-product-grid--4">
             {filteredProducts.map((product, index) => (
               <ProductCard

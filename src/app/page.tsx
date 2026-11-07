@@ -81,28 +81,28 @@ const sampleProducts = [
     price: "₹899",
     image: images.productOne,
     alt: "Model wearing a relaxed monochrome outfit",
-    href: "/product/heavyweight-crew-tee",
+    href: "/shop/women",
   },
   {
     name: "Everyday Oversized Shirt",
     price: "₹1,299",
     image: images.productTwo,
     alt: "Woman wearing an oversized white shirt",
-    href: "/product/studio-overshirt",
+    href: "/shop/women",
   },
   {
     name: "Classic Straight-Fit Trousers",
     price: "₹1,499",
     image: images.productThree,
     alt: "Woman wearing straight-fit jeans and a black jacket",
-    href: "/product/pleated-easy-trouser",
+    href: "/shop/women",
   },
   {
     name: "Essential Casual Sweatshirt",
     price: "₹1,199",
     image: images.productFour,
     alt: "Model in an understated casual top",
-    href: "/product/everyday-oxford-shirt",
+    href: "/shop/women",
   },
 ];
 

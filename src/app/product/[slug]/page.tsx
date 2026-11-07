@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Dosis } from "next/font/google";
-import { products, formatPrice } from "@/data/products";
+import { formatPrice } from "@/data/products";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { fetchProductBySlug, fetchRelatedProducts } from "@/lib/products/storefront";
 import ProductCard from "@/components/ProductCard";
@@ -24,9 +24,8 @@ const dosis = Dosis({
   variable: "--font-dosis",
 });
 
-// Generate static params for all published products and catalogue items at build time
+// Generate static params for all published products at build time
 export async function generateStaticParams() {
-  const mockSlugs = products.map((p) => ({ slug: p.slug }));
   try {
     const supabase = createSupabaseAdminClient();
     const { data: dbProducts } = await supabase
@@ -35,16 +34,14 @@ export async function generateStaticParams() {
       .eq("status", "published");
 
     if (dbProducts && Array.isArray(dbProducts)) {
-      const slugSet = new Set(mockSlugs.map((s) => s.slug));
-      const dbSlugs = dbProducts
-        .filter((p) => p.slug && !slugSet.has(p.slug))
+      return dbProducts
+        .filter((p) => Boolean(p.slug))
         .map((p) => ({ slug: p.slug }));
-      return [...mockSlugs, ...dbSlugs];
     }
   } catch (err) {
     console.warn("[generateStaticParams] Could not fetch published database slugs at build time:", err);
   }
-  return mockSlugs;
+  return [];
 }
 
 interface Props {

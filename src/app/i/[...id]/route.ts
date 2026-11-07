@@ -1,5 +1,4 @@
-import { products } from "../../../data/products.ts";
-import { createSupabaseAdminClient } from "../../../lib/supabase/server.ts";
+import { createSupabaseAdminClient } from "@/lib/supabase/server";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const IMAGE_EXT_REGEX = /\.(jpe?g|png|webp|avif|gif|svg)$/i;
@@ -68,18 +67,6 @@ export async function GET(
 
   // 3. Case C: Key is a product slug or product ID
   if (rawSegments.length === 1 && !IMAGE_EXT_REGEX.test(rawKey)) {
-    // Check mock catalogue products
-    const mock = products.find(
-      (p) => p.slug.toLowerCase() === rawKey.toLowerCase() || String(p.id) === rawKey
-    );
-    if (mock && mock.image) {
-      if (mock.image.startsWith("http://") || mock.image.startsWith("https://")) {
-        return Response.redirect(new URL(mock.image), 307);
-      }
-      const localPath = mock.image.startsWith("/") ? mock.image : `/${mock.image}`;
-      return Response.redirect(new URL(localPath, request.url), 307);
-    }
-
     // Check Supabase products
     try {
       const supabase = createSupabaseAdminClient();

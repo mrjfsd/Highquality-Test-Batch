@@ -237,7 +237,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const validateCartInventory = useCallback(async () => {
     try {
       const stored = localStorage.getItem(CART_STORAGE_KEY);
-      const currentItems: CartItem[] = stored ? sanitizeCartItems(JSON.parse(stored)) : items;
+      const parsedStored = stored ? JSON.parse(stored) : null;
+      const currentItems: CartItem[] = parsedStored ? sanitizeCartItems(parsedStored) : items;
+      if (Array.isArray(parsedStored) && currentItems.length !== parsedStored.length) {
+        setItems(currentItems);
+        persistItems(currentItems);
+      }
       if (currentItems.length === 0) {
         setInventoryErrors({});
         return;
@@ -268,20 +273,24 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         let hadChanges = false;
 
         const refreshed = currentItems.map((item) => {
-          if (item.variantId && stockMap[item.variantId]) {
-            const serverStock = stockMap[item.variantId].stock_quantity;
-            if (item.stockQuantity !== serverStock) {
-              hadChanges = true;
+          if (item.variantId) {
+            if (stockMap[item.variantId]) {
+              const serverStock = stockMap[item.variantId].stock_quantity;
+              if (item.stockQuantity !== serverStock) {
+                hadChanges = true;
+              }
+              if (serverStock <= 0) {
+                errors[item.id] = "Out of stock";
+              } else if (item.quantity > serverStock) {
+                errors[item.id] = `Only ${serverStock} available`;
+              }
+              return {
+                ...item,
+                stockQuantity: serverStock,
+              };
+            } else {
+              errors[item.id] = "Item no longer available";
             }
-            if (serverStock <= 0) {
-              errors[item.id] = "Out of stock";
-            } else if (item.quantity > serverStock) {
-              errors[item.id] = `Only ${serverStock} available`;
-            }
-            return {
-              ...item,
-              stockQuantity: serverStock,
-            };
           }
           return item;
         });

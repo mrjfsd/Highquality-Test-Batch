@@ -1,12 +1,7 @@
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
-import {
-  getProductBySlug as getMockProductBySlug,
-  products,
-  type Product,
-  type Department,
-} from "@/data/products";
+import type { Product, Department } from "@/data/products";
 
 function normalizeDepartment(raw: string): { lower: string; title: Department } {
   const lower = raw.trim().toLowerCase();
@@ -164,29 +159,15 @@ async function queryPublishedProductsByDepartment(
 
     const mappedDbProducts: Product[] = (dbProducts || []).map(mapDbProductToStorefront);
 
-    // Department catalogues display actual published products from Supabase plus dummy test products
-    const dummyProducts = products.filter(
-      (p) =>
-        p.department.toLowerCase() === deptLower &&
-        typeof p.id === "string" &&
-        p.id.startsWith("dummy-") &&
-        !mappedDbProducts.some((dp) => dp.slug === p.slug)
-    );
-
-    return [...mappedDbProducts, ...dummyProducts];
+    return mappedDbProducts;
   } catch (err: unknown) {
     console.error("[storefront] Unexpected error fetching department products:", err);
-    return products.filter(
-      (p) =>
-        p.department.toLowerCase() === deptLower &&
-        typeof p.id === "string" &&
-        p.id.startsWith("dummy-")
-    );
+    return [];
   }
 }
 
 /**
- * Low-level query: Resolves a published product by slug from Supabase, or falls back to catalogue data.
+ * Low-level query: Resolves a published product by slug from Supabase.
  */
 async function queryProductBySlug(cleanSlug: string): Promise<Product | undefined> {
   try {
@@ -212,8 +193,7 @@ async function queryProductBySlug(cleanSlug: string): Promise<Product | undefine
     console.error("[storefront] Unexpected error querying product by slug:", err);
   }
 
-  // Fallback to mock product catalog
-  return getMockProductBySlug(cleanSlug);
+  return undefined;
 }
 
 /**

@@ -235,6 +235,11 @@ export function sanitizeCartItems(raw: unknown): CartItem[] {
 
     if (!productId || !name || !slug) continue;
 
+    // Drop legacy dummy or mock products cleanly (real database products use UUID identifiers)
+    if (productId.startsWith("dummy-") || /^\d+$/.test(productId)) {
+      continue;
+    }
+
     const variantId = maybeItem.variantId ? String(maybeItem.variantId).trim() : null;
     const size = maybeItem.size ? String(maybeItem.size).trim() : null;
     const color = maybeItem.color ? String(maybeItem.color).trim() : null;

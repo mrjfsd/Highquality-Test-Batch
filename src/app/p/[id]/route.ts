@@ -1,12 +1,11 @@
-import { products } from "../../../data/products.ts";
-import { createSupabaseAdminClient } from "../../../lib/supabase/server.ts";
+import { createSupabaseAdminClient } from "@/lib/supabase/server";
 
 /**
  * GET /p/[id]
  *
  * Short product URL redirect handler:
  * - Redirects /p/[slug] or /p/[id] to the canonical /product/[slug] route.
- * - Resolves both mock catalogue products and published Supabase database products.
+ * - Resolves published Supabase database products.
  * - Protects against path traversal and arbitrary open redirects (strictly same-origin).
  */
 export async function GET(
@@ -25,16 +24,7 @@ export async function GET(
     return Response.redirect(new URL("/", request.url), 307);
   }
 
-  // 1. Check in-memory/static mock products (by slug or by ID)
-  const mockProduct = products.find(
-    (p) => p.slug.toLowerCase() === clean.toLowerCase() || String(p.id) === clean
-  );
-  if (mockProduct) {
-    const targetUrl = new URL(`/product/${encodeURIComponent(mockProduct.slug)}`, request.url);
-    return Response.redirect(targetUrl, 307);
-  }
-
-  // 2. Check Supabase database products
+  // 1. Check Supabase database products
   try {
     const supabase = createSupabaseAdminClient();
 
