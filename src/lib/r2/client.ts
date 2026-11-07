@@ -49,17 +49,23 @@ export function getR2BucketName(): string {
   return bucketName;
 }
 
+let cachedR2Client: S3Client | null = null;
+
 /**
- * Creates an AWS S3-compatible client configured for Cloudflare R2.
+ * Creates or reuses an AWS S3-compatible client configured for Cloudflare R2.
  * The client is scoped to the Cloudflare account's R2 endpoint.
  *
- * This is SERVER-SIDE ONLY. The R2 secret access key must never be
- * sent to or used in any browser context.
+ * This is SERVER-SIDE ONLY. Reuses the client instance across invocations
+ * to enable TCP/TLS connection reuse in serverless runtimes.
  */
 export function createR2Client(): S3Client {
+  if (cachedR2Client) {
+    return cachedR2Client;
+  }
+
   const { accountId, accessKeyId, secretAccessKey } = getR2Config();
 
-  return new S3Client({
+  cachedR2Client = new S3Client({
     region: "auto",
     endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
     credentials: {
@@ -67,4 +73,6 @@ export function createR2Client(): S3Client {
       secretAccessKey,
     },
   });
+
+  return cachedR2Client;
 }

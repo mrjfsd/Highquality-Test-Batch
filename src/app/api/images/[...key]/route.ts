@@ -2,6 +2,29 @@ import { type NextRequest } from "next/server";
 import sharp from "sharp";
 import { getR2Object, generatePresignedReadUrl } from "@/lib/r2/operations";
 
+// Run in Mumbai edge/serverless region close to Indian customers and Supabase Mumbai (ap-south-1)
+export const preferredRegion = "bom1";
+
+// Fixed responsive width whitelist to prevent CDN cache fragmentation
+const ALLOWED_WIDTHS = [64, 128, 360, 480, 640, 800, 1000, 1200] as const;
+
+function snapToAllowedWidth(width: number): number {
+  if (width <= ALLOWED_WIDTHS[0]) return ALLOWED_WIDTHS[0];
+  if (width >= ALLOWED_WIDTHS[ALLOWED_WIDTHS.length - 1]) {
+    return ALLOWED_WIDTHS[ALLOWED_WIDTHS.length - 1];
+  }
+  let closest: (typeof ALLOWED_WIDTHS)[number] = ALLOWED_WIDTHS[0];
+  let minDiff = Math.abs(width - closest);
+  for (let i = 1; i < ALLOWED_WIDTHS.length; i++) {
+    const diff = Math.abs(width - ALLOWED_WIDTHS[i]);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closest = ALLOWED_WIDTHS[i];
+    }
+  }
+  return closest;
+}
+
 // Server-side in-memory LRU cache for R2 image objects (both original and transformed variants)
 interface CachedR2Object {
   buffer: Uint8Array;
@@ -80,9 +103,9 @@ const matchClientEtag = (clientHeader: string | null, serverEtag: string) => {
  */
 function getCacheControlHeader(objectKey: string): string {
   if (objectKey.startsWith("products/")) {
-    return "public, max-age=31536000, immutable";
+    return "public, max-age=31536000, s-maxage=31536000, stale-while-revalidate=86400, immutable";
   }
-  return "public, max-age=86400, stale-while-revalidate=604800";
+  return "public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400";
 }
 
 /**
@@ -133,10 +156,18 @@ export async function GET(
   // Parse query parameters
   const { searchParams } = new URL(request.url);
   const isRaw = searchParams.get("raw") === "true" || searchParams.get("raw") === "1";
-  const widthParam = parseInt(searchParams.get("w") || "", 10);
-  const qualityParam = parseInt(searchParams.get("q") || "80", 10);
-  const targetWidth = !isNaN(widthParam) && widthParam >= 60 && widthParam <= 2560 ? widthParam : undefined;
-  const targetQuality = !isNaN(qualityParam) && qualityParam >= 30 && qualityParam <= 100 ? qualityParam : 80;
+  const rawWidthParam = parseInt(searchParams.get("w") || "", 10);
+  const rawQualityParam = parseInt(searchParams.get("q") || "80", 10);
+
+  // Snap width to fixed whitelist to prevent CDN cache fragmentation
+  const targetWidth = !isNaN(rawWidthParam) && rawWidthParam >= 32 && rawWidthParam <= 2560
+    ? snapToAllowedWidth(rawWidthParam)
+    : undefined;
+
+  // Standardize quality: snap near 80-82 to 80 to prevent cache splitting
+  const targetQuality = !isNaN(rawQualityParam) && rawQualityParam >= 30 && rawQualityParam <= 100
+    ? (rawQualityParam >= 78 && rawQualityParam <= 85 ? 80 : rawQualityParam)
+    : 80;
 
   // Raw bypass: if raw presigned URL is explicitly requested, redirect with 307
   if (isRaw) {

@@ -81,13 +81,15 @@ export function getOptimizedImageUrl(
   return url;
 }
 
+export const RESPONSIVE_IMAGE_WIDTHS = [360, 480, 640, 800, 1000] as const;
+
 /**
  * Generates a responsive srcSet string for Unsplash and R2 images across specified breakpoints.
  * Returns undefined for non-optimizable images so the browser uses the standard src.
  */
 export function getResponsiveImageSrcSet(
   url: string,
-  widths: number[] = [320, 480, 640, 800, 1000],
+  widths: number[] = [360, 480, 640, 800, 1000],
   quality: number = 80
 ): string | undefined {
   if (!url || (!isUnsplashUrl(url) && !isR2ImageUrl(url))) {

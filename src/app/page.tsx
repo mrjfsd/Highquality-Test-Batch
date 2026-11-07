@@ -1,7 +1,6 @@
 import {
   getOptimizedImageUrl,
   getResponsiveImageSrcSet,
-  isUnsplashUrl,
   RESPONSIVE_SIZES,
 } from "@/lib/images/responsive";
 import type { Metadata } from "next";
@@ -189,8 +188,8 @@ function getBannerResponsiveSources(url: string) {
   if (url.startsWith("/api/images/")) {
     return {
       mobileSrcSet: `${url}?w=640&q=80`,
-      desktopSrcSet: `${url}?w=1600&q=82`,
-      fallbackSrc: `${url}?w=1600&q=82`,
+      desktopSrcSet: `${url}?w=1200&q=80`,
+      fallbackSrc: `${url}?w=1200&q=80`,
     };
   }
   if (url === "/assets/image.png" || url === "/assets/image.webp") {
@@ -239,7 +238,6 @@ function HomePromotionalBanner({ banner }: { banner?: PromoBannerConfig | null }
             srcSet={sources.desktopSrcSet}
             type="image/webp"
           />
-          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={sources.fallbackSrc}
             alt={altText}
@@ -443,7 +441,9 @@ function EditorialScrollShowcase({ items }: { items?: HomepageFormPerspectiveIte
                 <div className="editorial-image-frame">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={imgSilhouette}
+                    src={getOptimizedImageUrl(imgSilhouette, 640, 80)}
+                    srcSet={getResponsiveImageSrcSet(imgSilhouette, [360, 480, 640, 800], 80)}
+                    sizes={RESPONSIVE_SIZES.editorial}
                     alt={altSilhouette}
                     className="editorial-image"
                     loading="lazy"
@@ -458,7 +458,9 @@ function EditorialScrollShowcase({ items }: { items?: HomepageFormPerspectiveIte
                 <div className="editorial-image-frame">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={imgTexture}
+                    src={getOptimizedImageUrl(imgTexture, 640, 80)}
+                    srcSet={getResponsiveImageSrcSet(imgTexture, [360, 480, 640, 800], 80)}
+                    sizes={RESPONSIVE_SIZES.editorial}
                     alt={altTexture}
                     className="editorial-image"
                     loading="lazy"
@@ -476,7 +478,9 @@ function EditorialScrollShowcase({ items }: { items?: HomepageFormPerspectiveIte
                 <div className="editorial-image-frame">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={imgProfile}
+                    src={getOptimizedImageUrl(imgProfile, 640, 80)}
+                    srcSet={getResponsiveImageSrcSet(imgProfile, [360, 480, 640, 800], 80)}
+                    sizes={RESPONSIVE_SIZES.editorial}
                     alt={altProfile}
                     className="editorial-image"
                     loading="lazy"
@@ -491,7 +495,9 @@ function EditorialScrollShowcase({ items }: { items?: HomepageFormPerspectiveIte
                 <div className="editorial-image-frame">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={imgCraft}
+                    src={getOptimizedImageUrl(imgCraft, 640, 80)}
+                    srcSet={getResponsiveImageSrcSet(imgCraft, [360, 480, 640, 800], 80)}
+                    sizes={RESPONSIVE_SIZES.editorial}
                     alt={altCraft}
                     className="editorial-image"
                     loading="lazy"

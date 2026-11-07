@@ -86,54 +86,62 @@ export default function ProductGallery({
   const [failedImages, setFailedImages] = useState<Set<number>>(new Set());
   const [isLandscape, setIsLandscape] = useState(false);
 
-  // Synchronize activeIndex when activeColor or validImages change
-  useEffect(() => {
-    if (!activeColor || !activeColor.trim()) return;
+  // Transition state: keeps previous image visible underneath so the gallery never flashes blank
+  const [prevImage, setPrevImage] = useState<{ url: string; alt: string; isLandscape: boolean } | null>(null);
+  const [isIncomingLoaded, setIsIncomingLoaded] = useState(true);
 
-    // 1. Direct color match within validImages
-    const directColorIdx = validImages.findIndex((img) =>
-      areColorsMatching(img.color, activeColor)
-    );
-    if (directColorIdx >= 0) {
-      setActiveIndex(directColorIdx);
-      setFailedImages(new Set());
-      return;
-    }
+  // Prefetch cache for adjacent gallery slides (±1)
+  const prefetchedUrls = useRef<Set<string>>(new Set());
 
-    // 2. Alt text or URL match
-    const fallbackColorIdx = validImages.findIndex((img) => {
-      const alt = (img.alt || '').toLowerCase();
-      const url = (img.url || '').toLowerCase();
-      const col = activeColor.trim().toLowerCase();
-      return col.length > 1 && (alt.includes(col) || url.includes(col));
-    });
-    if (fallbackColorIdx >= 0) {
-      setActiveIndex(fallbackColorIdx);
-      setFailedImages(new Set());
-      return;
-    }
+  // Synchronize activeIndex when activeColor changes (React state adjustment pattern)
+  const [prevColor, setPrevColor] = useState(activeColor);
+  if (activeColor !== prevColor) {
+    setPrevColor(activeColor);
+    setFailedImages(new Set());
 
-    // 3. Positional 1-to-1 correspondence:
-    // If the product has N colors and N images in validImages, map by index
-    if (availableColors.length > 1 && validImages.length === availableColors.length) {
-      const colorPos = availableColors.findIndex((c) =>
-        areColorsMatching(c, activeColor)
+    if (activeColor && activeColor.trim()) {
+      // 1. Direct color match within validImages
+      const directColorIdx = validImages.findIndex((img) =>
+        areColorsMatching(img.color, activeColor)
       );
-      if (colorPos >= 0 && colorPos < validImages.length) {
-        setActiveIndex(colorPos);
-        setFailedImages(new Set());
-        return;
+      if (directColorIdx >= 0) {
+        setActiveIndex(directColorIdx);
+      } else {
+        // 2. Alt text or URL match
+        const fallbackColorIdx = validImages.findIndex((img) => {
+          const alt = (img.alt || "").toLowerCase();
+          const url = (img.url || "").toLowerCase();
+          const col = activeColor.trim().toLowerCase();
+          return col.length > 1 && (alt.includes(col) || url.includes(col));
+        });
+        if (fallbackColorIdx >= 0) {
+          setActiveIndex(fallbackColorIdx);
+        } else if (availableColors.length > 1 && validImages.length === availableColors.length) {
+          // 3. Positional 1-to-1 correspondence
+          const colorPos = availableColors.findIndex((c) =>
+            areColorsMatching(c, activeColor)
+          );
+          if (colorPos >= 0 && colorPos < validImages.length) {
+            setActiveIndex(colorPos);
+          }
+        }
       }
     }
+  }
 
-    // 4. Default to primary image or 0
-    const primaryIdx = validImages.findIndex((img) => img.is_primary);
-    setActiveIndex(primaryIdx >= 0 ? primaryIdx : 0);
-    setFailedImages(new Set());
-  }, [validImages, activeColor, availableColors]);
+  const hasMultiple = validImages.length > 1;
 
   const selectIndex = useCallback(
     (newIdx: number) => {
+      if (newIdx !== activeIndex && validImages[activeIndex]) {
+        const current = validImages[activeIndex];
+        setPrevImage({
+          url: getOptimizedImageUrl(current.url, 800, 80),
+          alt: current.alt || "",
+          isLandscape,
+        });
+        setIsIncomingLoaded(false);
+      }
       setActiveIndex(newIdx);
       const img = validImages[newIdx];
       if (img && colorContext?.setSelectedColor) {
@@ -154,10 +162,35 @@ export default function ProductGallery({
         }
       }
     },
-    [validImages, colorContext, availableColors]
+    [activeIndex, validImages, isLandscape, colorContext, availableColors]
   );
 
-  const hasMultiple = validImages.length > 1;
+  // Background prefetching of adjacent slides (±1) respecting Data Saver / 2G networks
+  useEffect(() => {
+    if (!hasMultiple || typeof window === "undefined") return;
+
+    const nav = navigator as unknown as {
+      connection?: { saveData?: boolean; effectiveType?: string };
+    };
+    const isDataSaver =
+      nav.connection?.saveData === true ||
+      nav.connection?.effectiveType === "2g" ||
+      nav.connection?.effectiveType === "slow-2g";
+
+    if (isDataSaver) return;
+
+    const nextIdx = (activeIndex + 1) % validImages.length;
+    const prevIdx = (activeIndex - 1 + validImages.length) % validImages.length;
+    const targets = [validImages[nextIdx]?.url, validImages[prevIdx]?.url].filter(Boolean);
+
+    targets.forEach((url) => {
+      if (!url || prefetchedUrls.current.has(url)) return;
+      prefetchedUrls.current.add(url);
+      const img = new Image();
+      img.decoding = "async";
+      img.src = getOptimizedImageUrl(url, 800, 80);
+    });
+  }, [activeIndex, hasMultiple, validImages]);
 
   const goToNext = useCallback(() => {
     if (!hasMultiple) return;
@@ -250,7 +283,7 @@ export default function ProductGallery({
   };
 
   const mainSrcSet = getResponsiveImageSrcSet(currentImage.url, [360, 480, 640, 800, 1000]);
-  const optimizedMainSrc = getOptimizedImageUrl(currentImage.url, 800, 82);
+  const optimizedMainSrc = getOptimizedImageUrl(currentImage.url, 800, 80);
 
   return (
     <div
@@ -285,27 +318,50 @@ export default function ProductGallery({
             <span className="gallery-fallback-text">Image unavailable</span>
           </div>
         ) : (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            key={currentImage.url}
-            src={optimizedMainSrc}
-            srcSet={mainSrcSet}
-            sizes={mainSrcSet ? RESPONSIVE_SIZES.galleryMain : undefined}
-            alt={currentImage.alt || `${productName} - Image ${activeIndex + 1}`}
-            className={`imagery-main-img gallery-slide-img ${isLandscape ? "is-landscape" : ""}`}
-            loading="eager"
-            fetchPriority="high"
-            decoding="async"
-            width={460}
-            height={613}
-            onLoad={(e) => {
-              const img = e.currentTarget;
-              if (img.naturalWidth && img.naturalHeight) {
-                setIsLandscape(img.naturalWidth > img.naturalHeight * 1.05);
-              }
-            }}
-            onError={() => handleImageError(activeIndex)}
-          />
+          <>
+            {prevImage && !isIncomingLoaded && (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={prevImage.url}
+                alt=""
+                aria-hidden="true"
+                className={`imagery-main-img gallery-slide-img is-previous ${prevImage.isLandscape ? "is-landscape" : ""}`}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  height: "100%",
+                  pointerEvents: "none",
+                  zIndex: 1,
+                }}
+                width={460}
+                height={613}
+              />
+            )}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={optimizedMainSrc}
+              srcSet={mainSrcSet}
+              sizes={mainSrcSet ? RESPONSIVE_SIZES.galleryMain : undefined}
+              alt={currentImage.alt || `${productName} - Image ${activeIndex + 1}`}
+              className={`imagery-main-img gallery-slide-img ${isLandscape ? "is-landscape" : ""}`}
+              style={{ position: "relative", zIndex: 2 }}
+              loading="eager"
+              fetchPriority="high"
+              decoding="async"
+              width={460}
+              height={613}
+              onLoad={(e) => {
+                setIsIncomingLoaded(true);
+                const img = e.currentTarget;
+                if (img.naturalWidth && img.naturalHeight) {
+                  setIsLandscape(img.naturalWidth > img.naturalHeight * 1.05);
+                }
+              }}
+              onError={() => handleImageError(activeIndex)}
+            />
+          </>
         )}
 
         {/* Desktop Prev / Next Arrow Controls — Hidden when only 1 image */}
@@ -352,7 +408,7 @@ export default function ProductGallery({
           {validImages.map((img, idx) => {
             const isFailed = failedImages.has(idx);
             const isSelected = idx === activeIndex;
-            const thumbSrc = getOptimizedImageUrl(img.url, 128, 75);
+            const thumbSrc = getOptimizedImageUrl(img.url, 128, 80);
 
             return (
               <button

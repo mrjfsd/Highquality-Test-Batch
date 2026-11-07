@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef, useCallback } from "react";
 import Link from "next/link";
 import type { Product, ProductGalleryImage } from "@/data/products";
 import { formatPrice } from "@/data/products";
@@ -21,7 +21,6 @@ interface ProductCardProps {
 const ProductCard = React.memo(function ProductCard({
   product,
   priority = false,
-  isSalePage = false,
 }: ProductCardProps) {
   const { items, addItem, removeItem, isLoaded, getProductOffer } = useCart();
   const [showSizeSelector, setShowSizeSelector] = useState(false);
@@ -100,16 +99,45 @@ const ProductCard = React.memo(function ProductCard({
     return Array.from(set);
   }, [availableVariants]);
 
+  // Adjacent slide prefetching for instant carousel transitions on hover/interaction
+  const prefetchedCardUrls = useRef<Set<string>>(new Set());
+
+  const prefetchAdjacentImages = useCallback(() => {
+    if (!hasMultipleImages || typeof window === "undefined") return;
+    const nav = navigator as unknown as {
+      connection?: { saveData?: boolean; effectiveType?: string };
+    };
+    if (
+      nav.connection?.saveData === true ||
+      nav.connection?.effectiveType === "2g" ||
+      nav.connection?.effectiveType === "slow-2g"
+    ) {
+      return;
+    }
+
+    const nextIdx = (currentIndex + 1) % imageList.length;
+    const prevIdx = (currentIndex - 1 + imageList.length) % imageList.length;
+    [imageList[nextIdx]?.url, imageList[prevIdx]?.url].forEach((url) => {
+      if (!url || prefetchedCardUrls.current.has(url)) return;
+      prefetchedCardUrls.current.add(url);
+      const img = new Image();
+      img.decoding = "async";
+      img.src = getOptimizedImageUrl(url, 640, 80);
+    });
+  }, [currentIndex, hasMultipleImages, imageList]);
+
   const handlePrev = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
     e.stopPropagation();
     setCurrentIndex((prev) => (prev - 1 + imageList.length) % imageList.length);
+    prefetchAdjacentImages();
   };
 
   const handleNext = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
     e.stopPropagation();
     setCurrentIndex((prev) => (prev + 1) % imageList.length);
+    prefetchAdjacentImages();
   };
 
   // Touch gesture support without blocking vertical page scrolling
@@ -117,6 +145,7 @@ const ProductCard = React.memo(function ProductCard({
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (!hasMultipleImages) return;
+    prefetchAdjacentImages();
     touchStartRef.current = {
       x: e.touches[0].clientX,
       y: e.touches[0].clientY,
@@ -238,7 +267,7 @@ const ProductCard = React.memo(function ProductCard({
   const optimizedSrc = getOptimizedImageUrl(currentImage.url, 640, 80);
 
   return (
-    <article className="product-card">
+    <article className="product-card" onMouseEnter={prefetchAdjacentImages}>
       <div
         className="product-image-wrap"
         onTouchStart={handleTouchStart}

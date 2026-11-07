@@ -4,6 +4,7 @@
 import { useState, useRef, useEffect, useCallback, useLayoutEffect } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { getOptimizedImageUrl, getResponsiveImageSrcSet } from "@/lib/images/responsive";
 
 const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
@@ -647,6 +648,8 @@ export default function HeroGarmentFan({
           while (diff < -N / 2) diff += N;
           const isNeighbour = Math.abs(diff) <= 1.2;
           const isEager = isCenter || isNeighbour;
+          const optimizedFanSrc = getOptimizedImageUrl(item.image, 480, 80);
+          const fanSrcSet = getResponsiveImageSrcSet(item.image, [360, 480, 640], 80);
 
           return (
             <div
@@ -661,13 +664,17 @@ export default function HeroGarmentFan({
               {isCenter && <div className="hero-garment-light" aria-hidden="true" />}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={item.image}
+                src={optimizedFanSrc}
+                srcSet={fanSrcSet}
+                sizes="(max-width: 640px) 180px, 280px"
                 alt={item.alt}
                 className="hero-fan-img"
                 loading={isEager ? "eager" : "lazy"}
                 fetchPriority={isCenter && !isBannerActive ? "high" : "auto"}
                 decoding="async"
                 draggable={false}
+                width={280}
+                height={373}
               />
             </div>
           );
