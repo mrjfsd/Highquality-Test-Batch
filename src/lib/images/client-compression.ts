@@ -24,6 +24,26 @@ export interface ProcessedImageResult {
   mimeType: string;
   width: number;
   height: number;
+  compressionError?: string;
+}
+
+export interface R2UploadErrorDetails {
+  status: number;
+  statusText?: string;
+  isTimeout: boolean;
+  isStalled: boolean;
+  onLine: boolean;
+  fileSize: number;
+  isRetryable: boolean;
+}
+
+export class R2UploadError extends Error {
+  details: R2UploadErrorDetails;
+  constructor(message: string, details: R2UploadErrorDetails) {
+    super(message);
+    this.name = "R2UploadError";
+    this.details = details;
+  }
 }
 
 // Maps MIME types to standard file extensions
@@ -193,7 +213,10 @@ export async function compressImageForUpload(
       height: finalHeight || height,
     };
   } catch (err: unknown) {
-    console.warn(`[client-compression] Compression failed for "${file.name}":`, err);
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.warn(
+      `[client-compression] Compression failed for "${file.name}" (original size: ${(originalSize / (1024 * 1024)).toFixed(2)} MB): ${errorMsg}. Falling back to raw file.`
+    );
 
     // Safe fallback: if original file is <= 10 MB (server presign limit), use it
     if (originalSize <= 10 * 1024 * 1024) {
@@ -205,6 +228,7 @@ export async function compressImageForUpload(
         mimeType: file.type || "image/jpeg",
         width,
         height,
+        compressionError: errorMsg,
       };
     }
 
@@ -217,6 +241,9 @@ export async function compressImageForUpload(
 /**
  * Uploads a file directly to Cloudflare R2 using a presigned PUT URL and XMLHttpRequest.
  * Provides real-time upload progress via xhr.upload.onprogress.
+ * Features:
+ * - Stall timeout: aborts if no progress event for ~25s (handles dropped cellular connections without false fixed timeouts)
+ * - Specific, classified error reporting with status code, offline state, and timeout status
  */
 export function uploadToR2WithProgress(
   presignedUrl: string,
@@ -234,8 +261,32 @@ export function uploadToR2WithProgress(
     xhr.open("PUT", presignedUrl, true);
     xhr.setRequestHeader("Content-Type", contentType);
 
+    const STALL_TIMEOUT_MS = 25000; // 25s without upload progress
+    let stallTimer: ReturnType<typeof setTimeout> | null = null;
+    let isStalled = false;
+
+    const resetStallTimer = () => {
+      if (stallTimer) clearTimeout(stallTimer);
+      stallTimer = setTimeout(() => {
+        isStalled = true;
+        try {
+          xhr.abort();
+        } catch {
+          // ignore
+        }
+      }, STALL_TIMEOUT_MS);
+    };
+
+    const clearStallTimer = () => {
+      if (stallTimer) {
+        clearTimeout(stallTimer);
+        stallTimer = null;
+      }
+    };
+
     if (signal) {
       const abortHandler = () => {
+        clearStallTimer();
         try {
           xhr.abort();
         } catch {
@@ -246,32 +297,187 @@ export function uploadToR2WithProgress(
       signal.addEventListener("abort", abortHandler, { once: true });
     }
 
-    if (xhr.upload && onProgress) {
+    // Arm initial stall timer
+    resetStallTimer();
+
+    if (xhr.upload) {
       xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable) {
+        resetStallTimer();
+        if (onProgress && event.lengthComputable) {
           onProgress(event.loaded, event.total);
         }
       };
     }
 
     xhr.onload = () => {
+      clearStallTimer();
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve();
       } else {
+        const is5xx = xhr.status >= 500 && xhr.status < 600;
+        const msg =
+          xhr.status === 403
+            ? "R2 upload forbidden or URL expired (HTTP 403)"
+            : xhr.status === 401
+            ? "R2 upload unauthorized (HTTP 401)"
+            : is5xx
+            ? `Cloudflare R2 server error (HTTP ${xhr.status} ${xhr.statusText || ""})`.trim()
+            : `R2 upload rejected with HTTP ${xhr.status} (${xhr.statusText || "Request rejected"})`;
+
         reject(
-          new Error(`R2 upload rejected with status ${xhr.status} (${xhr.statusText || "Forbidden / Expired"}).`)
+          new R2UploadError(msg, {
+            status: xhr.status,
+            statusText: xhr.statusText,
+            isTimeout: false,
+            isStalled: false,
+            onLine: typeof navigator !== "undefined" ? navigator.onLine : true,
+            fileSize: file.size,
+            isRetryable: is5xx,
+          })
         );
       }
     };
 
     xhr.onerror = () => {
-      reject(new Error("Network error during direct upload to Cloudflare R2."));
+      clearStallTimer();
+      const isOnline = typeof navigator !== "undefined" ? navigator.onLine : true;
+      const msg = !isOnline
+        ? "Network error: Device is offline / Connection lost."
+        : "Network error during upload (HTTP status 0: connection dropped, preflight blocked, or CORS mismatch).";
+
+      reject(
+        new R2UploadError(msg, {
+          status: 0,
+          statusText: "Network Error",
+          isTimeout: false,
+          isStalled: false,
+          onLine: isOnline,
+          fileSize: file.size,
+          isRetryable: true,
+        })
+      );
     };
 
     xhr.onabort = () => {
-      reject(new DOMException("Upload cancelled by administrator.", "AbortError"));
+      clearStallTimer();
+      if (isStalled) {
+        reject(
+          new R2UploadError("Upload timed out (connection stalled with no progress for 25s).", {
+            status: 0,
+            statusText: "Timeout",
+            isTimeout: true,
+            isStalled: true,
+            onLine: typeof navigator !== "undefined" ? navigator.onLine : true,
+            fileSize: file.size,
+            isRetryable: true,
+          })
+        );
+      } else {
+        reject(new DOMException("Upload cancelled by administrator.", "AbortError"));
+      }
     };
 
     xhr.send(file);
   });
+}
+
+export interface UploadWithRetryParams {
+  file: Blob | File;
+  contentType: string;
+  productId: string;
+  fileName: string;
+  existingKey?: string;
+  fetchPresignedUrl: (params: {
+    productId: string;
+    fileName: string;
+    contentType: string;
+    fileSize: number;
+    objectKey?: string;
+  }) => Promise<{ presignedUrl: string; objectKey: string }>;
+  onProgress?: (loadedBytes: number, totalBytes: number) => void;
+  signal?: AbortSignal;
+  maxAttempts?: number;
+}
+
+/**
+ * Executes direct upload to R2 with automatic retry and backoff:
+ * - Up to 3 attempts with backoff (1s after attempt 1, 3s after attempt 2).
+ * - Requests a fresh presigned URL for each attempt.
+ * - Reuses the deterministic object key across attempts.
+ * - Retries only on retryable errors (status 0, stall timeout, HTTP 5xx). Never retries 4xx.
+ */
+export async function uploadToR2WithRetry(
+  params: UploadWithRetryParams
+): Promise<{ objectKey: string }> {
+  const {
+    file,
+    contentType,
+    productId,
+    fileName,
+    existingKey,
+    fetchPresignedUrl,
+    onProgress,
+    signal,
+    maxAttempts = 3,
+  } = params;
+
+  let attempt = 0;
+  let currentKey = existingKey;
+  let lastError: unknown = null;
+
+  while (attempt < maxAttempts) {
+    if (signal?.aborted) {
+      throw new DOMException("Upload cancelled by administrator.", "AbortError");
+    }
+
+    attempt++;
+
+    try {
+      // 1. Fetch fresh presigned URL (providing currentKey if already known to preserve key identity)
+      const { presignedUrl, objectKey } = await fetchPresignedUrl({
+        productId,
+        fileName,
+        contentType,
+        fileSize: file.size,
+        objectKey: currentKey,
+      });
+
+      currentKey = objectKey;
+
+      if (signal?.aborted) {
+        throw new DOMException("Upload cancelled by administrator.", "AbortError");
+      }
+
+      // 2. Upload with stall timeout & progress events
+      await uploadToR2WithProgress(presignedUrl, file, contentType, onProgress, signal);
+
+      // Successfully uploaded!
+      return { objectKey: currentKey };
+    } catch (err: unknown) {
+      lastError = err;
+
+      if (err instanceof DOMException && err.name === "AbortError") {
+        throw err;
+      }
+
+      const isR2Err = err instanceof R2UploadError;
+      const isRetryable = isR2Err ? err.details.isRetryable : true;
+
+      // Do NOT retry non-retryable errors (e.g. 4xx)
+      if (!isRetryable || attempt >= maxAttempts) {
+        break;
+      }
+
+      // Backoff: 1s after attempt 1, 3s after attempt 2
+      const backoffMs = attempt === 1 ? 1000 : 3000;
+      console.warn(
+        `[upload-retry] Attempt ${attempt}/${maxAttempts} failed for "${fileName}". Retrying in ${backoffMs}ms... Error: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
+      await new Promise((resolve) => setTimeout(resolve, backoffMs));
+    }
+  }
+
+  throw lastError;
 }

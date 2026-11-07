@@ -3,6 +3,8 @@
  * Handles right-sizing Unsplash URLs, generating responsive srcSet, and standard sizes attributes.
  */
 
+export const IMAGE_PIPELINE_VERSION = "2";
+
 /**
  * Checks if a URL is an Unsplash image CDN URL.
  */
@@ -68,6 +70,7 @@ export function getOptimizedImageUrl(
         urlObj.searchParams.set("w", width.toString());
       }
       urlObj.searchParams.set("q", quality.toString());
+      urlObj.searchParams.set("v", IMAGE_PIPELINE_VERSION);
 
       return isRelative ? `${urlObj.pathname}${urlObj.search}` : urlObj.toString();
     } catch {

@@ -153,7 +153,10 @@ export async function GET(
   }
 
   const clientEtag = request.headers.get("if-none-match");
-  const cacheKey = targetWidth ? `${objectKey}?w=${targetWidth}&q=${targetQuality}` : objectKey;
+  const versionParam = searchParams.get("v") || "2";
+  const cacheKey = targetWidth
+    ? `${objectKey}?w=${targetWidth}&q=${targetQuality}&v=${versionParam}`
+    : `${objectKey}?v=${versionParam}`;
 
   // 1. Check in-memory cache for fast repeat delivery (hit)
   const cached = getFromCache(cacheKey);
@@ -225,11 +228,12 @@ export async function GET(
     if (targetWidth) {
       try {
         const transformedBuffer = await sharp(originalBuffer)
+          .rotate()
           .resize({ width: targetWidth, withoutEnlargement: true })
           .webp({ quality: targetQuality })
           .toBuffer();
 
-        const transformedEtag = `${baseEtag}-w${targetWidth}-q${targetQuality}`;
+        const transformedEtag = `${baseEtag}-w${targetWidth}-q${targetQuality}-v${versionParam}`;
 
         if (matchClientEtag(clientEtag, transformedEtag)) {
           return new Response(null, {

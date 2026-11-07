@@ -23,11 +23,16 @@ const MIME_TO_EXT: Record<string, string> = {
 // Maximum allowed file size: 10 MB
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
+// Strict pattern for client-supplied retry key: products/temp-batch/<timestamp>-<uuid>.<ext>
+const TEMP_BATCH_KEY_REGEX =
+  /^products\/temp-batch\/\d+-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpe?g|png|webp|avif)$/i;
+
 interface RequestBody {
   productId: string;
   fileName: string;
   contentType: string;
   fileSize: number;
+  objectKey?: string;
 }
 
 /**
@@ -99,10 +104,29 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // 3. Construct a collision-resistant, scoped object key
-  const ext = MIME_TO_EXT[contentType] || "jpg";
-  const uniqueId = crypto.randomUUID();
-  const objectKey = `products/${cleanProductId}/${Date.now()}-${uniqueId}.${ext}`;
+  // 3. Construct or validate collision-resistant, scoped object key
+  let objectKey: string;
+  if (body.objectKey) {
+    if (
+      typeof body.objectKey !== "string" ||
+      body.objectKey.includes("..") ||
+      body.objectKey.includes("\\") ||
+      !TEMP_BATCH_KEY_REGEX.test(body.objectKey)
+    ) {
+      return Response.json(
+        {
+          error:
+            "Invalid client-supplied objectKey. Only products/temp-batch/ keys with valid format are permitted for re-signing.",
+        },
+        { status: 400 }
+      );
+    }
+    objectKey = body.objectKey;
+  } else {
+    const ext = MIME_TO_EXT[contentType] || "jpg";
+    const uniqueId = crypto.randomUUID();
+    objectKey = `products/${cleanProductId}/${Date.now()}-${uniqueId}.${ext}`;
+  }
 
   // 4. Generate the presigned upload URL (server-side only)
   let presignedUrl: string;

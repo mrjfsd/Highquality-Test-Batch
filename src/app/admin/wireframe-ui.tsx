@@ -3,7 +3,13 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { verifyAdminAuthorization } from "@/lib/supabase/auth";
-import { compressImageForUpload, uploadToR2WithProgress } from "@/lib/images/client-compression";
+import {
+  compressImageForUpload,
+  uploadToR2WithProgress,
+  uploadToR2WithRetry,
+  R2UploadError,
+  type ProcessedImageResult,
+} from "@/lib/images/client-compression";
 import { getProductDescriptionTemplate, isKnownDescriptionTemplate } from "@/lib/products/description-templates";
 import { BannerManagementScreen } from "./banner-management";
 import { HomepageManagementScreen } from "./homepage-management";
@@ -72,6 +78,16 @@ export interface IntakePhoto {
   error?: string;
   assignedGroup?: string;
   color?: string | null;
+  compressionError?: string;
+  originalSizeBytes?: number;
+  compressedSizeBytes?: number;
+  failureDetails?: {
+    status?: number;
+    isTimeout?: boolean;
+    isStalled?: boolean;
+    onLine?: boolean;
+    fileSize?: number;
+  };
 }
 
 export interface GarmentGroup {
@@ -995,6 +1011,8 @@ export function Intake({
   }, [products]);
 
   const fileRef = useRef<HTMLInputElement>(null);
+  const fileInMemoryMap = useRef<Map<string, File>>(new Map());
+  const pendingRetryPhotoId = useRef<string | null>(null);
 
   const persistSession = useCallback((updated: IntakeSession) => {
     setSession(updated);
@@ -1014,20 +1032,187 @@ export function Intake({
     );
   };
 
+  const uploadSinglePhoto = async (photoId: string, file: File, existingKey?: string) => {
+    setSession((curr) => ({
+      ...curr,
+      photos: curr.photos.map((p) =>
+        p.id === photoId
+          ? {
+              ...p,
+              state: "Uploading",
+              error: undefined,
+              uploadProgress: 0,
+            }
+          : p
+      ),
+    }));
+
+    let processed: ProcessedImageResult;
+    try {
+      processed = await compressImageForUpload(file);
+    } catch (compErr: unknown) {
+      console.warn(`[Intake] Compression failed for "${file.name}":`, compErr);
+      processed = {
+        file,
+        finalSize: file.size,
+        originalSize: file.size,
+        mimeType: file.type || "image/jpeg",
+        width: 0,
+        height: 0,
+        wasCompressed: false,
+        compressionError: compErr instanceof Error ? compErr.message : String(compErr),
+      };
+    }
+
+    let assignedKey = existingKey;
+
+    try {
+      const { objectKey } = await uploadToR2WithRetry({
+        file: processed.file,
+        contentType: processed.mimeType,
+        productId: "temp-batch",
+        fileName: processed.file.name,
+        existingKey: assignedKey,
+        fetchPresignedUrl: async ({ productId, fileName, contentType, fileSize, objectKey: keyToPresign }) => {
+          const presignRes = await authFetch("/api/admin/images/upload-url", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              productId,
+              fileName,
+              contentType,
+              fileSize,
+              ...(keyToPresign ? { objectKey: keyToPresign } : {}),
+            }),
+          });
+
+          if (!presignRes.ok) {
+            const errData = await presignRes.json().catch(() => ({}));
+            throw new Error(errData.error || `Upload auth error (HTTP ${presignRes.status})`);
+          }
+
+          const data = await presignRes.json();
+          assignedKey = data.objectKey;
+          return { presignedUrl: data.presignedUrl, objectKey: data.objectKey };
+        },
+        onProgress: (loaded, total) => {
+          const pct = Math.round((loaded / total) * 100);
+          setSession((curr) => ({
+            ...curr,
+            photos: curr.photos.map((p) =>
+              p.id === photoId ? { ...p, uploadProgress: pct } : p
+            ),
+          }));
+        },
+      });
+
+      setSession((curr) => {
+        const updated = {
+          ...curr,
+          updatedAt: new Date().toISOString(),
+          photos: curr.photos.map((p) =>
+            p.id === photoId
+              ? {
+                  ...p,
+                  state: "Uploaded" as const,
+                  uploadProgress: 100,
+                  storagePath: objectKey,
+                  previewUrl: `/api/images/${objectKey}`,
+                  compressionError: processed.compressionError,
+                  originalSizeBytes: processed.originalSize,
+                  compressedSizeBytes: processed.finalSize,
+                  failureDetails: undefined,
+                  error: undefined,
+                }
+              : p
+          ),
+        };
+        if (typeof window !== "undefined") {
+          localStorage.setItem(INTAKE_STORAGE_KEY, JSON.stringify(updated));
+        }
+        return updated;
+      });
+    } catch (err: unknown) {
+      let errorMsg = "Upload failed.";
+      let failureDetails: IntakePhoto["failureDetails"] = {
+        onLine: typeof navigator !== "undefined" ? navigator.onLine : true,
+        fileSize: file.size,
+      };
+
+      if (err instanceof R2UploadError) {
+        errorMsg = err.message;
+        failureDetails = {
+          status: err.details.status,
+          isTimeout: err.details.isTimeout,
+          isStalled: err.details.isStalled,
+          onLine: err.details.onLine,
+          fileSize: err.details.fileSize,
+        };
+      } else if (err instanceof Error) {
+        errorMsg = err.message;
+      }
+
+      console.error(`Upload error for ${file.name}:`, errorMsg, failureDetails);
+
+      setSession((curr) => {
+        const currentPhoto = curr.photos.find((p) => p.id === photoId);
+        const updated = {
+          ...curr,
+          updatedAt: new Date().toISOString(),
+          photos: curr.photos.map((p) =>
+            p.id === photoId
+              ? {
+                  ...p,
+                  state: "Failed" as const,
+                  error: errorMsg,
+                  storagePath: assignedKey || existingKey || currentPhoto?.storagePath,
+                  compressionError: processed.compressionError,
+                  originalSizeBytes: processed.originalSize,
+                  compressedSizeBytes: processed.finalSize,
+                  failureDetails,
+                }
+              : p
+          ),
+        };
+        if (typeof window !== "undefined") {
+          localStorage.setItem(INTAKE_STORAGE_KEY, JSON.stringify(updated));
+        }
+        return updated;
+      });
+    }
+  };
+
   const handleRealFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
     const fileList = Array.from(files);
-    const newPhotos: IntakePhoto[] = fileList.map((file, idx) => ({
-      id: `photo-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
-      name: file.name,
-      size: file.size,
-      mimeType: file.type || "image/jpeg",
-      previewUrl: URL.createObjectURL(file),
-      state: "Uploading",
-      uploadProgress: 0,
-    }));
+    if (event.target) event.target.value = "";
+
+    // If triggered as a file-picker fallback for an item whose memory File was lost
+    if (pendingRetryPhotoId.current) {
+      const retryId = pendingRetryPhotoId.current;
+      pendingRetryPhotoId.current = null;
+      const file = fileList[0];
+      fileInMemoryMap.current.set(retryId, file);
+      const photo = session.photos.find((p) => p.id === retryId);
+      await uploadSinglePhoto(retryId, file, photo?.storagePath);
+      return;
+    }
+
+    const newPhotos: IntakePhoto[] = fileList.map((file, idx) => {
+      const photoId = `photo-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`;
+      fileInMemoryMap.current.set(photoId, file);
+      return {
+        id: photoId,
+        name: file.name,
+        size: file.size,
+        mimeType: file.type || "image/jpeg",
+        previewUrl: URL.createObjectURL(file),
+        state: "Uploading",
+        uploadProgress: 0,
+      };
+    });
 
     const updatedPhotos = [...session.photos, ...newPhotos];
     const newSession: IntakeSession = {
@@ -1037,86 +1222,11 @@ export function Intake({
     };
     persistSession(newSession);
 
-    if (event.target) event.target.value = "";
-
+    // Sequential uploads (concurrency 1)
     for (let i = 0; i < fileList.length; i++) {
       const file = fileList[i];
       const photoItem = newPhotos[i];
-
-      try {
-        const processed = await compressImageForUpload(file);
-
-        const presignRes = await authFetch("/api/admin/images/upload-url", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            productId: "temp-batch",
-            fileName: processed.file.name,
-            contentType: processed.mimeType,
-            fileSize: processed.finalSize,
-          }),
-        });
-
-        if (!presignRes.ok) {
-          const errData = await presignRes.json().catch(() => ({}));
-          throw new Error(errData.error || `Upload auth error (HTTP ${presignRes.status})`);
-        }
-
-        const { presignedUrl, objectKey } = await presignRes.json();
-
-        await uploadToR2WithProgress(
-          presignedUrl,
-          processed.file,
-          processed.mimeType,
-          (loaded, total) => {
-            const pct = Math.round((loaded / total) * 100);
-            setSession((curr) => ({
-              ...curr,
-              photos: curr.photos.map((p) =>
-                p.id === photoItem.id ? { ...p, uploadProgress: pct } : p
-              ),
-            }));
-          }
-        );
-
-        setSession((curr) => {
-          const updated = {
-            ...curr,
-            updatedAt: new Date().toISOString(),
-            photos: curr.photos.map((p) =>
-              p.id === photoItem.id
-                ? {
-                    ...p,
-                    state: "Uploaded" as const,
-                    uploadProgress: 100,
-                    storagePath: objectKey,
-                    previewUrl: `/api/images/${objectKey}`,
-                  }
-                : p
-            ),
-          };
-          if (typeof window !== "undefined") {
-            localStorage.setItem(INTAKE_STORAGE_KEY, JSON.stringify(updated));
-          }
-          return updated;
-        });
-      } catch (err: unknown) {
-        const errorMsg = err instanceof Error ? err.message : "Upload failed.";
-        console.error(`Upload error for ${file.name}:`, errorMsg);
-        setSession((curr) => {
-          const updated = {
-            ...curr,
-            updatedAt: new Date().toISOString(),
-            photos: curr.photos.map((p) =>
-              p.id === photoItem.id ? { ...p, state: "Failed" as const, error: errorMsg } : p
-            ),
-          };
-          if (typeof window !== "undefined") {
-            localStorage.setItem(INTAKE_STORAGE_KEY, JSON.stringify(updated));
-          }
-          return updated;
-        });
-      }
+      await uploadSinglePhoto(photoItem.id, file);
     }
   };
 
@@ -1124,21 +1234,40 @@ export function Intake({
     const photo = session.photos.find((p) => p.id === photoId);
     if (!photo) return;
 
-    setSession((curr) => ({
-      ...curr,
-      photos: curr.photos.map((p) =>
-        p.id === photoId ? { ...p, state: "Uploading", error: undefined, uploadProgress: 10 } : p
-      ),
-    }));
+    const file = fileInMemoryMap.current.get(photoId);
+    if (file) {
+      showToast(`Retrying upload for ${photo.name}...`);
+      await uploadSinglePhoto(photoId, file, photo.storagePath);
+    } else {
+      pendingRetryPhotoId.current = photoId;
+      showToast(`Please choose the file for "${photo.name}" to retry.`);
+      fileRef.current?.click();
+    }
+  };
 
-    showToast(`Retrying upload for ${photo.name}...`);
-    fileRef.current?.click();
+  const retryAllFailed = async () => {
+    const failedList = session.photos.filter((p) => p.state === "Failed");
+    if (failedList.length === 0) return;
+
+    const inMemoryFailed = failedList.filter((p) => fileInMemoryMap.current.has(p.id));
+    if (inMemoryFailed.length === 0) {
+      showToast("Selected files were cleared from memory on reload. Please click Retry on each item to re-select.");
+      return;
+    }
+
+    showToast(`Retrying ${inMemoryFailed.length} failed upload${inMemoryFailed.length === 1 ? "" : "s"}...`);
+
+    for (const photo of inMemoryFailed) {
+      const file = fileInMemoryMap.current.get(photo.id);
+      if (file) {
+        await uploadSinglePhoto(photo.id, file, photo.storagePath);
+      }
+    }
   };
 
   const createGroupFromSelected = () => {
     if (!selectedPhotos.length) return;
 
-    const groupNum = session.groups.length + 1;
     const initialDept = "Women";
     const initialCat = "T-Shirts";
     const initialTpl = getProductDescriptionTemplate(initialDept, initialCat) || "";
@@ -1155,7 +1284,10 @@ export function Intake({
       forSale: false,
       status: "Draft",
       photoIds: [...selectedPhotos],
-      primaryPhotoId: selectedPhotos[0],
+      primaryPhotoId: selectedPhotos.find((id) => {
+        const p = session.photos.find((photo) => photo.id === id);
+        return p && p.state === "Uploaded";
+      }) || selectedPhotos[0],
       variants: [{ size: "M", color: "Black", sku: "", qty: "1", is_available: true }],
     };
 
@@ -1173,7 +1305,17 @@ export function Intake({
     persistSession(updatedSession);
     setSelectedPhotos([]);
     setTab("groups");
-    showToast("Photos grouped into one garment.");
+
+    const failedInSelection = selectedPhotos.filter((id) => {
+      const p = session.photos.find((photo) => photo.id === id);
+      return p && p.state === "Failed";
+    }).length;
+
+    if (failedInSelection > 0) {
+      showToast(`Group created. ${failedInSelection} photo(s) failed upload and will be excluded on publish unless retried.`);
+    } else {
+      showToast("Photos grouped into one garment.");
+    }
   };
 
   const deleteSelectedPhotos = async () => {
@@ -1182,6 +1324,7 @@ export function Intake({
 
     try {
       const photosToDelete = session.photos.filter((p) => selectedPhotos.includes(p.id));
+      photosToDelete.forEach((p) => fileInMemoryMap.current.delete(p.id));
       const storageKeysToDelete = photosToDelete
         .map((p) => p.storagePath)
         .filter((k): k is string => Boolean(k));
@@ -1652,9 +1795,12 @@ export function Intake({
   const publishReadyGarments = async () => {
     if (isPublishing) return;
 
-    const readyGroups = session.groups.filter(
-      (g) => g.name.trim().length > 0 && parseFloat(g.price) > 0 && g.photoIds.length > 0
-    );
+    const readyGroups = session.groups.filter((g) => {
+      const hasUploadedPhotos = session.photos.some(
+        (p) => g.photoIds.includes(p.id) && p.state === "Uploaded" && Boolean(p.storagePath)
+      );
+      return g.name.trim().length > 0 && parseFloat(g.price) > 0 && hasUploadedPhotos;
+    });
 
     if (readyGroups.length === 0) {
       showToast("No ready garments found to publish. Please check name, price, and photos.");
@@ -1763,10 +1909,23 @@ export function Intake({
         session.groups
           .filter((g) => successfulGroupIds.has(g.id))
           .flatMap((g) => g.photoIds)
+          .filter((id) => {
+            const photo = session.photos.find((p) => p.id === id);
+            return photo && photo.state === "Uploaded" && Boolean(photo.storagePath);
+          })
       );
 
-      const remainingGroups = updatedGroups.filter((g) => !successfulGroupIds.has(g.id));
-      const remainingPhotos = session.photos.filter((p) => !publishedPhotoIds.has(p.id));
+      publishedPhotoIds.forEach((id) => fileInMemoryMap.current.delete(id));
+
+      const successfulGroupSet = successfulGroupIds;
+      const remainingGroups = updatedGroups.filter((g) => !successfulGroupSet.has(g.id));
+      const remainingPhotos = session.photos
+        .filter((p) => !publishedPhotoIds.has(p.id))
+        .map((p) =>
+          p.assignedGroup && successfulGroupSet.has(p.assignedGroup)
+            ? { ...p, assignedGroup: undefined }
+            : p
+        );
 
       if (remainingGroups.length === 0) {
         const nextBatchId = getNextBatchId(session.batchId);
@@ -2019,9 +2178,28 @@ export function Intake({
                   {session.photos.length > 0 ? Math.round((totalUploaded / session.photos.length) * 100) : 0}%
                 </span>
                 {failedUploads.length > 0 && (
-                  <Status tone="error">
-                    {failedUploads.length} failed
-                  </Status>
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
+                    <Status tone="error">
+                      {failedUploads.length} failed
+                    </Status>
+                    <button
+                      type="button"
+                      onClick={retryAllFailed}
+                      style={{
+                        fontSize: "12px",
+                        padding: "3px 8px",
+                        cursor: "pointer",
+                        background: "none",
+                        border: "1px solid currentColor",
+                        borderRadius: "4px",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px",
+                      }}
+                    >
+                      <Icon name="refresh" size={13} /> Retry all failed
+                    </button>
+                  </div>
                 )}
               </div>
             )}
@@ -2036,6 +2214,16 @@ export function Intake({
                       <span>
                         {(fail.size / (1024 * 1024)).toFixed(1)} MB · {fail.error || "Upload failed — try again"}
                       </span>
+                      {fail.compressionError && (
+                        <span style={{ display: "block", fontSize: "11px", color: "var(--muted, #666)", marginTop: "2px" }}>
+                          Fallback: {fail.compressionError} (Original: {((fail.originalSizeBytes || fail.size) / (1024 * 1024)).toFixed(1)} MB)
+                        </span>
+                      )}
+                      {fail.failureDetails && (
+                        <span style={{ display: "block", fontSize: "11px", color: "var(--muted, #666)", marginTop: "2px" }}>
+                          Diagnostic: HTTP {fail.failureDetails.status ?? "0"}{fail.failureDetails.isTimeout ? " (Stalled / Timed out)" : ""}{fail.failureDetails.onLine === false ? " (Offline)" : " (Online)"}
+                        </span>
+                      )}
                     </div>
                     <Status tone="error">Upload failed</Status>
                     <button onClick={() => retryUpload(fail.id)}>
@@ -2044,6 +2232,7 @@ export function Intake({
                     <button
                       aria-label="Remove file"
                       onClick={() => {
+                        fileInMemoryMap.current.delete(fail.id);
                         const filtered = session.photos.filter((p) => p.id !== fail.id);
                         persistSession({ ...session, photos: filtered });
                       }}
@@ -2162,6 +2351,8 @@ export function Intake({
             <div className="garment-cards-container">
               {session.groups.map((group, index) => {
                 const groupPhotos = session.photos.filter((p) => group.photoIds.includes(p.id));
+                const readyPhotos = groupPhotos.filter((p) => p.state === "Uploaded" && p.storagePath);
+                const failedInGroup = groupPhotos.filter((p) => p.state === "Failed").length;
                 const primaryPhoto =
                   groupPhotos.find((p) => p.id === group.primaryPhotoId) || groupPhotos[0];
                 const groupErrors = validationErrors[group.id] || {};
@@ -2250,7 +2441,12 @@ export function Intake({
                         </div>
 
                         <div className="photos-meta-caption">
-                          <span>{groupPhotos.length} photo{groupPhotos.length === 1 ? "" : "s"}</span>
+                          <span>{readyPhotos.length} of {groupPhotos.length} photo{groupPhotos.length === 1 ? "" : "s"} ready</span>
+                          {failedInGroup > 0 && (
+                            <small style={{ color: "var(--warning, #b45309)", display: "block" }}>
+                              {failedInGroup} failed photo{failedInGroup === 1 ? "" : "s"} will be excluded on publish
+                            </small>
+                          )}
                           <small>Click thumbnail to set as main photo</small>
                         </div>
 
@@ -2593,11 +2789,13 @@ export function Intake({
             <div className="review-cards-list">
               {session.groups.map((group, idx) => {
                 const groupPhotos = session.photos.filter((p) => group.photoIds.includes(p.id));
+                const readyPhotos = groupPhotos.filter((p) => p.state === "Uploaded" && p.storagePath);
+                const failedInGroup = groupPhotos.filter((p) => p.state === "Failed").length;
                 const primary = groupPhotos.find((p) => p.id === group.primaryPhotoId) || groupPhotos[0];
                 const isReady =
                   group.name.trim().length > 0 &&
                   parseFloat(group.price) > 0 &&
-                  groupPhotos.length > 0;
+                  readyPhotos.length > 0;
                 const hasError = Boolean(group.error);
                 const totalQty = group.variants.reduce((sum, v) => sum + (parseInt(v.qty, 10) || 0), 0);
 
@@ -2605,7 +2803,7 @@ export function Intake({
                   <div className="review-card" key={group.id}>
                     <div className="review-card-thumb">
                       <ProductThumb src={primary?.previewUrl} label={`#${idx + 1}`} large />
-                      <span className="review-photo-count">{groupPhotos.length} photo{groupPhotos.length === 1 ? "" : "s"}</span>
+                      <span className="review-photo-count">{readyPhotos.length} of {groupPhotos.length} photo{groupPhotos.length === 1 ? "" : "s"}</span>
                     </div>
                     <div className="review-card-info">
                       <div className="review-card-top">
@@ -2653,6 +2851,11 @@ export function Intake({
                           {hasError ? "Publish failed" : isReady ? "Ready to publish" : "Needs more details"}
                         </Status>
                         {hasError && <span className="field-error" style={{ marginLeft: "8px" }}>{group.error}</span>}
+                        {failedInGroup > 0 && (
+                          <span style={{ fontSize: "12px", color: "var(--warning, #b45309)", marginLeft: "8px" }}>
+                            ({failedInGroup} failed photo{failedInGroup === 1 ? "" : "s"} excluded)
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
