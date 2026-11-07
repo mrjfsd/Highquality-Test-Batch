@@ -3557,6 +3557,292 @@
   color: var(--cream-muted);
 }
 
+/* Full-Screen Product Image Zoom Viewer */
+.zoom-viewer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: rgba(6, 17, 12, 0.96);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  animation: zoomOverlayFadeIn 200ms ease;
+}
+
+@keyframes zoomOverlayFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.zoom-viewer-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  background: linear-gradient(to bottom, rgba(6, 17, 12, 0.9) 0%, rgba(6, 17, 12, 0) 100%);
+  pointer-events: auto;
+}
+
+.zoom-viewer-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.zoom-viewer-product-title {
+  font-family: var(--font-dosis), "Dosis", sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cream);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 260px;
+}
+
+.zoom-viewer-counter {
+  font-family: var(--font-dosis), "Dosis", sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(247, 243, 238, 0.1);
+  color: var(--cream);
+  border: 1px solid rgba(247, 243, 238, 0.14);
+}
+
+.zoom-viewer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.zoom-toolbar-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: rgba(23, 23, 23, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(247, 243, 238, 0.18);
+  color: var(--cream);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+
+.zoom-toolbar-btn:hover:not(:disabled) {
+  background: var(--crimson);
+  border-color: var(--crimson);
+  color: #ffffff;
+  transform: scale(1.05);
+}
+
+.zoom-toolbar-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.zoom-toolbar-btn:focus-visible {
+  outline: 2px solid var(--crimson);
+  outline-offset: 2px;
+}
+
+.zoom-level-btn {
+  width: auto;
+  min-width: 52px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-family: var(--font-dosis), "Dosis", sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.zoom-level-btn.is-zoomed {
+  border-color: var(--crimson);
+  color: var(--crimson);
+}
+
+.zoom-viewer-stage {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+}
+
+.zoom-viewer-stage.is-panning {
+  cursor: grabbing;
+}
+
+.zoom-transform-layer {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: center center;
+  will-change: transform;
+}
+
+.zoom-viewer-img {
+  max-width: 90vw;
+  max-height: 85vh;
+  max-height: 85dvh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none;
+}
+
+.zoom-viewer-img--placeholder {
+  position: absolute;
+  inset: auto;
+  filter: blur(4px);
+  transform: scale(1.01);
+  transition: opacity 300ms ease;
+}
+
+.zoom-viewer-img.is-loading {
+  opacity: 0.85;
+}
+
+.zoom-viewer-img.is-loaded {
+  opacity: 1;
+}
+
+/* Side navigation buttons */
+.zoom-nav-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: rgba(23, 23, 23, 0.8);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(247, 243, 238, 0.16);
+  color: var(--cream);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  z-index: 10;
+}
+
+.zoom-nav-btn:hover {
+  background: var(--crimson);
+  border-color: var(--crimson);
+  color: #ffffff;
+  transform: translateY(-50%) scale(1.06);
+}
+
+.zoom-nav-btn:focus-visible {
+  outline: 2px solid var(--crimson);
+  outline-offset: 2px;
+}
+
+.zoom-nav-btn--prev {
+  left: 20px;
+}
+
+.zoom-nav-btn--next {
+  right: 20px;
+}
+
+.zoom-viewer-footer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(to top, rgba(6, 17, 12, 0.9) 0%, rgba(6, 17, 12, 0) 100%);
+  pointer-events: none;
+}
+
+.zoom-hint-text {
+  font-family: var(--font-dosis), "Dosis", sans-serif;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  color: var(--cream-muted);
+  opacity: 0.85;
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .zoom-viewer-header {
+    height: 56px;
+    padding: 0 12px;
+  }
+  .zoom-viewer-product-title {
+    max-width: 140px;
+    font-size: 12px;
+  }
+  .zoom-nav-btn {
+    width: 38px;
+    height: 38px;
+  }
+  .zoom-nav-btn--prev {
+    left: 8px;
+  }
+  .zoom-nav-btn--next {
+    right: 8px;
+  }
+  .zoom-hint-text {
+    font-size: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zoom-viewer-overlay,
+  .zoom-transform-layer,
+  .zoom-toolbar-btn,
+  .zoom-nav-btn {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
 /* Right Column — Product Information */
 .product-info {
   position: sticky;

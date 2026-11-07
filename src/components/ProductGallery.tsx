@@ -5,6 +5,7 @@ import { useProductColor } from "@/components/ProductColorContext";
 import { areColorsMatching } from "@/lib/products/colors";
 import type { ProductGalleryImage } from "@/data/products";
 import Icon from "@/components/Icon";
+import ProductZoomViewer from "@/components/ProductZoomViewer";
 import {
   getOptimizedImageUrl,
   getResponsiveImageSrcSet,
@@ -89,6 +90,7 @@ export default function ProductGallery({
   // Transition state: keeps previous image visible underneath so the gallery never flashes blank
   const [prevImage, setPrevImage] = useState<{ url: string; alt: string; isLandscape: boolean } | null>(null);
   const [isIncomingLoaded, setIsIncomingLoaded] = useState(true);
+  const [isZoomOpen, setIsZoomOpen] = useState(false);
 
   // Prefetch cache for adjacent gallery slides (±1)
   const prefetchedUrls = useRef<Set<string>>(new Set());
@@ -346,12 +348,23 @@ export default function ProductGallery({
               sizes={mainSrcSet ? RESPONSIVE_SIZES.galleryMain : undefined}
               alt={currentImage.alt || `${productName} - Image ${activeIndex + 1}`}
               className={`imagery-main-img gallery-slide-img ${isLandscape ? "is-landscape" : ""}`}
-              style={{ position: "relative", zIndex: 2 }}
+              style={{ position: "relative", zIndex: 2, cursor: "zoom-in" }}
               loading="eager"
               fetchPriority="high"
               decoding="async"
               width={460}
               height={613}
+              tabIndex={0}
+              role="button"
+              aria-haspopup="dialog"
+              aria-label={`Zoom image ${activeIndex + 1} of ${validImages.length}`}
+              onClick={() => setIsZoomOpen(true)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setIsZoomOpen(true);
+                }
+              }}
               onLoad={(e) => {
                 setIsIncomingLoaded(true);
                 const img = e.currentTarget;
@@ -443,6 +456,18 @@ export default function ProductGallery({
             );
           })}
         </div>
+      )}
+
+      {/* Full-screen customer image zoom viewer */}
+      {isZoomOpen && (
+        <ProductZoomViewer
+          isOpen={isZoomOpen}
+          images={validImages}
+          initialIndex={activeIndex}
+          productName={productName}
+          onClose={() => setIsZoomOpen(false)}
+          onIndexChange={(idx) => selectIndex(idx)}
+        />
       )}
     </div>
   );

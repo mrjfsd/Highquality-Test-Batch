@@ -6,7 +6,7 @@ import { getR2Object, generatePresignedReadUrl } from "@/lib/r2/operations";
 export const preferredRegion = "bom1";
 
 // Fixed responsive width whitelist to prevent CDN cache fragmentation
-const ALLOWED_WIDTHS = [64, 128, 360, 480, 640, 800, 1000, 1200] as const;
+const ALLOWED_WIDTHS = [64, 128, 360, 480, 640, 800, 1000, 1200, 1600, 2000] as const;
 
 function snapToAllowedWidth(width: number): number {
   if (width <= ALLOWED_WIDTHS[0]) return ALLOWED_WIDTHS[0];
