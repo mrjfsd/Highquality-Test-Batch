@@ -80,16 +80,25 @@ export async function DELETE(
   if (imageRecord) {
     const objectKey = imageRecord.storage_path;
 
-    // 3. Delete from R2
-    try {
-      await deleteR2Object(objectKey);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "R2 deletion failed.";
-      console.error(`[delete-image] R2 deletion failed for key "${objectKey}":`, message);
-      return Response.json(
-        { error: "Failed to delete image from storage. Database record was not removed." },
-        { status: 500 }
-      );
+    // Check if any other product_images row references this same storage_path
+    const { data: otherRefs } = await adminClient
+      .from("product_images")
+      .select("id")
+      .eq("storage_path", objectKey)
+      .neq("id", imageRecord.id);
+
+    // 3. Delete from R2 only if no other row references this object
+    if (!otherRefs || otherRefs.length === 0) {
+      try {
+        await deleteR2Object(objectKey);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "R2 deletion failed.";
+        console.error(`[delete-image] R2 deletion failed for key "${objectKey}":`, message);
+        return Response.json(
+          { error: "Failed to delete image from storage. Database record was not removed." },
+          { status: 500 }
+        );
+      }
     }
 
     // 4. Delete the DB metadata record
@@ -128,6 +137,20 @@ export async function DELETE(
     !decodedParam.includes("..");
 
   if (isAllowedR2Key) {
+    // Verify that this key is not referenced by any existing product_images row
+    const { data: existingRef } = await adminClient
+      .from("product_images")
+      .select("id")
+      .eq("storage_path", decodedParam)
+      .limit(1);
+
+    if (existingRef && existingRef.length > 0) {
+      return Response.json(
+        { error: "Cannot delete storage object: it is currently referenced by a product image." },
+        { status: 409 }
+      );
+    }
+
     try {
       await deleteR2Object(decodedParam);
       return Response.json({

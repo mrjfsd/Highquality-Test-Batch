@@ -2,7 +2,6 @@ import type { NextRequest } from "next/server";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { verifyAdminServer } from "@/lib/supabase/server-auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
-import { deleteR2Objects } from "@/lib/r2/operations";
 import { normalizeSlug, resolveUniqueSlug } from "@/lib/products/slug";
 import type { Product, ProductVariant, ProductImage } from "@/types/product";
 
@@ -381,6 +380,36 @@ export async function POST(request: NextRequest) {
   // Initialize Admin client for privileged write operations
   const adminClient = createSupabaseAdminClient();
 
+  // Pre-insert check: verify none of the submitted storage_path values are already registered in product_images
+  const candidatePaths = images
+    .map((img) => img.storage_path)
+    .filter((p): p is string => typeof p === "string" && Boolean(p));
+
+  if (candidatePaths.length > 0) {
+    const { data: existingImageRows, error: preCheckErr } = await adminClient
+      .from("product_images")
+      .select("storage_path, product_id, products(id, slug)")
+      .in("storage_path", candidatePaths);
+
+    if (!preCheckErr && existingImageRows && existingImageRows.length > 0) {
+      const conflict = existingImageRows[0] as unknown as {
+        storage_path: string;
+        product_id: string;
+        products?: { id: string; slug: string } | Array<{ id: string; slug: string }> | null;
+      };
+      const linkedProduct = Array.isArray(conflict.products) ? conflict.products[0] : conflict.products;
+      return Response.json(
+        {
+          error: "photos_already_published",
+          message: "These photos were already published.",
+          existingProductId: linkedProduct?.id || conflict.product_id || null,
+          existingProductSlug: linkedProduct?.slug || null,
+        },
+        { status: 409 }
+      );
+    }
+  }
+
   // 4. Step A: Automatically resolve unique available slug (e.g. jeans -> jeans-2 -> jeans-3)
   let candidateSlug: string;
   try {
@@ -512,17 +541,54 @@ export async function POST(request: NextRequest) {
       .select();
 
     if (imageError || !imageData) {
-      console.error(`[create-product] Failed inserting images for product ${productId}. Rolling back product & R2:`, imageError);
+      console.error(`[create-product] Failed inserting images for product ${productId}. Rolling back product:`, imageError);
 
       // Rollback: delete product record (cascades variants)
       await adminClient.from("products").delete().eq("id", productId);
 
-      // Rollback: delete uploaded R2 objects to prevent orphans
-      const storageKeys = images.map((img) => img.storage_path);
-      try {
-        await deleteR2Objects(storageKeys);
-      } catch (r2Err) {
-        console.error(`[create-product] Warning: failed cleaning up R2 objects for product ${productId}:`, r2Err);
+      // Intentionally do NOT delete any R2 objects when a publish fails, for any reason:
+      // 1. Avoids data loss if another product row already references an image (e.g. race conditions).
+      // 2. Uncommitted uploads in R2 are harmless and allow the intake session to remain retryable
+      //    without forcing the user to re-upload large files.
+
+      // Check if error is PostgreSQL code 23505 (unique violation on storage_path)
+      const isUniqueViolation =
+        imageError?.code === "23505" ||
+        imageError?.message?.includes("product_images_storage_path_key") ||
+        imageError?.message?.includes("storage_path");
+
+      if (isUniqueViolation) {
+        let existingProductId: string | null = null;
+        let existingProductSlug: string | null = null;
+        const candidateKeys = images.map((img) => img.storage_path);
+
+        if (candidateKeys.length > 0) {
+          const { data: existingRows } = await adminClient
+            .from("product_images")
+            .select("product_id, products(id, slug)")
+            .in("storage_path", candidateKeys)
+            .limit(1);
+
+          if (existingRows && existingRows.length > 0) {
+            const match = existingRows[0] as unknown as {
+              product_id: string;
+              products?: { id: string; slug: string } | Array<{ id: string; slug: string }> | null;
+            };
+            const linkedProduct = Array.isArray(match.products) ? match.products[0] : match.products;
+            existingProductId = linkedProduct?.id || match.product_id || null;
+            existingProductSlug = linkedProduct?.slug || null;
+          }
+        }
+
+        return Response.json(
+          {
+            error: "photos_already_published",
+            message: "These photos were already published.",
+            existingProductId,
+            existingProductSlug,
+          },
+          { status: 409 }
+        );
       }
 
       return Response.json(

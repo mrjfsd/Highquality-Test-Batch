@@ -141,12 +141,22 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // 5. Clean up associated R2 objects
+  // 5. Clean up associated R2 objects (only delete keys not referenced by any remaining product)
   let r2CleanupSuccess = true;
   let r2CleanupError: string | null = null;
   if (allStorageKeysToDelete.length > 0) {
     try {
-      await deleteR2Objects(allStorageKeysToDelete);
+      const { data: stillReferenced } = await adminClient
+        .from("product_images")
+        .select("storage_path")
+        .in("storage_path", allStorageKeysToDelete);
+
+      const referencedSet = new Set((stillReferenced || []).map((r: { storage_path: string }) => r.storage_path));
+      const safeKeysToDelete = allStorageKeysToDelete.filter((k: string) => !referencedSet.has(k));
+
+      if (safeKeysToDelete.length > 0) {
+        await deleteR2Objects(safeKeysToDelete);
+      }
     } catch (err: unknown) {
       r2CleanupSuccess = false;
       r2CleanupError = err instanceof Error ? err.message : "R2 deletion error.";

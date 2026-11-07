@@ -955,6 +955,7 @@ export function Intake({
   const [confirm, setConfirm] = useState<string | null>(null);
   const [restoredBannerVisible, setRestoredBannerVisible] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+  const isPublishingRef = useRef(false);
   const [isDeletingPhotos, setIsDeletingPhotos] = useState(false);
   const [isSavingDrafts, setIsSavingDrafts] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, { name?: string; price?: string; discountPercent?: string }>>({});
@@ -984,6 +985,27 @@ export function Intake({
                   g.status !== "Published" &&
                   !(g.savedProductId && publishedProductIds.has(g.savedProductId))
               );
+
+              // Filter activePhotos against already-published storage paths on page load
+              const publishedStoragePaths = new Set(
+                products
+                  .filter((p) => p.status === "published")
+                  .flatMap((p) => {
+                    const prod = p as unknown as {
+                      product_images?: Array<{ storage_path?: string }>;
+                      images?: Array<{ storage_path?: string }>;
+                    };
+                    return prod.product_images || prod.images || [];
+                  })
+                  .map((img: { storage_path?: string }) => img.storage_path)
+                  .filter((p): p is string => Boolean(p))
+              );
+
+              if (publishedStoragePaths.size > 0) {
+                activePhotos = activePhotos.filter(
+                  (p) => !p.storagePath || !publishedStoragePaths.has(p.storagePath)
+                );
+              }
             }
 
             if (activePhotos.length > 0 || activeGroups.length > 0) {
@@ -1038,11 +1060,11 @@ export function Intake({
       photos: curr.photos.map((p) =>
         p.id === photoId
           ? {
-              ...p,
-              state: "Uploading",
-              error: undefined,
-              uploadProgress: 0,
-            }
+            ...p,
+            state: "Uploading",
+            error: undefined,
+            uploadProgress: 0,
+          }
           : p
       ),
     }));
@@ -1113,17 +1135,17 @@ export function Intake({
           photos: curr.photos.map((p) =>
             p.id === photoId
               ? {
-                  ...p,
-                  state: "Uploaded" as const,
-                  uploadProgress: 100,
-                  storagePath: objectKey,
-                  previewUrl: `/api/images/${objectKey}`,
-                  compressionError: processed.compressionError,
-                  originalSizeBytes: processed.originalSize,
-                  compressedSizeBytes: processed.finalSize,
-                  failureDetails: undefined,
-                  error: undefined,
-                }
+                ...p,
+                state: "Uploaded" as const,
+                uploadProgress: 100,
+                storagePath: objectKey,
+                previewUrl: `/api/images/${objectKey}`,
+                compressionError: processed.compressionError,
+                originalSizeBytes: processed.originalSize,
+                compressedSizeBytes: processed.finalSize,
+                failureDetails: undefined,
+                error: undefined,
+              }
               : p
           ),
         };
@@ -1162,15 +1184,15 @@ export function Intake({
           photos: curr.photos.map((p) =>
             p.id === photoId
               ? {
-                  ...p,
-                  state: "Failed" as const,
-                  error: errorMsg,
-                  storagePath: assignedKey || existingKey || currentPhoto?.storagePath,
-                  compressionError: processed.compressionError,
-                  originalSizeBytes: processed.originalSize,
-                  compressedSizeBytes: processed.finalSize,
-                  failureDetails,
-                }
+                ...p,
+                state: "Failed" as const,
+                error: errorMsg,
+                storagePath: assignedKey || existingKey || currentPhoto?.storagePath,
+                compressionError: processed.compressionError,
+                originalSizeBytes: processed.originalSize,
+                compressedSizeBytes: processed.finalSize,
+                failureDetails,
+              }
               : p
           ),
         };
@@ -1793,7 +1815,8 @@ export function Intake({
   };
 
   const publishReadyGarments = async () => {
-    if (isPublishing) return;
+    if (isPublishingRef.current || isPublishing) return;
+    isPublishingRef.current = true;
 
     const readyGroups = session.groups.filter((g) => {
       const hasUploadedPhotos = session.photos.some(
@@ -1805,12 +1828,14 @@ export function Intake({
     if (readyGroups.length === 0) {
       showToast("No ready garments found to publish. Please check name, price, and photos.");
       setConfirm(null);
+      isPublishingRef.current = false;
       return;
     }
 
     setIsPublishing(true);
     let publishedCount = 0;
     const successfulGroupIds = new Set<string>();
+    const purgedPhotoIds = new Set<string>();
     const updatedGroups = [...session.groups];
     let lastError = "";
 
@@ -1885,6 +1910,28 @@ export function Intake({
             delete group.error;
             successfulGroupIds.add(group.id);
             publishedCount++;
+          } else if (res.status === 409) {
+            const errData = await res.json().catch(() => ({}));
+            const msg = errData.message || "These photos were already published.";
+            const existingSlug = errData.existingProductSlug;
+
+            if (existingSlug) {
+              showToast(`${msg} View existing product at /product/${existingSlug}`);
+            } else {
+              showToast(msg);
+            }
+            lastError = msg;
+
+            // Remove conflict photos from session and memory
+            group.photoIds.forEach((pid) => {
+              purgedPhotoIds.add(pid);
+              fileInMemoryMap.current.delete(pid);
+            });
+
+            const idx = updatedGroups.findIndex((g) => g.id === group.id);
+            if (idx >= 0) {
+              updatedGroups[idx] = { ...updatedGroups[idx], error: msg };
+            }
           } else {
             const errData = await res.json().catch(() => ({}));
             const errMsg = errData.error || `Publish failed (HTTP ${res.status})`;
@@ -1895,8 +1942,22 @@ export function Intake({
             }
           }
         } catch (err) {
-          const errMsg = err instanceof Error ? err.message : "Network error publishing garment";
+          const isNetworkError =
+            err instanceof TypeError ||
+            (err instanceof Error &&
+              (err.message.toLowerCase().includes("network") ||
+                err.message.toLowerCase().includes("failed to fetch") ||
+                err.message.toLowerCase().includes("timeout") ||
+                err.message.toLowerCase().includes("abort")));
+
+          const errMsg = isNetworkError
+            ? "We couldn't confirm that this was published. Check All Clothes before publishing again."
+            : err instanceof Error
+              ? err.message
+              : "Error publishing garment";
+
           lastError = errMsg;
+          showToast(errMsg);
           console.error(`Error publishing ${group.name}:`, err);
           const idx = updatedGroups.findIndex((g) => g.id === group.id);
           if (idx >= 0) {
@@ -1917,10 +1978,12 @@ export function Intake({
 
       publishedPhotoIds.forEach((id) => fileInMemoryMap.current.delete(id));
 
+      const allRemovedPhotoIds = new Set([...publishedPhotoIds, ...purgedPhotoIds]);
+
       const successfulGroupSet = successfulGroupIds;
       const remainingGroups = updatedGroups.filter((g) => !successfulGroupSet.has(g.id));
       const remainingPhotos = session.photos
-        .filter((p) => !publishedPhotoIds.has(p.id))
+        .filter((p) => !allRemovedPhotoIds.has(p.id))
         .map((p) =>
           p.assignedGroup && successfulGroupSet.has(p.assignedGroup)
             ? { ...p, assignedGroup: undefined }
@@ -1967,6 +2030,7 @@ export function Intake({
       console.error("[publishReadyGarments] Unexpected error:", err);
       showToast(err?.message || "An unexpected error occurred while publishing.");
     } finally {
+      isPublishingRef.current = false;
       setIsPublishing(false);
       setConfirm(null);
       onProductCreated?.();
@@ -2097,7 +2161,7 @@ export function Intake({
       )}
 
       {/* Main 3-Step Navigation Tabs Strip */}
-            {/* Main 3-Step Navigation Tabs Strip */}
+      {/* Main 3-Step Navigation Tabs Strip */}
       <nav className="workflow-tabs" aria-label="Workflow Steps">
         <button
           type="button"
@@ -2136,7 +2200,7 @@ export function Intake({
         </button>
       </nav>
 
-{/* STEP 1: Photos to Group (Upload area strictly rendered here) */}
+      {/* STEP 1: Photos to Group (Upload area strictly rendered here) */}
       {tab === "unassigned" && (
         <>
           <section className="upload-panel">
@@ -2248,45 +2312,45 @@ export function Intake({
           <section className="workspace photo-grouping-workspace">
 
             {selectedPhotos.length > 0 && (
-            <div className="selection-bar">
-              <div className="selection-info-group">
-                <strong className="selection-count">{selectedPhotos.length} selected</strong>
-                <button
-                  type="button"
-                  className="select-all-btn"
-                  onClick={() => {
-                    if (selectedPhotos.length === unassignedPhotos.length) {
-                      setSelectedPhotos([]);
-                    } else {
-                      setSelectedPhotos(unassignedPhotos.map((p) => p.id));
-                    }
-                  }}
-                >
-                  {selectedPhotos.length === unassignedPhotos.length ? "Deselect all" : "Select all"}
-                </button>
-              </div>
+              <div className="selection-bar">
+                <div className="selection-info-group">
+                  <strong className="selection-count">{selectedPhotos.length} selected</strong>
+                  <button
+                    type="button"
+                    className="select-all-btn"
+                    onClick={() => {
+                      if (selectedPhotos.length === unassignedPhotos.length) {
+                        setSelectedPhotos([]);
+                      } else {
+                        setSelectedPhotos(unassignedPhotos.map((p) => p.id));
+                      }
+                    }}
+                  >
+                    {selectedPhotos.length === unassignedPhotos.length ? "Deselect all" : "Select all"}
+                  </button>
+                </div>
 
-              <div className="selection-actions-group">
-                <Button
-                  variant="primary"
-                  icon="plus"
-                  onClick={createGroupFromSelected}
-                >
-                  Group Photos
-                </Button>
-                <Button
-                  variant="danger"
-                  icon="trash"
-                  disabled={isDeletingPhotos}
-                  onClick={() => setConfirm("Delete selected photos?")}
-                >
-                  Delete Selected
-                </Button>
+                <div className="selection-actions-group">
+                  <Button
+                    variant="primary"
+                    icon="plus"
+                    onClick={createGroupFromSelected}
+                  >
+                    Group Photos
+                  </Button>
+                  <Button
+                    variant="danger"
+                    icon="trash"
+                    disabled={isDeletingPhotos}
+                    onClick={() => setConfirm("Delete selected photos?")}
+                  >
+                    Delete Selected
+                  </Button>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {unassignedPhotos.length > 0 ? (
+            {unassignedPhotos.length > 0 ? (
               <div className="photo-grid">
                 {unassignedPhotos.map((photo) => (
                   <button
@@ -2317,8 +2381,8 @@ export function Intake({
                         {photo.state === "Failed"
                           ? "Upload failed — try again"
                           : photo.state === "Uploading"
-                          ? `Uploading ${photo.uploadProgress || 0}%`
-                          : "Waiting to be grouped"}
+                            ? `Uploading ${photo.uploadProgress || 0}%`
+                            : "Waiting to be grouped"}
                       </span>
                     </div>
                   </button>
@@ -3026,15 +3090,15 @@ export function ProductTable({
                       product.status?.toLowerCase() === "published"
                         ? "dark"
                         : product.status?.toLowerCase() === "archived"
-                        ? "neutral"
-                        : "outline"
+                          ? "neutral"
+                          : "outline"
                     }
                   >
                     {product.status?.toLowerCase() === "published"
                       ? "Published"
                       : product.status?.toLowerCase() === "archived"
-                      ? "In archive"
-                      : "Draft"}
+                        ? "In archive"
+                        : "Draft"}
                   </Status>
                 </td>
                 {!compact && (
@@ -3157,15 +3221,15 @@ export function ProductGallery({
                     product.status?.toLowerCase() === "published"
                       ? "dark"
                       : product.status?.toLowerCase() === "archived"
-                      ? "neutral"
-                      : "outline"
+                        ? "neutral"
+                        : "outline"
                   }
                 >
                   {product.status?.toLowerCase() === "published"
                     ? "Published"
                     : product.status?.toLowerCase() === "archived"
-                    ? "In archive"
-                    : "Draft"}
+                      ? "In archive"
+                      : "Draft"}
                 </Status>
               </div>
 
@@ -3272,14 +3336,14 @@ export function Catalogue({
       if (saved === "grid" || saved === "list") {
         setViewMode(saved);
       }
-    } catch {}
+    } catch { }
   }, []);
 
   const handleSetViewMode = (mode: "list" | "grid") => {
     setViewMode(mode);
     try {
       localStorage.setItem("style_edit_admin_catalogue_view", mode);
-    } catch {}
+    } catch { }
   };
 
   const filtered = useMemo(() => {
@@ -4352,8 +4416,8 @@ export function MediaLibrary({
                 {item === "All"
                   ? "All Photos"
                   : item === "Unassigned"
-                  ? "Unassigned Photos"
-                  : "Photos Assigned to Garments"}
+                    ? "Unassigned Photos"
+                    : "Photos Assigned to Garments"}
               </button>
             ))}
           </div>
@@ -4649,8 +4713,8 @@ export default function App({
       editor: pId
         ? `/admin/products/${pId}`
         : editingProductId
-        ? `/admin/products/${editingProductId}`
-        : "/admin/editor",
+          ? `/admin/products/${editingProductId}`
+          : "/admin/editor",
       offers: "/admin/offers",
       media: "/admin/media",
       banner: "/admin/banner",

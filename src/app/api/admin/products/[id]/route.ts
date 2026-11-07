@@ -1009,18 +1009,28 @@ export async function DELETE(
     );
   }
 
-  // 6. Clean up associated R2 objects
+  // 6. Clean up associated R2 objects (only delete keys not referenced by any other product)
   let r2CleanupSuccess = true;
   let r2CleanupError: string | null = null;
 
   if (storageKeys.length > 0) {
     try {
-      await deleteR2Objects(storageKeys);
+      const { data: stillReferenced } = await adminClient
+        .from("product_images")
+        .select("storage_path")
+        .in("storage_path", storageKeys);
+
+      const referencedSet = new Set((stillReferenced || []).map((r: { storage_path: string }) => r.storage_path));
+      const safeKeysToDelete = storageKeys.filter((k: string) => !referencedSet.has(k));
+
+      if (safeKeysToDelete.length > 0) {
+        await deleteR2Objects(safeKeysToDelete);
+      }
     } catch (err: unknown) {
       r2CleanupSuccess = false;
       r2CleanupError = err instanceof Error ? err.message : "R2 deletion error.";
       console.error(
-        `[delete-product] Failed to clean up ${storageKeys.length} images from R2 for product ${productId}:`,
+        `[delete-product] Failed to clean up images from R2 for product ${productId}:`,
         r2CleanupError
       );
     }
